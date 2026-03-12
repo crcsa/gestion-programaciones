@@ -1,4 +1,17 @@
-// Schema barrel file - exports all table definitions
-// Tables will be added in task 1.4
-
-export {}
+export * from './enums'
+export * from './users'
+export * from './staff-members'
+export * from './training-areas'
+export * from './companies'
+export * from './locations'
+export * from './campaigns'
+export * from './campaign-assignments'
+export * from './campaign-timeline'
+export * from './sede-shifts'
+export * from './hours-log'
+export * from './weekly-balance'
+export * from './monthly-counters'
+export * from './staff-availability'
+export * from './system-config'
+export * from './colombian-holidays'
+export * from './audit-log'
