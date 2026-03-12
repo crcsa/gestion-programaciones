@@ -34,6 +34,16 @@ export function CardSkeleton() {
   )
 }
 
+export function LoadingSkeleton({ lines = 6 }: { lines?: number }) {
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: lines }).map((_, i) => (
+        <Skeleton key={i} className="h-6 w-full" style={{ width: `${70 + Math.random() * 30}%` }} />
+      ))}
+    </div>
+  )
+}
+
 export function FormSkeleton({ fields = 4 }: { fields?: number }) {
   return (
     <div className="space-y-6">
