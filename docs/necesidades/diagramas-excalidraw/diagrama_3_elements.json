@@ -1,0 +1,542 @@
+[
+  {
+    "type": "cameraUpdate",
+    "width": 600,
+    "height": 450,
+    "x": 240,
+    "y": -20
+  },
+  {
+    "type": "text",
+    "id": "t1",
+    "x": 305,
+    "y": 10,
+    "text": "Ciclo de Vida de Campañas",
+    "fontSize": 28,
+    "strokeColor": "#1e1e1e"
+  },
+  {
+    "type": "text",
+    "id": "t2",
+    "x": 310,
+    "y": 48,
+    "text": "Estados, Tamaños y Modalidades",
+    "fontSize": 18,
+    "strokeColor": "#757575"
+  },
+  {
+    "type": "cameraUpdate",
+    "width": 800,
+    "height": 600,
+    "x": 20,
+    "y": 50
+  },
+  {
+    "type": "rectangle",
+    "id": "z1",
+    "x": 30,
+    "y": 85,
+    "width": 920,
+    "height": 240,
+    "backgroundColor": "#e5dbff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#8b5cf6",
+    "strokeWidth": 1,
+    "opacity": 30
+  },
+  {
+    "type": "text",
+    "id": "z1l",
+    "x": 45,
+    "y": 91,
+    "text": "Estados y Transiciones",
+    "fontSize": 18,
+    "strokeColor": "#6d28d9"
+  },
+  {
+    "type": "ellipse",
+    "id": "dot",
+    "x": 55,
+    "y": 160,
+    "width": 22,
+    "height": 22,
+    "backgroundColor": "#1e1e1e",
+    "fillStyle": "solid",
+    "strokeColor": "#1e1e1e",
+    "strokeWidth": 2
+  },
+  {
+    "type": "text",
+    "id": "newL",
+    "x": 38,
+    "y": 190,
+    "text": "Nueva",
+    "fontSize": 14,
+    "strokeColor": "#757575"
+  },
+  {
+    "type": "arrow",
+    "id": "a0",
+    "x": 77,
+    "y": 171,
+    "width": 43,
+    "height": 0,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        43,
+        0
+      ]
+    ],
+    "strokeColor": "#1e1e1e",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow"
+  },
+  {
+    "type": "rectangle",
+    "id": "tent",
+    "x": 120,
+    "y": 140,
+    "width": 185,
+    "height": 75,
+    "backgroundColor": "#fff3bf",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#f59e0b",
+    "strokeWidth": 2,
+    "label": {
+      "text": "TENTATIVA",
+      "fontSize": 20
+    }
+  },
+  {
+    "type": "arrow",
+    "id": "a1",
+    "x": 305,
+    "y": 177,
+    "width": 205,
+    "height": 0,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        205,
+        0
+      ]
+    ],
+    "strokeColor": "#22c55e",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow",
+    "startBinding": {
+      "elementId": "tent",
+      "fixedPoint": [
+        1,
+        0.5
+      ]
+    },
+    "endBinding": {
+      "elementId": "conf",
+      "fixedPoint": [
+        0,
+        0.5
+      ]
+    },
+    "label": {
+      "text": "Aprobación BdS",
+      "fontSize": 16
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "conf",
+    "x": 510,
+    "y": 140,
+    "width": 185,
+    "height": 75,
+    "backgroundColor": "#b2f2bb",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#22c55e",
+    "strokeWidth": 2,
+    "label": {
+      "text": "CONFIRMADA",
+      "fontSize": 20
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "canc",
+    "x": 310,
+    "y": 256,
+    "width": 180,
+    "height": 55,
+    "backgroundColor": "#ffc9c9",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#ef4444",
+    "strokeWidth": 2,
+    "label": {
+      "text": "CANCELADA",
+      "fontSize": 20
+    }
+  },
+  {
+    "type": "arrow",
+    "id": "a2",
+    "x": 212,
+    "y": 215,
+    "width": 118,
+    "height": 41,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        118,
+        41
+      ]
+    ],
+    "strokeColor": "#ef4444",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow",
+    "startBinding": {
+      "elementId": "tent",
+      "fixedPoint": [
+        0.5,
+        1
+      ]
+    },
+    "endBinding": {
+      "elementId": "canc",
+      "fixedPoint": [
+        0.1,
+        0
+      ]
+    },
+    "strokeStyle": "dashed",
+    "label": {
+      "text": "Cancelar",
+      "fontSize": 14
+    }
+  },
+  {
+    "type": "arrow",
+    "id": "a3",
+    "x": 602,
+    "y": 215,
+    "width": -132,
+    "height": 41,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        -132,
+        41
+      ]
+    ],
+    "strokeColor": "#ef4444",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow",
+    "startBinding": {
+      "elementId": "conf",
+      "fixedPoint": [
+        0.5,
+        1
+      ]
+    },
+    "endBinding": {
+      "elementId": "canc",
+      "fixedPoint": [
+        0.9,
+        0
+      ]
+    },
+    "strokeStyle": "dashed",
+    "label": {
+      "text": "Cancelar",
+      "fontSize": 14
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "confNote",
+    "x": 720,
+    "y": 152,
+    "width": 210,
+    "height": 50,
+    "backgroundColor": "#fff3bf",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#f59e0b",
+    "strokeWidth": 1,
+    "opacity": 60,
+    "label": {
+      "text": "Permite asignación\nde personal",
+      "fontSize": 14
+    }
+  },
+  {
+    "type": "arrow",
+    "id": "aNote",
+    "x": 720,
+    "y": 177,
+    "width": -25,
+    "height": 0,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        -25,
+        0
+      ]
+    ],
+    "strokeColor": "#f59e0b",
+    "strokeWidth": 1,
+    "strokeStyle": "dashed",
+    "endArrowhead": "arrow"
+  },
+  {
+    "type": "cameraUpdate",
+    "width": 800,
+    "height": 600,
+    "x": 30,
+    "y": 250
+  },
+  {
+    "type": "rectangle",
+    "id": "z2",
+    "x": 30,
+    "y": 350,
+    "width": 920,
+    "height": 185,
+    "backgroundColor": "#dbe4ff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#4a9eed",
+    "strokeWidth": 1,
+    "opacity": 30
+  },
+  {
+    "type": "text",
+    "id": "z2l",
+    "x": 45,
+    "y": 356,
+    "text": "Tamaños de Campaña",
+    "fontSize": 18,
+    "strokeColor": "#2563eb"
+  },
+  {
+    "type": "rectangle",
+    "id": "sS",
+    "x": 55,
+    "y": 398,
+    "width": 270,
+    "height": 108,
+    "backgroundColor": "#a5d8ff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#4a9eed",
+    "strokeWidth": 2,
+    "label": {
+      "text": "Talla S\n2 Bacteriólogos\n2 Auxiliares\n= 4 personas",
+      "fontSize": 16
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "sM",
+    "x": 355,
+    "y": 398,
+    "width": 270,
+    "height": 108,
+    "backgroundColor": "#d0bfff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#8b5cf6",
+    "strokeWidth": 2,
+    "label": {
+      "text": "Talla M\n2 Bacteriólogos\n4 Auxiliares\n= 6 personas",
+      "fontSize": 16
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "sL",
+    "x": 655,
+    "y": 398,
+    "width": 270,
+    "height": 108,
+    "backgroundColor": "#ffd8a8",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#f59e0b",
+    "strokeWidth": 2,
+    "label": {
+      "text": "Talla L\n3 Bacteriólogos\n6 Auxiliares\n= 9 personas",
+      "fontSize": 16
+    }
+  },
+  {
+    "type": "cameraUpdate",
+    "width": 800,
+    "height": 600,
+    "x": 30,
+    "y": 420
+  },
+  {
+    "type": "rectangle",
+    "id": "z3",
+    "x": 30,
+    "y": 560,
+    "width": 920,
+    "height": 145,
+    "backgroundColor": "#d3f9d8",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#22c55e",
+    "strokeWidth": 1,
+    "opacity": 30
+  },
+  {
+    "type": "text",
+    "id": "z3l",
+    "x": 45,
+    "y": 566,
+    "text": "Modalidades de Campaña",
+    "fontSize": 18,
+    "strokeColor": "#15803d"
+  },
+  {
+    "type": "rectangle",
+    "id": "mo1",
+    "x": 42,
+    "y": 602,
+    "width": 163,
+    "height": 68,
+    "backgroundColor": "#c3fae8",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#06b6d4",
+    "strokeWidth": 2,
+    "label": {
+      "text": "Corporativa",
+      "fontSize": 18
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "mo2",
+    "x": 225,
+    "y": 602,
+    "width": 140,
+    "height": 68,
+    "backgroundColor": "#c3fae8",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#06b6d4",
+    "strokeWidth": 2,
+    "label": {
+      "text": "Carpa",
+      "fontSize": 18
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "mo3",
+    "x": 385,
+    "y": 602,
+    "width": 175,
+    "height": 68,
+    "backgroundColor": "#c3fae8",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#06b6d4",
+    "strokeWidth": 2,
+    "label": {
+      "text": "Unidad Móvil",
+      "fontSize": 18
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "mo4",
+    "x": 580,
+    "y": 602,
+    "width": 160,
+    "height": 68,
+    "backgroundColor": "#c3fae8",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#06b6d4",
+    "strokeWidth": 2,
+    "label": {
+      "text": "Municipal",
+      "fontSize": 18
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "mo5",
+    "x": 760,
+    "y": 602,
+    "width": 170,
+    "height": 68,
+    "backgroundColor": "#c3fae8",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#06b6d4",
+    "strokeWidth": 2,
+    "label": {
+      "text": "Combinada",
+      "fontSize": 18
+    }
+  },
+  {
+    "type": "cameraUpdate",
+    "width": 1200,
+    "height": 900,
+    "x": -80,
+    "y": -60
+  }
+]

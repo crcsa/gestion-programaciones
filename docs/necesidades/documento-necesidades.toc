@@ -1,0 +1,73 @@
+\babel@toc {spanish}{}\relax 
+\contentsline {section}{\numberline {1}Contexto y Justificaci\'{o}n}{4}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Situaci\'{o}n Actual}{4}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Visi\'{o}n del Sistema}{4}{subsection.1.2}%
+\contentsline {section}{\numberline {2}Alcance del Sistema}{4}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Objetivos Generales}{5}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Primera Implementaci\'{o}n: Banco de Sangre}{5}{subsection.2.2}%
+\contentsline {section}{\numberline {3}Gesti\'{o}n de Campañas}{5}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Tamaños de Campaña (Mix)}{5}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Modalidades de Campaña}{5}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Estados de Campaña}{6}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Coordinador de Campaña (Designaci\'{o}n por Campaña)}{7}{subsection.3.4}%
+\contentsline {subsubsection}{\numberline {3.4.1}L\'{i}nea de Tiempo de Campaña (Trazabilidad de Horas)}{7}{subsubsection.3.4.1}%
+\contentsline {section}{\numberline {4}Perfiles de Personal}{8}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Tipos de Perfil}{8}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}\'{A}reas de Trabajo}{8}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Turnos de T\'{e}cnicos Administrativos}{8}{subsection.4.3}%
+\contentsline {section}{\numberline {5}Programaci\'{o}n: Sede y Campañas}{9}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Flujo 1: Turnos en Sede Principal}{9}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Flujo 2: Campañas Extramurales}{9}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}C\'{o}mputo Integrado de Horas}{9}{subsection.5.3}%
+\contentsline {section}{\numberline {6}Reglas de Negocio y Validaciones}{10}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Reglas Laborales Semanales}{10}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Reglas Mensuales por Persona}{11}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Reglas de Municipios y Pernoctas}{11}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Reglas de Asignaci\'{o}n}{11}{subsection.6.4}%
+\contentsline {subsection}{\numberline {6.5}Calculadora de Horas y Balance Semanal}{11}{subsection.6.5}%
+\contentsline {subsection}{\numberline {6.6}Proyecci\'{o}n de Impacto}{12}{subsection.6.6}%
+\contentsline {subsection}{\numberline {6.7}Detector de Conflictos (9 Validaciones)}{12}{subsection.6.7}%
+\contentsline {subsection}{\numberline {6.8}Motor de Disponibilidad}{13}{subsection.6.8}%
+\contentsline {section}{\numberline {7}Integraciones Externas}{13}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Flujo CRM $\rightarrow $ Excel $\rightarrow $ Plataforma}{13}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Datos que Importa Comercial (desde CRM/Excel)}{14}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}Datos que Consulta Comercial (desde la Plataforma)}{14}{subsection.7.3}%
+\contentsline {subsection}{\numberline {7.4}Integraci\'{o}n con Hexabank}{15}{subsection.7.4}%
+\contentsline {subsection}{\numberline {7.5}Migraci\'{o}n de Directorio de Contactos}{15}{subsection.7.5}%
+\contentsline {section}{\numberline {8}Roles y Permisos}{15}{section.8}%
+\contentsline {section}{\numberline {9}Flujos de Trabajo Principales}{16}{section.9}%
+\contentsline {subsection}{\numberline {9.1}Flujo 1: Carga y Confirmaci\'{o}n de Campañas (Comercial $\rightarrow $ Banco de Sangre)}{16}{subsection.9.1}%
+\contentsline {subsection}{\numberline {9.2}Flujo 2: Asignaci\'{o}n de Personal (Banco de Sangre)}{17}{subsection.9.2}%
+\contentsline {subsection}{\numberline {9.3}Flujo 3: Programaci\'{o}n de Turnos en Sede (Banco de Sangre)}{17}{subsection.9.3}%
+\contentsline {subsection}{\numberline {9.4}Flujo 4: Registro de Horas Reales (Coordinador de Campaña)}{17}{subsection.9.4}%
+\contentsline {subsection}{\numberline {9.5}Flujo 5: Monitoreo Semanal de Horas y Balance}{18}{subsection.9.5}%
+\contentsline {subsection}{\numberline {9.6}Flujo 6: Vista Personal Operativo}{18}{subsection.9.6}%
+\contentsline {subsection}{\numberline {9.7}Flujo 7: Cancelaci\'{o}n de Campaña}{18}{subsection.9.7}%
+\contentsline {section}{\numberline {10}Stack Tecnol\'{o}gico y Arquitectura}{19}{section.10}%
+\contentsline {subsection}{\numberline {10.1}Tecnolog\'{i}as Principales}{19}{subsection.10.1}%
+\contentsline {subsection}{\numberline {10.2}Decisiones de Arquitectura}{19}{subsection.10.2}%
+\contentsline {subsection}{\numberline {10.3}Principio de Diseño: M\'{o}dulos Gen\'{e}ricos}{19}{subsection.10.3}%
+\contentsline {subsection}{\numberline {10.4}M\'{o}dulos del Sistema}{20}{subsection.10.4}%
+\contentsline {subsubsection}{\numberline {10.4.1}M\'{o}dulo 1: Autenticaci\'{o}n y Autorizaci\'{o}n}{20}{subsubsection.10.4.1}%
+\contentsline {subsubsection}{\numberline {10.4.2}M\'{o}dulo 2: Gesti\'{o}n de Personal}{20}{subsubsection.10.4.2}%
+\contentsline {subsubsection}{\numberline {10.4.3}M\'{o}dulo 3: Programaci\'{o}n en Sede}{21}{subsubsection.10.4.3}%
+\contentsline {subsubsection}{\numberline {10.4.4}M\'{o}dulo 4: Gesti\'{o}n de Campañas}{21}{subsubsection.10.4.4}%
+\contentsline {subsubsection}{\numberline {10.4.5}M\'{o}dulo 5: Programaci\'{o}n y Asignaci\'{o}n}{21}{subsubsection.10.4.5}%
+\contentsline {subsubsection}{\numberline {10.4.6}M\'{o}dulo 6: Disponibilidad y Capacidad}{22}{subsubsection.10.4.6}%
+\contentsline {subsubsection}{\numberline {10.4.7}M\'{o}dulo 7: Control de Horas y Balance Semanal}{22}{subsubsection.10.4.7}%
+\contentsline {subsubsection}{\numberline {10.4.8}M\'{o}dulo 8: Integraci\'{o}n Comercial (CRM $\rightarrow $ Plataforma)}{22}{subsubsection.10.4.8}%
+\contentsline {subsubsection}{\numberline {10.4.9}M\'{o}dulo 9: Integraci\'{o}n Hexabank}{23}{subsubsection.10.4.9}%
+\contentsline {subsubsection}{\numberline {10.4.10}M\'{o}dulo 10: Reportes y Exportaci\'{o}n}{23}{subsubsection.10.4.10}%
+\contentsline {subsubsection}{\numberline {10.4.11}M\'{o}dulo 11: Configuraci\'{o}n del Sistema}{23}{subsubsection.10.4.11}%
+\contentsline {subsection}{\numberline {10.5}Escalabilidad Organizacional}{23}{subsection.10.5}%
+\contentsline {section}{\numberline {11}Modelo de Datos}{24}{section.11}%
+\contentsline {subsection}{\numberline {11.1}Diagrama de Relaciones}{24}{subsection.11.1}%
+\contentsline {subsection}{\numberline {11.2}Tablas Principales}{25}{subsection.11.2}%
+\contentsline {section}{\numberline {12}Estructura de Rutas (Navegaci\'{o}n)}{26}{section.12}%
+\contentsline {section}{\numberline {13}Consideraciones de Seguridad}{27}{section.13}%
+\contentsline {section}{\numberline {14}Plan de Implementaci\'{o}n por Fases}{27}{section.14}%
+\contentsline {subsection}{\numberline {14.1}Fase 1 --- MVP (Semanas 1--4)}{27}{subsection.14.1}%
+\contentsline {subsection}{\numberline {14.2}Fase 2 --- Motor de Reglas (Semanas 5--8)}{27}{subsection.14.2}%
+\contentsline {subsection}{\numberline {14.3}Fase 3 --- Reportes e Integraci\'{o}n (Semanas 9--12)}{27}{subsection.14.3}%
+\contentsline {subsection}{\numberline {14.4}Fase 4 --- Funcionalidades Avanzadas (Semanas 13--16)}{27}{subsection.14.4}%
+\contentsline {section}{\numberline {15}Verificaci\'{o}n y Pruebas}{28}{section.15}%

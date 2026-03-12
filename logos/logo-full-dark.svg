@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Objects" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 971 619">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: none;
+      }
+
+      .cls-2 {
+        font-size: 77.02px;
+      }
+
+      .cls-2, .cls-3 {
+        fill: #ffffff;
+        font-family: TimesNewRomanPS-BoldMT, 'Times New Roman';
+        font-weight: 700;
+      }
+
+      .cls-4 {
+        fill: #e30613;
+      }
+
+      .cls-5 {
+        letter-spacing: -.06em;
+      }
+
+      .cls-3 {
+        font-size: 78.53px;
+      }
+
+      .cls-6 {
+        clip-path: url(#clippath);
+      }
+    </style>
+    <clipPath id="clippath">
+      <rect class="cls-1" x="-33" y="-65" width="1070.19" height="749.13"/>
+    </clipPath>
+  </defs>
+  <g class="cls-6">
+    <rect class="cls-4" x="474.68" y="114.14" width="54.89" height="163.94"/>
+    <rect class="cls-4" x="420.08" y="168.76" width="164.03" height="54.81"/>
+    <text class="cls-3" transform="translate(111.64 386.13)"><tspan x="0" y="0">Cruz Roja Colombiana</tspan></text>
+    <text class="cls-2" transform="translate(175.78 475.23)"><tspan x="0" y="0">Seccional</tspan><tspan class="cls-5" x="308.04" y="0"> </tspan><tspan x="323.05" y="0">Antioquia</tspan></text>
+  </g>
+</svg>

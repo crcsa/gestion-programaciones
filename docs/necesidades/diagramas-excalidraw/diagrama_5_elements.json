@@ -1,0 +1,580 @@
+[
+  {
+    "type": "cameraUpdate",
+    "width": 600,
+    "height": 400,
+    "x": 300,
+    "y": -20
+  },
+  {
+    "type": "text",
+    "id": "t1",
+    "x": 320,
+    "y": 10,
+    "text": "Modelo de Datos",
+    "fontSize": 28,
+    "strokeColor": "#1e1e1e"
+  },
+  {
+    "type": "text",
+    "id": "t2",
+    "x": 295,
+    "y": 48,
+    "text": "Entidades Principales y Relaciones",
+    "fontSize": 18,
+    "strokeColor": "#757575"
+  },
+  {
+    "type": "cameraUpdate",
+    "width": 1100,
+    "height": 370,
+    "x": 0,
+    "y": 55
+  },
+  {
+    "type": "rectangle",
+    "id": "z1",
+    "x": 20,
+    "y": 80,
+    "width": 1060,
+    "height": 240,
+    "backgroundColor": "#dbe4ff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#4a9eed",
+    "strokeWidth": 1,
+    "opacity": 30
+  },
+  {
+    "type": "text",
+    "id": "z1l",
+    "x": 35,
+    "y": 86,
+    "text": "Identidad y Personal",
+    "fontSize": 18,
+    "strokeColor": "#364fc7"
+  },
+  {
+    "type": "rectangle",
+    "id": "e1",
+    "x": 40,
+    "y": 118,
+    "width": 230,
+    "height": 185,
+    "backgroundColor": "#ffffff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#4a9eed",
+    "strokeWidth": 2,
+    "label": {
+      "text": "users\n─────────\nid (PK)\nemail\nrole\nname\nis_active",
+      "fontSize": 13
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "e2",
+    "x": 415,
+    "y": 118,
+    "width": 260,
+    "height": 185,
+    "backgroundColor": "#ffffff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#4a9eed",
+    "strokeWidth": 2,
+    "label": {
+      "text": "staff_members\n──────────────\nid (PK)\nuser_id → users\ndocument_id\nposition\ncontract_hours (44h)",
+      "fontSize": 13
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "e3",
+    "x": 810,
+    "y": 118,
+    "width": 250,
+    "height": 185,
+    "backgroundColor": "#ffffff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#4a9eed",
+    "strokeWidth": 2,
+    "label": {
+      "text": "training_areas\n──────────────\nid (PK)\nstaff_id → staff\narea_name\ncertified_date\nis_active",
+      "fontSize": 13
+    }
+  },
+  {
+    "type": "arrow",
+    "id": "r1",
+    "x": 270,
+    "y": 210,
+    "width": 145,
+    "height": 0,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        145,
+        0
+      ]
+    ],
+    "strokeColor": "#364fc7",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow"
+  },
+  {
+    "type": "text",
+    "id": "r1l",
+    "x": 315,
+    "y": 193,
+    "text": "1 : 1",
+    "fontSize": 12,
+    "strokeColor": "#364fc7"
+  },
+  {
+    "type": "arrow",
+    "id": "r2",
+    "x": 675,
+    "y": 210,
+    "width": 135,
+    "height": 0,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        135,
+        0
+      ]
+    ],
+    "strokeColor": "#364fc7",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow"
+  },
+  {
+    "type": "text",
+    "id": "r2l",
+    "x": 715,
+    "y": 193,
+    "text": "1 : N",
+    "fontSize": 12,
+    "strokeColor": "#364fc7"
+  },
+  {
+    "type": "arrow",
+    "id": "v1",
+    "x": 545,
+    "y": 303,
+    "width": 0,
+    "height": 60,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        60
+      ]
+    ],
+    "strokeColor": "#495057",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow",
+    "strokeStyle": "dashed"
+  },
+  {
+    "type": "text",
+    "id": "v1l",
+    "x": 555,
+    "y": 320,
+    "text": "se asigna a",
+    "fontSize": 12,
+    "strokeColor": "#495057"
+  },
+  {
+    "type": "cameraUpdate",
+    "width": 1100,
+    "height": 480,
+    "x": 0,
+    "y": 305
+  },
+  {
+    "type": "rectangle",
+    "id": "z2",
+    "x": 20,
+    "y": 375,
+    "width": 1060,
+    "height": 275,
+    "backgroundColor": "#f1f3f5",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#adb5bd",
+    "strokeWidth": 1,
+    "opacity": 30
+  },
+  {
+    "type": "text",
+    "id": "z2l",
+    "x": 35,
+    "y": 381,
+    "text": "Operaciones",
+    "fontSize": 18,
+    "strokeColor": "#495057"
+  },
+  {
+    "type": "rectangle",
+    "id": "sz1",
+    "x": 35,
+    "y": 410,
+    "width": 290,
+    "height": 225,
+    "backgroundColor": "#e5dbff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#8b5cf6",
+    "strokeWidth": 1,
+    "opacity": 30
+  },
+  {
+    "type": "text",
+    "id": "sz1l",
+    "x": 50,
+    "y": 416,
+    "text": "Sede",
+    "fontSize": 14,
+    "strokeColor": "#7048e8"
+  },
+  {
+    "type": "rectangle",
+    "id": "e4",
+    "x": 50,
+    "y": 440,
+    "width": 260,
+    "height": 180,
+    "backgroundColor": "#ffffff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#8b5cf6",
+    "strokeWidth": 2,
+    "label": {
+      "text": "sede_shifts\n──────────────\nid (PK)\nstaff_id → staff\ndate\nstart · end_time\narea · status",
+      "fontSize": 13
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "sz2",
+    "x": 355,
+    "y": 410,
+    "width": 710,
+    "height": 225,
+    "backgroundColor": "#d3f9d8",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#22c55e",
+    "strokeWidth": 1,
+    "opacity": 30
+  },
+  {
+    "type": "text",
+    "id": "sz2l",
+    "x": 370,
+    "y": 416,
+    "text": "Campañas",
+    "fontSize": 14,
+    "strokeColor": "#2b8a3e"
+  },
+  {
+    "type": "rectangle",
+    "id": "e5",
+    "x": 370,
+    "y": 440,
+    "width": 290,
+    "height": 180,
+    "backgroundColor": "#ffffff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#22c55e",
+    "strokeWidth": 2,
+    "label": {
+      "text": "campaigns\n──────────────\nid (PK)\nname · date\nmodality · size\nstatus\ncoordinator_id → staff\nlocation_code",
+      "fontSize": 13
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "e6",
+    "x": 720,
+    "y": 440,
+    "width": 290,
+    "height": 180,
+    "backgroundColor": "#ffffff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#22c55e",
+    "strokeWidth": 2,
+    "label": {
+      "text": "campaign_assignments\n────────────────────\nid (PK)\ncampaign_id → camp\nstaff_id → staff\nrole · start · end\nstatus\noverride_reason",
+      "fontSize": 13
+    }
+  },
+  {
+    "type": "arrow",
+    "id": "r3",
+    "x": 660,
+    "y": 530,
+    "width": 60,
+    "height": 0,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        0
+      ]
+    ],
+    "strokeColor": "#2b8a3e",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow"
+  },
+  {
+    "type": "text",
+    "id": "r3l",
+    "x": 665,
+    "y": 513,
+    "text": "1 : N",
+    "fontSize": 12,
+    "strokeColor": "#2b8a3e"
+  },
+  {
+    "type": "arrow",
+    "id": "v2",
+    "x": 545,
+    "y": 650,
+    "width": 0,
+    "height": 60,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        60
+      ]
+    ],
+    "strokeColor": "#e67700",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow",
+    "strokeStyle": "dashed"
+  },
+  {
+    "type": "text",
+    "id": "v2l",
+    "x": 555,
+    "y": 666,
+    "text": "genera horas",
+    "fontSize": 12,
+    "strokeColor": "#e67700"
+  },
+  {
+    "type": "cameraUpdate",
+    "width": 1100,
+    "height": 430,
+    "x": 0,
+    "y": 640
+  },
+  {
+    "type": "rectangle",
+    "id": "z3",
+    "x": 20,
+    "y": 720,
+    "width": 1060,
+    "height": 280,
+    "backgroundColor": "#ffd8a8",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#f59e0b",
+    "strokeWidth": 1,
+    "opacity": 25
+  },
+  {
+    "type": "text",
+    "id": "z3l",
+    "x": 35,
+    "y": 726,
+    "text": "Control de Horas y Balance",
+    "fontSize": 18,
+    "strokeColor": "#e67700"
+  },
+  {
+    "type": "rectangle",
+    "id": "e7",
+    "x": 40,
+    "y": 760,
+    "width": 280,
+    "height": 185,
+    "backgroundColor": "#ffffff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#f59e0b",
+    "strokeWidth": 2,
+    "label": {
+      "text": "hours_log\n──────────────\nid (PK)\nstaff_id → staff\nsource (sede|camp)\nref_id · date\nhours_worked\ntype (regular|extra)",
+      "fontSize": 13
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "e8",
+    "x": 400,
+    "y": 760,
+    "width": 280,
+    "height": 185,
+    "backgroundColor": "#ffffff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#f59e0b",
+    "strokeWidth": 2,
+    "label": {
+      "text": "weekly_balance\n──────────────\nid (PK)\nstaff_id → staff\nweek_start\nsede_hours\ncampaign_hours\ntotal · overtime",
+      "fontSize": 13
+    }
+  },
+  {
+    "type": "rectangle",
+    "id": "e9",
+    "x": 750,
+    "y": 760,
+    "width": 310,
+    "height": 185,
+    "backgroundColor": "#ffffff",
+    "fillStyle": "solid",
+    "roundness": {
+      "type": 3
+    },
+    "strokeColor": "#f59e0b",
+    "strokeWidth": 2,
+    "label": {
+      "text": "monthly_counters\n────────────────\nid (PK)\nstaff_id → staff\nmonth\nsundays_count (máx 2)\novernight_count (máx 1)",
+      "fontSize": 13
+    }
+  },
+  {
+    "type": "arrow",
+    "id": "r4",
+    "x": 320,
+    "y": 830,
+    "width": 80,
+    "height": 0,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        80,
+        0
+      ]
+    ],
+    "strokeColor": "#e67700",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow"
+  },
+  {
+    "type": "text",
+    "id": "r4l",
+    "x": 327,
+    "y": 813,
+    "text": "Σ semanal",
+    "fontSize": 11,
+    "strokeColor": "#e67700"
+  },
+  {
+    "type": "arrow",
+    "id": "r5",
+    "x": 320,
+    "y": 895,
+    "width": 430,
+    "height": 70,
+    "points": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        70
+      ],
+      [
+        430,
+        70
+      ],
+      [
+        430,
+        0
+      ]
+    ],
+    "strokeColor": "#e67700",
+    "strokeWidth": 2,
+    "endArrowhead": "arrow"
+  },
+  {
+    "type": "text",
+    "id": "r5l",
+    "x": 500,
+    "y": 968,
+    "text": "Σ mensual",
+    "fontSize": 11,
+    "strokeColor": "#e67700"
+  },
+  {
+    "type": "text",
+    "id": "note",
+    "x": 340,
+    "y": 1010,
+    "text": "9 entidades principales (de ~16 tablas totales del sistema)",
+    "fontSize": 13,
+    "strokeColor": "#868e96"
+  },
+  {
+    "type": "cameraUpdate",
+    "width": 1200,
+    "height": 1150,
+    "x": -60,
+    "y": -50
+  }
+]
