@@ -4,6 +4,7 @@ import { campaignStatusEnum, campaignSizeEnum, campaignModalityEnum } from './en
 import { companies } from './companies'
 import { locations } from './locations'
 import { profiles } from './profiles'
+import { trainingAreas } from './training-areas'
 
 export const campaigns = pgTable('campaigns', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -18,7 +19,7 @@ export const campaigns = pgTable('campaigns', {
   status: campaignStatusEnum('status').notNull().default('tentativa'),
   municipality: text('municipality').notNull(),
   expectedDonations: integer('expected_donations'),
-  trainingAreaId: uuid('training_area_id'),
+  trainingAreaId: uuid('training_area_id').references(() => trainingAreas.id, { onDelete: 'set null' }),
   cancelReason: text('cancel_reason'),
   observations: text('observations'),
   createdById: uuid('created_by_id').references(() => profiles.id, { onDelete: 'set null' }),

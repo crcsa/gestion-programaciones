@@ -1,4 +1,4 @@
-import { pgTable, uuid, integer, timestamp } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, integer, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 import { staffMembers } from './staff-members'
 
 export const monthlyCounters = pgTable('monthly_counters', {
@@ -13,7 +13,9 @@ export const monthlyCounters = pgTable('monthly_counters', {
   campaignCount: integer('campaign_count').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
+}, (t) => [
+  uniqueIndex('monthly_counters_staff_year_month_idx').on(t.staffId, t.year, t.month),
+])
 
 export type MonthlyCounter = typeof monthlyCounters.$inferSelect
 export type NewMonthlyCounter = typeof monthlyCounters.$inferInsert

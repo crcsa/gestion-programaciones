@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, boolean, timestamp, date } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, integer, boolean, timestamp, date, primaryKey } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { staffProfileEnum, contractTypeEnum, shiftTypeEnum } from './enums'
 import { profiles } from './profiles'
@@ -26,7 +26,9 @@ export const staffMembers = pgTable('staff_members', {
 export const staffTrainingAreas = pgTable('staff_training_areas', {
   staffId: uuid('staff_id').notNull().references(() => staffMembers.id, { onDelete: 'cascade' }),
   trainingAreaId: uuid('training_area_id').notNull().references(() => trainingAreas.id, { onDelete: 'cascade' }),
-})
+}, (t) => [
+  primaryKey({ columns: [t.staffId, t.trainingAreaId] }),
+])
 
 export const staffMembersRelations = relations(staffMembers, ({ many }) => ({
   trainingAreas: many(staffTrainingAreas),
