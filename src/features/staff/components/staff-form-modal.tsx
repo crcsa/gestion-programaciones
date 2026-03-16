@@ -40,7 +40,7 @@ export function StaffFormModal(props: StaffFormModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="!max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {props.mode === 'create' ? 'Nuevo Funcionario' : 'Editar Funcionario'}

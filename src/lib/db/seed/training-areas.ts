@@ -2,16 +2,57 @@ import { db } from '../index'
 import { trainingAreas } from '../schema'
 
 const AREAS = [
-  { name: 'Banco de Sangre', description: 'Procesamiento y almacenamiento de sangre' },
-  { name: 'Colecta', description: 'Recoleccion de donaciones de sangre' },
-  { name: 'Serologia', description: 'Analisis serologicos' },
-  { name: 'Hematologia', description: 'Analisis hematologicos' },
-  { name: 'Medicina Transfusional', description: 'Procesos de transfusion' },
-  { name: 'Aferesis', description: 'Procedimientos de aferesis' },
-  { name: 'Control de Calidad', description: 'Control de calidad de procesos' },
-  { name: 'Coordinacion', description: 'Coordinacion de campanas y equipos' },
+  // Técnico
+  {
+    name: 'Atención Donantes Campañas - Sede - Punto Fijo',
+    description: 'Atención y recepción de donantes en campañas, sede y puntos fijos',
+    forProfiles: ['tecnico'],
+  },
+  {
+    name: 'Encuestas - Inventario',
+    description: 'Aplicación de encuestas a donantes y gestión de inventario',
+    forProfiles: ['tecnico'],
+  },
+  {
+    name: 'Aféresis',
+    description: 'Procedimientos de aféresis para técnicos',
+    forProfiles: ['tecnico'],
+  },
+  // Bacteriólogo
+  {
+    name: 'Selección Donantes Campañas - Sede - Punto Fijo',
+    description: 'Selección y evaluación de donantes en campañas, sede y puntos fijos',
+    forProfiles: ['bacteriologo'],
+  },
+  {
+    name: 'Aféresis Amicus',
+    description: 'Procedimientos de aféresis con equipo Amicus',
+    forProfiles: ['bacteriologo'],
+  },
+  {
+    name: 'Inmunohematología',
+    description: 'Análisis y pruebas de inmunohematología',
+    forProfiles: ['bacteriologo'],
+  },
+  {
+    name: 'Inmunoserología',
+    description: 'Análisis y pruebas de inmunoserología',
+    forProfiles: ['bacteriologo'],
+  },
+  {
+    name: 'Servicios Transfusionales',
+    description: 'Gestión y soporte de servicios transfusionales',
+    forProfiles: ['bacteriologo'],
+  },
+  // Compartida: Técnico + Bacteriólogo
+  {
+    name: 'Fraccionamiento',
+    description: 'Procesamiento y fraccionamiento de componentes sanguíneos',
+    forProfiles: ['tecnico', 'bacteriologo'],
+  },
 ]
 
 export async function seedTrainingAreas() {
-  await db.insert(trainingAreas).values(AREAS).onConflictDoNothing()
+  await db.delete(trainingAreas)
+  await db.insert(trainingAreas).values(AREAS)
 }

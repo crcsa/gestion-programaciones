@@ -44,6 +44,10 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }:
   const contractType = watch('contractType')
   const defaultShift = watch('defaultShift')
 
+  const filteredAreas = staffProfile
+    ? areas.filter((a) => a.forProfiles.includes(staffProfile))
+    : areas
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -185,6 +189,9 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }:
 
         <div className="space-y-1.5 sm:col-span-2">
           <Label>Áreas de Entrenamiento</Label>
+          {!staffProfile && (
+            <p className="text-xs text-muted-foreground">Selecciona un perfil para ver las áreas disponibles</p>
+          )}
           <Controller
             control={control}
             name="trainingAreaIds"
@@ -192,7 +199,7 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }:
               <TrainingAreaMultiSelect
                 value={field.value ?? []}
                 onChange={field.onChange}
-                areas={areas}
+                areas={filteredAreas}
               />
             )}
           />
