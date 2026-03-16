@@ -64,7 +64,7 @@ export function StaffFilters({ onFiltersChange }: StaffFiltersProps) {
         <Label htmlFor="staff-perfil" className="mb-1.5">
           Perfil
         </Label>
-        <Select value={perfil} onValueChange={setPerfil}>
+        <Select value={perfil} onValueChange={(v) => setPerfil(v ?? 'todos')}>
           <SelectTrigger id="staff-perfil" className="w-full">
             <SelectValue placeholder="Todos" />
           </SelectTrigger>
@@ -83,7 +83,7 @@ export function StaffFilters({ onFiltersChange }: StaffFiltersProps) {
         <Label htmlFor="staff-estado" className="mb-1.5">
           Estado
         </Label>
-        <Select value={estado} onValueChange={setEstado}>
+        <Select value={estado} onValueChange={(v) => setEstado(v ?? 'todos')}>
           <SelectTrigger id="staff-estado" className="w-full">
             <SelectValue placeholder="Todos" />
           </SelectTrigger>

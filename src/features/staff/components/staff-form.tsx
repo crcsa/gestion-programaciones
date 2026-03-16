@@ -35,6 +35,7 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }:
     resolver: zodResolver(createStaffSchema),
     defaultValues: {
       weeklyHours: 44,
+      trainingAreaIds: [],
       ...defaultValues,
     },
   })

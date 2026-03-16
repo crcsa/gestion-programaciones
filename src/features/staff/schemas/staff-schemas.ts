@@ -29,7 +29,7 @@ export const createStaffSchema = z.object({
   ),
   hireDate: z.string().optional(),
   notes: z.string().optional(),
-  trainingAreaIds: z.array(z.string().uuid()).optional().default([]),
+  trainingAreaIds: z.array(z.string().uuid()).optional(),
 })
 
 export const updateStaffSchema = z.object({
