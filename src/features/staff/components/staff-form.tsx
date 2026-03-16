@@ -112,7 +112,7 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }:
         <div className="space-y-1.5">
           <Label htmlFor="staffProfile">Perfil</Label>
           <Select
-            value={staffProfile}
+            value={staffProfile ?? ''}
             onValueChange={(v) => setValue('staffProfile', v as CreateStaffInput['staffProfile'], { shouldValidate: true })}
           >
             <SelectTrigger id="staffProfile" aria-invalid={!!errors.staffProfile} className="w-full">
@@ -134,7 +134,7 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }:
         <div className="space-y-1.5">
           <Label htmlFor="contractType">Tipo de Contrato</Label>
           <Select
-            value={contractType}
+            value={contractType ?? ''}
             onValueChange={(v) => setValue('contractType', v as CreateStaffInput['contractType'], { shouldValidate: true })}
           >
             <SelectTrigger id="contractType" aria-invalid={!!errors.contractType} className="w-full">
@@ -170,7 +170,7 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }:
         <div className="space-y-1.5">
           <Label htmlFor="defaultShift">Turno por defecto</Label>
           <Select
-            value={defaultShift}
+            value={defaultShift ?? ''}
             onValueChange={(v) => setValue('defaultShift', v as CreateStaffInput['defaultShift'], { shouldValidate: true })}
           >
             <SelectTrigger id="defaultShift" aria-invalid={!!errors.defaultShift} className="w-full">
