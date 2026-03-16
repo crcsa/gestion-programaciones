@@ -4,11 +4,13 @@ import { eq, ilike, and, or, sql } from 'drizzle-orm'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { db } from '@/lib/db'
 import { staffMembers, staffTrainingAreas } from '@/lib/db/schema/staff-members'
+import { trainingAreas } from '@/lib/db/schema/training-areas'
 import { profiles } from '@/lib/db/schema/profiles'
 import { requireRole } from '@/features/auth/lib/require-role'
 import { createStaffSchema, updateStaffSchema } from '../schemas/staff-schemas'
 import type { CreateStaffInput, UpdateStaffInput } from '../schemas/staff-schemas'
 import type { StaffMember } from '@/lib/db/schema/staff-members'
+import type { TrainingArea } from '@/lib/db/schema/training-areas'
 
 // ---- Types ----------------------------------------------------------------
 
@@ -128,6 +130,21 @@ export async function getStaffById(id: string): Promise<StaffMember & { training
       throw error
     }
     throw new Error('Error al obtener el funcionario')
+  }
+}
+
+export async function getTrainingAreas(): Promise<TrainingArea[]> {
+  await requireRole(['admin', 'banco_sangre'])
+
+  try {
+    return await db
+      .select()
+      .from(trainingAreas)
+      .where(eq(trainingAreas.isActive, true))
+      .orderBy(trainingAreas.name)
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('permiso')) throw error
+    throw new Error('Error al obtener las areas de entrenamiento')
   }
 }
 

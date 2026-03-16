@@ -6,15 +6,18 @@ import { toast } from 'sonner'
 import { StaffForm } from './staff-form'
 import { createStaff, updateStaff } from '@/features/staff/actions/staff-actions'
 import type { CreateStaffInput } from '@/features/staff/schemas/staff-schemas'
+import type { TrainingArea } from '@/lib/db/schema/training-areas'
 
 interface CreateMode {
   mode: 'create'
+  areas: TrainingArea[]
 }
 
 interface EditMode {
   mode: 'edit'
   staffId: string
   defaultValues: Partial<CreateStaffInput>
+  areas: TrainingArea[]
 }
 
 type StaffFormClientProps = CreateMode | EditMode
@@ -35,6 +38,8 @@ export function StaffFormClient(props: StaffFormClientProps) {
         toast.success('Funcionario creado correctamente')
         router.push('/personal')
       }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar el funcionario')
     } finally {
       setIsLoading(false)
     }
@@ -47,7 +52,7 @@ export function StaffFormClient(props: StaffFormClientProps) {
       defaultValues={defaultValues}
       onSubmit={handleSubmit}
       isLoading={isLoading}
-      areas={[]}
+      areas={props.areas}
     />
   )
 }

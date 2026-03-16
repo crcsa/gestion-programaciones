@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { format } from 'date-fns'
 import { getStaffById } from '@/features/staff/actions/staff-actions'
 import { StaffStatusBadge } from '@/features/staff/components/staff-status-badge'
 import { Button } from '@/components/ui/button'
@@ -52,7 +53,7 @@ export default async function StaffDetailPage({ params }: StaffDetailPageProps) 
         <DetailRow label="Turno por defecto" value={SHIFT_LABELS[staff.defaultShift] ?? staff.defaultShift} />
         {staff.email && <DetailRow label="Correo" value={staff.email} />}
         {staff.phone && <DetailRow label="Teléfono" value={staff.phone} />}
-        {staff.hireDate && <DetailRow label="Fecha de ingreso" value={staff.hireDate} />}
+        {staff.hireDate && <DetailRow label="Fecha de ingreso" value={format(new Date(staff.hireDate), 'dd/MM/yyyy')} />}
       </div>
 
       {staff.trainingAreaIds.length > 0 && (

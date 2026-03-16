@@ -9,7 +9,7 @@ import {
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { StaffStatusBadge } from './staff-status-badge'
-import { STAFF_PROFILE_LABELS } from '@/features/staff/lib/constants'
+import { STAFF_PROFILE_LABELS, PAGE_LIMIT } from '@/features/staff/lib/constants'
 import type { StaffMember } from '@/lib/db/schema/staff-members'
 
 interface StaffTableProps {
@@ -18,8 +18,6 @@ interface StaffTableProps {
   page: number
   onPageChange: (page: number) => void
 }
-
-const PAGE_LIMIT = 20
 
 const columnHelper = createColumnHelper<StaffMember>()
 

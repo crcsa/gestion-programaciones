@@ -5,11 +5,12 @@ import { getStaffList } from '@/features/staff/actions/staff-actions'
 import { StaffListClient } from '@/features/staff/components/staff-list-client'
 import { StaffTableSkeleton } from '@/features/staff/components/staff-table-skeleton'
 import { RoleGate } from '@/features/auth/components/role-gate'
+import { PAGE_LIMIT } from '@/features/staff/lib/constants'
 import { Button } from '@/components/ui/button'
 import type { Role } from '@/types/roles'
 
 async function StaffListSection() {
-  const result = await getStaffList({ page: 1, limit: 20 })
+  const result = await getStaffList({ page: 1, limit: PAGE_LIMIT })
   return <StaffListClient initialData={result} />
 }
 

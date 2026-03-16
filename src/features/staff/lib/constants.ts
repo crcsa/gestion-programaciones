@@ -1,3 +1,5 @@
+export const PAGE_LIMIT = 20
+
 export const STAFF_PROFILE_LABELS: Record<string, string> = {
   bacteriologo: 'Bacteriólogo',
   tecnico: 'Técnico',
