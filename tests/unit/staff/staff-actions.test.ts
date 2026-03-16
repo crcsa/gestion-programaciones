@@ -78,7 +78,7 @@ describe('createStaff', () => {
 
     // Mock: select existing cedula → found
     const selectChain = makeChain(existingStaff)
-    mockDb.select = vi.fn(() => selectChain) as typeof mockDb.select
+    mockDb.select = vi.fn(() => selectChain) as unknown as typeof mockDb.select
 
     await expect(createStaff(validInput)).rejects.toThrow(
       'Ya existe un funcionario con esa cedula'
@@ -106,7 +106,7 @@ describe('createStaff', () => {
     }
 
     // select (cedula check) → empty
-    mockDb.select = vi.fn(() => makeChain([])) as typeof mockDb.select
+    mockDb.select = vi.fn(() => makeChain([])) as unknown as typeof mockDb.select
 
     // insert: first call = profiles (no returning, void), second call = staffMembers (.returning())
     let insertCallCount = 0
@@ -115,7 +115,7 @@ describe('createStaff', () => {
       // Both calls return a chain; only staffMembers insert uses .returning()
       // The chain's 'then' resolves to [createdStaff] for both, which works for destructuring
       return makeChain([createdStaff])
-    }) as typeof mockDb.insert
+    }) as unknown as typeof mockDb.insert
 
     const result = await createStaff(validInput)
     expect(result.cedula).toBe('1234567890')
@@ -139,8 +139,8 @@ describe('updateTrainingAreas', () => {
       { staffId, trainingAreaId: 'area-2' },
     ])
 
-    mockDb.delete = vi.fn(() => deleteChain) as typeof mockDb.delete
-    mockDb.insert = vi.fn(() => insertChain) as typeof mockDb.insert
+    mockDb.delete = vi.fn(() => deleteChain) as unknown as typeof mockDb.delete
+    mockDb.insert = vi.fn(() => insertChain) as unknown as typeof mockDb.insert
 
     await updateTrainingAreas(staffId, newAreaIds)
 
@@ -152,8 +152,8 @@ describe('updateTrainingAreas', () => {
     const staffId = 'staff-abc'
     const deleteChain = makeChain([])
 
-    mockDb.delete = vi.fn(() => deleteChain) as typeof mockDb.delete
-    mockDb.insert = vi.fn(() => makeChain([])) as typeof mockDb.insert
+    mockDb.delete = vi.fn(() => deleteChain) as unknown as typeof mockDb.delete
+    mockDb.insert = vi.fn(() => makeChain([])) as unknown as typeof mockDb.insert
 
     await updateTrainingAreas(staffId, [])
 
@@ -190,7 +190,7 @@ describe('getStaffList', () => {
     ]
 
     const selectChain = makeChain(bacteriologos)
-    mockDb.select = vi.fn(() => selectChain) as typeof mockDb.select
+    mockDb.select = vi.fn(() => selectChain) as unknown as typeof mockDb.select
 
     const result = await getStaffList({ perfil: 'bacteriologo', page: 1, limit: 20 })
 
@@ -219,7 +219,7 @@ describe('getStaffList', () => {
     }))
 
     const selectChain = makeChain(staffList)
-    mockDb.select = vi.fn(() => selectChain) as typeof mockDb.select
+    mockDb.select = vi.fn(() => selectChain) as unknown as typeof mockDb.select
 
     const result = await getStaffList({ page: 1, limit: 20 })
 
@@ -242,10 +242,10 @@ describe('toggleStaffStatus', () => {
     mockDb.select = vi.fn(() => {
       selectCallCount++
       return makeChain(existingStaff)
-    }) as typeof mockDb.select
+    }) as unknown as typeof mockDb.select
 
     const updateChain = makeChain(updatedStaff)
-    mockDb.update = vi.fn(() => updateChain) as typeof mockDb.update
+    mockDb.update = vi.fn(() => updateChain) as unknown as typeof mockDb.update
 
     const result = await toggleStaffStatus(staffId)
 
@@ -254,7 +254,7 @@ describe('toggleStaffStatus', () => {
   })
 
   it('lanza error si el staff no existe', async () => {
-    mockDb.select = vi.fn(() => makeChain([])) as typeof mockDb.select
+    mockDb.select = vi.fn(() => makeChain([])) as unknown as typeof mockDb.select
 
     await expect(toggleStaffStatus('no-existe')).rejects.toThrow(
       'Funcionario no encontrado'
