@@ -29,6 +29,7 @@ export const createStaffSchema = z.object({
   ),
   hireDate: z.string().optional(),
   notes: z.string().optional(),
+  trainingAreaIds: z.array(z.string().uuid()).optional().default([]),
 })
 
 export const updateStaffSchema = z.object({
@@ -58,6 +59,7 @@ export const updateStaffSchema = z.object({
   defaultShift: z.enum(['diurno_completo', 'noche', 'posturno']).optional(),
   hireDate: z.string().optional(),
   notes: z.string().optional(),
+  trainingAreaIds: z.array(z.string().uuid()).optional(),
 })
 
 export type CreateStaffInput = z.infer<typeof createStaffSchema>

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { StaffForm } from './staff-form'
@@ -20,16 +21,22 @@ type StaffFormClientProps = CreateMode | EditMode
 
 export function StaffFormClient(props: StaffFormClientProps) {
   const router = useRouter()
+  const [isLoading, setIsLoading] = useState<boolean>(false)
 
   async function handleSubmit(data: CreateStaffInput) {
-    if (props.mode === 'edit') {
-      await updateStaff(props.staffId, data)
-      toast.success('Funcionario actualizado correctamente')
-      router.push(`/personal/${props.staffId}`)
-    } else {
-      await createStaff(data)
-      toast.success('Funcionario creado correctamente')
-      router.push('/personal')
+    setIsLoading(true)
+    try {
+      if (props.mode === 'edit') {
+        await updateStaff(props.staffId, data)
+        toast.success('Funcionario actualizado correctamente')
+        router.push(`/personal/${props.staffId}`)
+      } else {
+        await createStaff(data)
+        toast.success('Funcionario creado correctamente')
+        router.push('/personal')
+      }
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -39,6 +46,8 @@ export function StaffFormClient(props: StaffFormClientProps) {
     <StaffForm
       defaultValues={defaultValues}
       onSubmit={handleSubmit}
+      isLoading={isLoading}
+      areas={[]}
     />
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,19 +13,23 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { createStaffSchema, type CreateStaffInput } from '@/features/staff/schemas/staff-schemas'
+import { TrainingAreaMultiSelect } from './training-area-multi-select'
+import type { TrainingArea } from '@/lib/db/schema/training-areas'
 
 interface StaffFormProps {
   defaultValues?: Partial<CreateStaffInput>
   onSubmit: (data: CreateStaffInput) => Promise<void>
   isLoading?: boolean
+  areas: TrainingArea[]
 }
 
-export function StaffForm({ defaultValues, onSubmit, isLoading = false }: StaffFormProps) {
+export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }: StaffFormProps) {
   const {
     register,
     handleSubmit,
     setValue,
     watch,
+    control,
     formState: { errors },
   } = useForm<CreateStaffInput>({
     resolver: zodResolver(createStaffSchema),
@@ -176,6 +180,21 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false }: StaffF
           {errors.defaultShift && (
             <p className="text-sm text-destructive">{errors.defaultShift.message}</p>
           )}
+        </div>
+
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label>Áreas de Entrenamiento</Label>
+          <Controller
+            control={control}
+            name="trainingAreaIds"
+            render={({ field }) => (
+              <TrainingAreaMultiSelect
+                value={field.value ?? []}
+                onChange={field.onChange}
+                areas={areas}
+              />
+            )}
+          />
         </div>
 
         <div className="space-y-1.5">
