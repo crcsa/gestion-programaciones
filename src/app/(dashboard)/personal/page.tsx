@@ -1,18 +1,10 @@
 import { Suspense } from 'react'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { getStaffList } from '@/features/staff/actions/staff-actions'
+import { getStaffList, getTrainingAreas } from '@/features/staff/actions/staff-actions'
 import { StaffListClient } from '@/features/staff/components/staff-list-client'
 import { StaffTableSkeleton } from '@/features/staff/components/staff-table-skeleton'
-import { RoleGate } from '@/features/auth/components/role-gate'
 import { PAGE_LIMIT } from '@/features/staff/lib/constants'
-import { Button } from '@/components/ui/button'
 import type { Role } from '@/types/roles'
-
-async function StaffListSection() {
-  const result = await getStaffList({ page: 1, limit: PAGE_LIMIT })
-  return <StaffListClient initialData={result} />
-}
 
 async function getCurrentRole(): Promise<Role | null> {
   const supabase = await createClient()
@@ -28,29 +20,26 @@ async function getCurrentRole(): Promise<Role | null> {
   return (profile?.role as Role) ?? null
 }
 
-export default async function PersonalPage() {
-  const currentRole = await getCurrentRole()
+async function PersonalSection() {
+  const [result, areas, currentRole] = await Promise.all([
+    getStaffList({ page: 1, limit: PAGE_LIMIT }),
+    getTrainingAreas(),
+    getCurrentRole(),
+  ])
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Personal</h1>
-          <p className="text-muted-foreground text-sm">
-            Gestión de funcionarios del banco de sangre
-          </p>
-        </div>
+    <StaffListClient
+      initialData={result}
+      areas={areas}
+      currentRole={currentRole}
+    />
+  )
+}
 
-        <RoleGate allowedRoles={['admin', 'banco_sangre']} currentRole={currentRole}>
-          <Button render={<Link href="/personal/nuevo" />} nativeButton={false}>
-            Nuevo
-          </Button>
-        </RoleGate>
-      </div>
-
-      <Suspense fallback={<StaffTableSkeleton />}>
-        <StaffListSection />
-      </Suspense>
-    </div>
+export default async function PersonalPage() {
+  return (
+    <Suspense fallback={<StaffTableSkeleton />}>
+      <PersonalSection />
+    </Suspense>
   )
 }

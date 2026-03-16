@@ -11,6 +11,7 @@ import type { TrainingArea } from '@/lib/db/schema/training-areas'
 interface CreateMode {
   mode: 'create'
   areas: TrainingArea[]
+  onSuccess?: () => void
 }
 
 interface EditMode {
@@ -18,6 +19,7 @@ interface EditMode {
   staffId: string
   defaultValues: Partial<CreateStaffInput>
   areas: TrainingArea[]
+  onSuccess?: () => void
 }
 
 type StaffFormClientProps = CreateMode | EditMode
@@ -32,11 +34,19 @@ export function StaffFormClient(props: StaffFormClientProps) {
       if (props.mode === 'edit') {
         await updateStaff(props.staffId, data)
         toast.success('Funcionario actualizado correctamente')
-        router.push(`/personal/${props.staffId}`)
+        if (props.onSuccess) {
+          props.onSuccess()
+        } else {
+          router.push(`/personal/${props.staffId}`)
+        }
       } else {
         await createStaff(data)
         toast.success('Funcionario creado correctamente')
-        router.push('/personal')
+        if (props.onSuccess) {
+          props.onSuccess()
+        } else {
+          router.push('/personal')
+        }
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar el funcionario')

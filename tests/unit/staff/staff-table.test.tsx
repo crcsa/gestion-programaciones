@@ -57,6 +57,7 @@ describe('StaffTable', () => {
         total={2}
         page={1}
         onPageChange={vi.fn()}
+        onEdit={vi.fn()}
       />
     )
 
@@ -71,6 +72,7 @@ describe('StaffTable', () => {
         total={2}
         page={1}
         onPageChange={vi.fn()}
+        onEdit={vi.fn()}
       />
     )
 
@@ -85,6 +87,7 @@ describe('StaffTable', () => {
         total={2}
         page={1}
         onPageChange={vi.fn()}
+        onEdit={vi.fn()}
       />
     )
 
@@ -99,6 +102,7 @@ describe('StaffTable', () => {
         total={2}
         page={1}
         onPageChange={vi.fn()}
+        onEdit={vi.fn()}
       />
     )
 
@@ -106,24 +110,43 @@ describe('StaffTable', () => {
     expect(screen.getByText('Inactivo')).toBeDefined()
   })
 
-  it('renders action links for each row', () => {
+  it('renders Ver links and Editar buttons for each row', () => {
+    const onEdit = vi.fn()
+
     render(
       <StaffTable
         data={mockStaff}
         total={2}
         page={1}
         onPageChange={vi.fn()}
+        onEdit={onEdit}
       />
     )
 
     const verLinks = screen.getAllByText('Ver')
-    const editLinks = screen.getAllByText('Editar')
+    const editButtons = screen.getAllByText('Editar')
 
     expect(verLinks).toHaveLength(2)
-    expect(editLinks).toHaveLength(2)
+    expect(editButtons).toHaveLength(2)
 
     expect(verLinks[0].getAttribute('href')).toBe('/personal/id-1')
-    expect(editLinks[0].getAttribute('href')).toBe('/personal/id-1/editar')
+  })
+
+  it('calls onEdit with staff member when Editar is clicked', () => {
+    const onEdit = vi.fn()
+
+    render(
+      <StaffTable
+        data={mockStaff}
+        total={2}
+        page={1}
+        onPageChange={vi.fn()}
+        onEdit={onEdit}
+      />
+    )
+
+    fireEvent.click(screen.getAllByText('Editar')[0])
+    expect(onEdit).toHaveBeenCalledWith(mockStaff[0])
   })
 
   it('shows empty state when no data', () => {
@@ -133,6 +156,7 @@ describe('StaffTable', () => {
         total={0}
         page={1}
         onPageChange={vi.fn()}
+        onEdit={vi.fn()}
       />
     )
 
@@ -146,6 +170,7 @@ describe('StaffTable', () => {
         total={2}
         page={1}
         onPageChange={vi.fn()}
+        onEdit={vi.fn()}
       />
     )
 
@@ -160,6 +185,7 @@ describe('StaffTable', () => {
         total={50}
         page={2}
         onPageChange={vi.fn()}
+        onEdit={vi.fn()}
       />
     )
 
@@ -176,6 +202,7 @@ describe('StaffTable', () => {
         total={50}
         page={2}
         onPageChange={onPageChange}
+        onEdit={vi.fn()}
       />
     )
 
@@ -192,6 +219,7 @@ describe('StaffTable', () => {
         total={50}
         page={1}
         onPageChange={onPageChange}
+        onEdit={vi.fn()}
       />
     )
 
@@ -206,6 +234,7 @@ describe('StaffTable', () => {
         total={50}
         page={1}
         onPageChange={vi.fn()}
+        onEdit={vi.fn()}
       />
     )
 
@@ -220,6 +249,7 @@ describe('StaffTable', () => {
         total={40}
         page={2}
         onPageChange={vi.fn()}
+        onEdit={vi.fn()}
       />
     )
 

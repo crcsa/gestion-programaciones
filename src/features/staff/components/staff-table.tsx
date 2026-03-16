@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -17,54 +18,59 @@ interface StaffTableProps {
   total: number
   page: number
   onPageChange: (page: number) => void
+  onEdit: (staff: StaffMember) => void
 }
 
 const columnHelper = createColumnHelper<StaffMember>()
 
-const columns = [
-  columnHelper.accessor(
-    (row) => `${row.firstName} ${row.lastName}`,
-    {
-      id: 'fullName',
-      header: 'Nombre completo',
-      cell: (info) => info.getValue(),
-    }
-  ),
-  columnHelper.accessor('cedula', {
-    header: 'Cédula',
-    cell: (info) => info.getValue(),
-  }),
-  columnHelper.accessor('staffProfile', {
-    header: 'Perfil',
-    cell: (info) => STAFF_PROFILE_LABELS[info.getValue()] ?? info.getValue(),
-  }),
-  columnHelper.accessor('isActive', {
-    header: 'Estado',
-    cell: (info) => <StaffStatusBadge isActive={info.getValue()} />,
-  }),
-  columnHelper.accessor('id', {
-    id: 'acciones',
-    header: 'Acciones',
-    cell: (info) => (
-      <div className="flex items-center gap-2">
-        <Link
-          href={`/personal/${info.getValue()}`}
-          className="text-sm text-primary underline-offset-4 hover:underline"
-        >
-          Ver
-        </Link>
-        <Link
-          href={`/personal/${info.getValue()}/editar`}
-          className="text-sm text-primary underline-offset-4 hover:underline"
-        >
-          Editar
-        </Link>
-      </div>
-    ),
-  }),
-]
+export function StaffTable({ data, total, page, onPageChange, onEdit }: StaffTableProps) {
+  const columns = useMemo(
+    () => [
+      columnHelper.accessor(
+        (row) => `${row.firstName} ${row.lastName}`,
+        {
+          id: 'fullName',
+          header: 'Nombre completo',
+          cell: (info) => info.getValue(),
+        }
+      ),
+      columnHelper.accessor('cedula', {
+        header: 'Cédula',
+        cell: (info) => info.getValue(),
+      }),
+      columnHelper.accessor('staffProfile', {
+        header: 'Perfil',
+        cell: (info) => STAFF_PROFILE_LABELS[info.getValue()] ?? info.getValue(),
+      }),
+      columnHelper.accessor('isActive', {
+        header: 'Estado',
+        cell: (info) => <StaffStatusBadge isActive={info.getValue()} />,
+      }),
+      columnHelper.display({
+        id: 'acciones',
+        header: 'Acciones',
+        cell: (info) => (
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/personal/${info.row.original.id}`}
+              className="text-sm text-primary underline-offset-4 hover:underline"
+            >
+              Ver
+            </Link>
+            <button
+              type="button"
+              onClick={() => onEdit(info.row.original)}
+              className="text-sm text-primary underline-offset-4 hover:underline"
+            >
+              Editar
+            </button>
+          </div>
+        ),
+      }),
+    ],
+    [onEdit]
+  )
 
-export function StaffTable({ data, total, page, onPageChange }: StaffTableProps) {
   const table = useReactTable({
     data,
     columns,
