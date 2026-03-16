@@ -42,7 +42,7 @@ export default async function PersonalPage() {
         </div>
 
         <RoleGate allowedRoles={['admin', 'banco_sangre']} currentRole={currentRole}>
-          <Button render={<Link href="/personal/nuevo" />}>
+          <Button render={<Link href="/personal/nuevo" />} nativeButton={false}>
             Nuevo
           </Button>
         </RoleGate>
