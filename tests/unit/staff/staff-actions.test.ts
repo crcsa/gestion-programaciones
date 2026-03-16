@@ -55,7 +55,13 @@ function makeChain(resolvedValue: unknown) {
   return chain
 }
 
-const mockDb = vi.mocked(db)
+type SimpleMockDb = {
+  select: ReturnType<typeof vi.fn>
+  insert: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
+  delete: ReturnType<typeof vi.fn>
+}
+const mockDb = db as unknown as SimpleMockDb
 
 describe('createStaff', () => {
   const validInput = {
@@ -78,8 +84,7 @@ describe('createStaff', () => {
 
     // Mock: select existing cedula → found
     const selectChain = makeChain(existingStaff)
-    mockDb.select = vi.fn(() => selectChain) as unknown as typeof mockDb.select
-
+    mockDb.select = vi.fn(() => selectChain)
     await expect(createStaff(validInput)).rejects.toThrow(
       'Ya existe un funcionario con esa cedula'
     )
@@ -106,8 +111,7 @@ describe('createStaff', () => {
     }
 
     // select (cedula check) → empty
-    mockDb.select = vi.fn(() => makeChain([])) as unknown as typeof mockDb.select
-
+    mockDb.select = vi.fn(() => makeChain([]))
     // insert: first call = profiles (no returning, void), second call = staffMembers (.returning())
     let insertCallCount = 0
     mockDb.insert = vi.fn(() => {
@@ -115,8 +119,7 @@ describe('createStaff', () => {
       // Both calls return a chain; only staffMembers insert uses .returning()
       // The chain's 'then' resolves to [createdStaff] for both, which works for destructuring
       return makeChain([createdStaff])
-    }) as unknown as typeof mockDb.insert
-
+    })
     const result = await createStaff(validInput)
     expect(result.cedula).toBe('1234567890')
     expect(result.id).toBe('new-id')
@@ -139,9 +142,8 @@ describe('updateTrainingAreas', () => {
       { staffId, trainingAreaId: 'area-2' },
     ])
 
-    mockDb.delete = vi.fn(() => deleteChain) as unknown as typeof mockDb.delete
-    mockDb.insert = vi.fn(() => insertChain) as unknown as typeof mockDb.insert
-
+    mockDb.delete = vi.fn(() => deleteChain)
+    mockDb.insert = vi.fn(() => insertChain)
     await updateTrainingAreas(staffId, newAreaIds)
 
     expect(mockDb.delete).toHaveBeenCalledTimes(1)
@@ -152,9 +154,8 @@ describe('updateTrainingAreas', () => {
     const staffId = 'staff-abc'
     const deleteChain = makeChain([])
 
-    mockDb.delete = vi.fn(() => deleteChain) as unknown as typeof mockDb.delete
-    mockDb.insert = vi.fn(() => makeChain([])) as unknown as typeof mockDb.insert
-
+    mockDb.delete = vi.fn(() => deleteChain)
+    mockDb.insert = vi.fn(() => makeChain([]))
     await updateTrainingAreas(staffId, [])
 
     expect(mockDb.delete).toHaveBeenCalledTimes(1)
@@ -190,8 +191,7 @@ describe('getStaffList', () => {
     ]
 
     const selectChain = makeChain(bacteriologos)
-    mockDb.select = vi.fn(() => selectChain) as unknown as typeof mockDb.select
-
+    mockDb.select = vi.fn(() => selectChain)
     const result = await getStaffList({ perfil: 'bacteriologo', page: 1, limit: 20 })
 
     expect(result.data).toHaveLength(1)
@@ -219,8 +219,7 @@ describe('getStaffList', () => {
     }))
 
     const selectChain = makeChain(staffList)
-    mockDb.select = vi.fn(() => selectChain) as unknown as typeof mockDb.select
-
+    mockDb.select = vi.fn(() => selectChain)
     const result = await getStaffList({ page: 1, limit: 20 })
 
     expect(Array.isArray(result.data)).toBe(true)
@@ -242,11 +241,9 @@ describe('toggleStaffStatus', () => {
     mockDb.select = vi.fn(() => {
       selectCallCount++
       return makeChain(existingStaff)
-    }) as unknown as typeof mockDb.select
-
+    })
     const updateChain = makeChain(updatedStaff)
-    mockDb.update = vi.fn(() => updateChain) as unknown as typeof mockDb.update
-
+    mockDb.update = vi.fn(() => updateChain)
     const result = await toggleStaffStatus(staffId)
 
     expect(mockDb.update).toHaveBeenCalledTimes(1)
@@ -254,8 +251,7 @@ describe('toggleStaffStatus', () => {
   })
 
   it('lanza error si el staff no existe', async () => {
-    mockDb.select = vi.fn(() => makeChain([])) as unknown as typeof mockDb.select
-
+    mockDb.select = vi.fn(() => makeChain([]))
     await expect(toggleStaffStatus('no-existe')).rejects.toThrow(
       'Funcionario no encontrado'
     )

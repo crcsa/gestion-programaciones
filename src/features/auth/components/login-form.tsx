@@ -20,18 +20,18 @@ export function LoginForm() {
       <CardContent>
         <form action={formAction} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Correo electronico</Label>
+            <Label htmlFor="email">Correo electrónico</Label>
             <Input
               id="email"
               name="email"
               type="email"
-              placeholder="usuario@cruzroja.org.co"
+              placeholder="usuario@crantioquia.org.co"
               required
               autoComplete="email"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Contrasena</Label>
+            <Label htmlFor="password">Contraseña</Label>
             <Input
               id="password"
               name="password"

@@ -30,7 +30,7 @@ export function Breadcrumbs() {
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbPage>Dashboard</BreadcrumbPage>
+            <BreadcrumbPage>Gestión de Programaciones CRCSA</BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
@@ -41,7 +41,7 @@ export function Breadcrumbs() {
     <Breadcrumb>
       <BreadcrumbList>
         <BreadcrumbItem>
-          <BreadcrumbLink render={<Link href="/" />}>Dashboard</BreadcrumbLink>
+          <BreadcrumbLink render={<Link href="/" />}>Inicio</BreadcrumbLink>
         </BreadcrumbItem>
         {segments.map((segment, index) => {
           const href = '/' + segments.slice(0, index + 1).join('/')

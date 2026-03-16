@@ -68,25 +68,26 @@ export function Sidebar({ role }: SidebarProps) {
   return (
     <TooltipProvider delay={0}>
       <aside
-        className="group/sidebar flex h-screen w-16 flex-col transition-all duration-300 ease-in-out hover:w-60"
+        className="group/sidebar flex h-screen w-16 flex-col overflow-hidden transition-all duration-300 ease-in-out hover:w-60"
         style={{
           backgroundColor: 'var(--sidebar-bg)',
           borderRight: '1px solid var(--sidebar-border)',
         }}
       >
         {/* Logo area */}
-        <div className="flex h-16 items-center overflow-hidden px-3">
-          {/* Icon-only logo (visible when collapsed) */}
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#c8102e]">
-            <span className="text-lg font-bold text-white">+</span>
-          </div>
-          {/* Full text (visible when expanded) */}
-          <div className="ml-3 overflow-hidden opacity-0 transition-all duration-300 group-hover/sidebar:opacity-100">
-            <p className="whitespace-nowrap text-sm font-semibold text-white">CRCA</p>
-            <p className="whitespace-nowrap text-xs" style={{ color: 'var(--sidebar-fg)' }}>
-              Programaciones
-            </p>
-          </div>
+        <div className="relative flex h-16 items-center justify-center">
+          {/* Icon: centered, fades out on expand */}
+          <img
+            src="/logo-icon.svg"
+            alt="CRCSA"
+            className="h-9 w-9 object-contain opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0"
+          />
+          {/* Full logo: centered absolute, fades in on expand */}
+          <img
+            src="/logo-full-dark.svg"
+            alt="Cruz Roja Colombiana Seccional Antioquia"
+            className="absolute h-16 w-60 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
+          />
         </div>
 
         {/* Divider */}

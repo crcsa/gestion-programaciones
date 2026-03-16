@@ -16,7 +16,10 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Programaciones CRCA',
+  title: {
+    default: 'Gestión de Programaciones CRCSA',
+    template: '%s | CRCSA',
+  },
   description: 'Sistema de Gestión de Programaciones — Cruz Roja Colombiana Seccional Antioquia',
 }
 
