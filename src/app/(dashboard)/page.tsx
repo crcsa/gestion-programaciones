@@ -1,11 +1,18 @@
+import { eq } from 'drizzle-orm'
 import { createClient } from '@/lib/supabase/server'
 import { db } from '@/lib/db'
 import { profiles } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
-import { StatCard } from '@/components/data-display/stat-card'
-import { Users, Megaphone, CalendarDays, Clock } from 'lucide-react'
+import { staffMembers } from '@/lib/db/schema/staff-members'
 import type { Role } from '@/types/roles'
 import { ROLE_LABELS } from '@/types/roles'
+import {
+  getAdminDashboardData,
+  getComercialDashboardData,
+  getOperativoDashboardData,
+} from '@/features/dashboard/actions/dashboard-actions'
+import { AdminDashboard } from '@/features/dashboard/components/admin-dashboard'
+import { ComercialDashboard } from '@/features/dashboard/components/comercial-dashboard'
+import { OperativoDashboard } from '@/features/dashboard/components/operativo-dashboard'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -13,50 +20,62 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  let role: Role | null = null
-  if (user) {
-    const [profile] = await db
-      .select({ role: profiles.role })
-      .from(profiles)
-      .where(eq(profiles.id, user.id))
-      .limit(1)
-    role = (profile?.role as Role) ?? null
-  }
+  if (!user) return null
+
+  const [profile] = await db
+    .select({ role: profiles.role, fullName: profiles.fullName })
+    .from(profiles)
+    .where(eq(profiles.id, user.id))
+    .limit(1)
+
+  const role = (profile?.role ?? 'operativo') as Role
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        {role && (
-          <p className="text-muted-foreground">Bienvenido — Vista de {ROLE_LABELS[role]}</p>
-        )}
+        <p className="text-muted-foreground">
+          {profile?.fullName ?? user.email} — {ROLE_LABELS[role]}
+        </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Personal Activo"
-          value="—"
-          icon={Users}
-          description="Módulo pendiente"
-        />
-        <StatCard
-          title="Campañas esta semana"
-          value="—"
-          icon={Megaphone}
-          description="Módulo pendiente"
-        />
-        <StatCard
-          title="Turnos programados"
-          value="—"
-          icon={CalendarDays}
-          description="Módulo pendiente"
-        />
-        <StatCard
-          title="Horas extra pendientes"
-          value="—"
-          icon={Clock}
-          description="Módulo pendiente"
-        />
-      </div>
+
+      <DashboardContent role={role} userId={user.id} />
     </div>
   )
+}
+
+async function DashboardContent({
+  role,
+  userId,
+}: {
+  role: Role
+  userId: string
+}) {
+  if (role === 'admin' || role === 'banco_sangre') {
+    const data = await getAdminDashboardData()
+    return <AdminDashboard data={data} />
+  }
+
+  if (role === 'comercial') {
+    const data = await getComercialDashboardData()
+    return <ComercialDashboard data={data} />
+  }
+
+  // operativo
+  const [staffMember] = await db
+    .select({ id: staffMembers.id })
+    .from(staffMembers)
+    .where(eq(staffMembers.profileId, userId))
+    .limit(1)
+
+  if (!staffMember) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Perfil de empleado no configurado. Contacta al administrador.
+      </p>
+    )
+  }
+
+  const data = await getOperativoDashboardData(staffMember.id)
+  return <OperativoDashboard data={data} />
 }

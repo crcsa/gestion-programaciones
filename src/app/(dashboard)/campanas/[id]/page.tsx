@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCampaignById } from '@/features/campaigns/actions/campaign-actions'
 import { CampaignStatusBadge } from '@/features/campaigns/components/campaign-status-badge'
 import { CampaignSizeBadge } from '@/features/campaigns/components/campaign-size-badge'
+import { AssignmentPanel } from '@/features/assignments/components/assignment-panel'
 import { Button } from '@/components/ui/button'
 import {
   CAMPAIGN_MODALITY_LABELS,
@@ -110,6 +111,18 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
           </div>
         )}
       </div>
+
+      {(campaign.status === 'confirmada' || campaign.status === 'ejecutada') && (
+        <section>
+          <h2 className="text-lg font-semibold mb-4">Personal asignado</h2>
+          <AssignmentPanel
+            campaignId={campaign.id}
+            campaignSize={campaign.size}
+            campaignStatus={campaign.status}
+            currentRole={currentRole}
+          />
+        </section>
+      )}
 
       <div className="pt-2">
         <Button variant="outline" render={<Link href="/campanas" />}>
