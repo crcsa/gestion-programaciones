@@ -241,3 +241,43 @@ describe('getOperativoDashboardData', () => {
     await expect(getOperativoDashboardData(STAFF_ID)).rejects.toThrow('permiso')
   })
 })
+
+// ---- Error wrapping paths --------------------------------------------------
+
+describe('getAdminDashboardData — error wrapping', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('envuelve errores de DB inesperados', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(getAdminDashboardData()).rejects.toThrow('Error al obtener')
+  })
+})
+
+describe('getComercialDashboardData — error wrapping', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('envuelve errores de DB inesperados', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(getComercialDashboardData()).rejects.toThrow('Error al obtener')
+  })
+})
+
+describe('getOperativoDashboardData — error wrapping', () => {
+  const STAFF_ID = 'staff-abc'
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('envuelve errores de DB inesperados', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(getOperativoDashboardData(STAFF_ID)).rejects.toThrow('Error al obtener')
+  })
+})

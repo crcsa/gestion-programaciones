@@ -51,6 +51,8 @@ import {
   confirmCampaign,
   cancelCampaign,
   getCampaignsList,
+  getCampaignById,
+  updateCampaign,
 } from '@/features/campaigns/actions/campaign-actions'
 
 // Helper to create a chainable drizzle mock
@@ -277,5 +279,309 @@ describe('getCampaignsList', () => {
     const result = await getCampaignsList({ status: 'confirmada' })
 
     expect(result.data[0].status).toBe('confirmada')
+  })
+})
+
+// ---- getCampaignById -------------------------------------------------------
+
+describe('getCampaignById', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('retorna campana encontrada exitosamente', async () => {
+    const row = {
+      campaign: {
+        id: 'camp-1',
+        code: 'CAM-001',
+        status: 'tentativa',
+        municipality: 'Medellin',
+        campaignDate: '2026-04-15',
+        size: 'M' as const,
+        modality: 'presencial' as const,
+        expectedDonations: 50,
+        companyId: null,
+        locationId: null,
+        startTime: null,
+        endTime: null,
+        trainingAreaId: null,
+        cancelReason: null,
+        observations: null,
+        createdById: 'user-123',
+        confirmedById: null,
+        confirmedAt: null,
+        isDeleted: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      companyName: 'Empresa ABC',
+    }
+
+    mockDb.select = vi.fn(() => makeChain([row]))
+
+    const result = await getCampaignById('camp-1')
+
+    expect(result.id).toBe('camp-1')
+    expect(result.code).toBe('CAM-001')
+    expect(result.companyName).toBe('Empresa ABC')
+  })
+
+  it('lanza error Campana no encontrada cuando no existe el registro', async () => {
+    mockDb.select = vi.fn(() => makeChain([]))
+
+    await expect(getCampaignById('nonexistent-id')).rejects.toThrow(
+      'Campana no encontrada',
+    )
+  })
+
+  it('propagates error when requireRole rejects', async () => {
+    vi.mocked(requireRole).mockRejectedValue(
+      new Error('No tienes permiso para realizar esta accion.'),
+    )
+
+    await expect(getCampaignById('camp-1')).rejects.toThrow('permiso')
+  })
+})
+
+// ---- updateCampaign --------------------------------------------------------
+
+describe('updateCampaign', () => {
+  const validUuid = '00000000-0000-4000-8000-000000000002'
+  const validUpdateData = {
+    campaignDate: '2026-05-20',
+    size: 'L' as const,
+    modality: 'virtual' as const,
+    municipality: 'Bogota',
+    expectedDonations: 100,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('actualiza campana en estado tentativa exitosamente', async () => {
+    const currentRow = [{ id: validUuid, status: 'tentativa' }]
+    const updatedCampaign = [{
+      id: validUuid,
+      code: 'CAM-002',
+      status: 'tentativa' as const,
+      campaignDate: '2026-05-20',
+      size: 'L' as const,
+      modality: 'virtual' as const,
+      municipality: 'Bogota',
+      expectedDonations: 100,
+      companyId: null,
+      locationId: null,
+      startTime: null,
+      endTime: null,
+      trainingAreaId: null,
+      cancelReason: null,
+      observations: null,
+      createdById: 'user-123',
+      confirmedById: null,
+      confirmedAt: null,
+      isDeleted: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }]
+
+    mockDb.select = vi.fn(() => makeChain(currentRow))
+    mockDb.update = vi.fn(() => makeChain(updatedCampaign))
+
+    const result = await updateCampaign(validUuid, validUpdateData)
+
+    expect(result.id).toBe(validUuid)
+    expect(result.status).toBe('tentativa')
+  })
+
+  it('lanza error Campana no encontrada cuando no existe', async () => {
+    mockDb.select = vi.fn(() => makeChain([]))
+
+    await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
+      'Campana no encontrada',
+    )
+  })
+
+  it('lanza error cuando el estado no es tentativa', async () => {
+    const confirmedRow = [{ id: validUuid, status: 'confirmada' }]
+
+    mockDb.select = vi.fn(() => makeChain(confirmedRow))
+
+    await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
+      'No se puede editar una campana confirmada o cancelada',
+    )
+  })
+
+  it('lanza error cuando el estado es cancelada', async () => {
+    const cancelledRow = [{ id: validUuid, status: 'cancelada' }]
+
+    mockDb.select = vi.fn(() => makeChain(cancelledRow))
+
+    await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
+      'No se puede editar una campana confirmada o cancelada',
+    )
+  })
+
+  it('propagates error when requireRole rejects', async () => {
+    vi.mocked(requireRole).mockRejectedValue(
+      new Error('No tienes permiso para realizar esta accion.'),
+    )
+
+    await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
+      'permiso',
+    )
+  })
+})
+
+// ---- getCampaignsList con filtros adicionales ------------------------------
+
+describe('getCampaignsList con filtros adicionales', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  const makeRow = (overrides: Record<string, unknown> = {}) => ({
+    id: 'camp-1',
+    code: 'CAM-001',
+    municipality: 'Medellin',
+    campaignDate: '2026-04-15',
+    size: 'M',
+    modality: 'presencial',
+    status: 'tentativa',
+    expectedDonations: 50,
+    companyName: null,
+    createdAt: new Date(),
+    ...overrides,
+  })
+
+  it('filtra por size y retorna resultados', async () => {
+    const rows = [makeRow({ size: 'L' })]
+
+    mockDb.select = vi.fn(() => makeChain(rows))
+
+    const result = await getCampaignsList({ size: 'L' })
+
+    expect(result.data[0].size).toBe('L')
+  })
+
+  it('filtra por modality y retorna resultados', async () => {
+    const rows = [makeRow({ modality: 'virtual' })]
+
+    mockDb.select = vi.fn(() => makeChain(rows))
+
+    const result = await getCampaignsList({ modality: 'virtual' })
+
+    expect(result.data[0].modality).toBe('virtual')
+  })
+
+  it('filtra por dateFrom y retorna resultados', async () => {
+    const rows = [makeRow({ campaignDate: '2026-06-01' })]
+
+    mockDb.select = vi.fn(() => makeChain(rows))
+
+    const result = await getCampaignsList({ dateFrom: '2026-06-01' })
+
+    expect(Array.isArray(result.data)).toBe(true)
+  })
+
+  it('filtra por dateTo y retorna resultados', async () => {
+    const rows = [makeRow({ campaignDate: '2026-03-31' })]
+
+    mockDb.select = vi.fn(() => makeChain(rows))
+
+    const result = await getCampaignsList({ dateTo: '2026-03-31' })
+
+    expect(Array.isArray(result.data)).toBe(true)
+  })
+
+  it('combina filtros dateFrom y dateTo', async () => {
+    const rows = [
+      makeRow({ campaignDate: '2026-04-10' }),
+      makeRow({ id: 'camp-2', code: 'CAM-002', campaignDate: '2026-04-20' }),
+    ]
+
+    mockDb.select = vi.fn(() => makeChain(rows))
+
+    const result = await getCampaignsList({
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+    })
+
+    expect(result.data.length).toBe(2)
+  })
+
+  it('retorna lista vacia cuando no hay resultados con los filtros', async () => {
+    mockDb.select = vi.fn(() => makeChain([]))
+
+    const result = await getCampaignsList({
+      status: 'ejecutada',
+      size: 'S',
+    })
+
+    expect(result.data).toEqual([])
+    expect(result.total).toBe(0)
+  })
+
+  it('propagates error when requireRole rejects', async () => {
+    vi.mocked(requireRole).mockRejectedValue(
+      new Error('No tienes permiso para realizar esta accion.'),
+    )
+
+    await expect(getCampaignsList()).rejects.toThrow('permiso')
+  })
+})
+
+// ---- Cobertura de ramas adicionales ----------------------------------------
+
+describe('cancelCampaign — ramas adicionales', () => {
+  const validCancelId = '00000000-0000-4000-8000-000000000099'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('lanza error cuando la campaña ya está cancelada', async () => {
+    mockDb.select = vi.fn(() => makeChain([{ id: validCancelId, status: 'cancelada' }]))
+
+    await expect(
+      cancelCampaign(validCancelId, 'Motivo de prueba'),
+    ).rejects.toThrow('La campana ya esta cancelada')
+  })
+
+  it('lanza error cuando la campaña está ejecutada', async () => {
+    mockDb.select = vi.fn(() => makeChain([{ id: validCancelId, status: 'ejecutada' }]))
+
+    await expect(
+      cancelCampaign(validCancelId, 'Motivo de prueba'),
+    ).rejects.toThrow('No se puede cancelar una campana ejecutada')
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(
+      cancelCampaign(validCancelId, 'Motivo de prueba'),
+    ).rejects.toThrow('Error al cancelar la campana')
+  })
+})
+
+describe('getCampaignsList — ramas de error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(getCampaignsList()).rejects.toThrow('Error al obtener la lista de campanas')
   })
 })

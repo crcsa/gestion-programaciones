@@ -37,11 +37,14 @@ vi.mock('@/lib/db/schema/profiles', () => ({
 }))
 
 import { db } from '@/lib/db'
+import { requireRole } from '@/features/auth/lib/require-role'
 import {
   createStaff,
   updateTrainingAreas,
   getStaffList,
   toggleStaffStatus,
+  getStaffById,
+  updateStaff,
 } from '@/features/staff/actions/staff-actions'
 
 // Helper to create a chainable drizzle mock
@@ -255,5 +258,218 @@ describe('toggleStaffStatus', () => {
     await expect(toggleStaffStatus('no-existe')).rejects.toThrow(
       'Funcionario no encontrado'
     )
+  })
+})
+
+describe('getStaffById', () => {
+  const mockRequireRole = requireRole as ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockRequireRole.mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('retorna el funcionario con sus areas de entrenamiento cuando existe', async () => {
+    const staffId = 'staff-found'
+    const staffRow = {
+      id: staffId,
+      firstName: 'Maria',
+      lastName: 'Lopez',
+      cedula: '9876543210',
+      isActive: true,
+    }
+    const areaRows = [
+      { trainingAreaId: 'area-10' },
+      { trainingAreaId: 'area-20' },
+    ]
+
+    let selectCallCount = 0
+    mockDb.select = vi.fn(() => {
+      selectCallCount++
+      if (selectCallCount === 1) return makeChain([staffRow])
+      return makeChain(areaRows)
+    })
+
+    const result = await getStaffById(staffId)
+
+    expect(result.id).toBe(staffId)
+    expect(result.trainingAreaIds).toEqual(['area-10', 'area-20'])
+    expect(selectCallCount).toBe(2)
+  })
+
+  it('lanza error cuando el funcionario no existe', async () => {
+    mockDb.select = vi.fn(() => makeChain([]))
+
+    await expect(getStaffById('id-inexistente')).rejects.toThrow(
+      'Funcionario no encontrado'
+    )
+  })
+
+  it('lanza error de permiso cuando requireRole rechaza', async () => {
+    mockRequireRole.mockRejectedValue(new Error('Sin permiso para acceder'))
+
+    await expect(getStaffById('any-id')).rejects.toThrow('Sin permiso para acceder')
+  })
+})
+
+describe('updateStaff', () => {
+  const mockRequireRole = requireRole as ReturnType<typeof vi.fn>
+
+  const staffId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+  const validUpdateData = {
+    firstName: 'Carlos',
+    lastName: 'Ruiz',
+    cedula: '1112223334',
+    contractType: 'indefinido' as const,
+    weeklyHours: 36,
+    defaultShift: 'diurno_completo' as const,
+    staffProfile: 'bacteriologo' as const,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockRequireRole.mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('actualiza el funcionario exitosamente cuando los datos son validos', async () => {
+    const updatedRow = { id: staffId, ...validUpdateData, isActive: true }
+
+    // select for cedula duplicate check → empty (no conflict)
+    mockDb.select = vi.fn(() => makeChain([]))
+    // update → returns updated row
+    mockDb.update = vi.fn(() => makeChain([updatedRow]))
+
+    const result = await updateStaff(staffId, validUpdateData)
+
+    expect(result.id).toBe(staffId)
+    expect(result.firstName).toBe('Carlos')
+    expect(mockDb.update).toHaveBeenCalledTimes(1)
+  })
+
+  it('lanza error cuando la cedula ya existe en otro funcionario', async () => {
+    // select for cedula duplicate check → conflict found
+    mockDb.select = vi.fn(() => makeChain([{ id: 'other-staff-id' }]))
+
+    await expect(updateStaff(staffId, validUpdateData)).rejects.toThrow(
+      'Ya existe otro funcionario con esa cedula'
+    )
+    expect(mockDb.update).not.toHaveBeenCalled()
+  })
+
+  it('lanza error cuando el funcionario no existe (update no retorna filas)', async () => {
+    // select for cedula duplicate check → empty
+    mockDb.select = vi.fn(() => makeChain([]))
+    // update returning → empty array (not found)
+    mockDb.update = vi.fn(() => makeChain([]))
+
+    await expect(updateStaff(staffId, validUpdateData)).rejects.toThrow(
+      'Funcionario no encontrado'
+    )
+  })
+
+  it('lanza error de permiso cuando requireRole rechaza', async () => {
+    mockRequireRole.mockRejectedValue(new Error('Sin permiso para acceder'))
+
+    await expect(updateStaff(staffId, validUpdateData)).rejects.toThrow('Sin permiso para acceder')
+  })
+})
+
+describe('updateTrainingAreas - cobertura adicional', () => {
+  const mockRequireRole = requireRole as ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockRequireRole.mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('retorno temprano cuando areaIds es vacio (sin llamada a insert)', async () => {
+    const staffId = 'staff-empty-areas'
+
+    mockDb.delete = vi.fn(() => makeChain([]))
+    mockDb.insert = vi.fn(() => makeChain([]))
+
+    await updateTrainingAreas(staffId, [])
+
+    expect(mockDb.delete).toHaveBeenCalledTimes(1)
+    expect(mockDb.insert).not.toHaveBeenCalled()
+  })
+
+  it('inserta multiples areas de entrenamiento correctamente', async () => {
+    const staffId = 'staff-multi-areas'
+    const areaIds = ['area-a', 'area-b', 'area-c']
+
+    mockDb.delete = vi.fn(() => makeChain([]))
+    mockDb.insert = vi.fn(() => makeChain([
+      { staffId, trainingAreaId: 'area-a' },
+      { staffId, trainingAreaId: 'area-b' },
+      { staffId, trainingAreaId: 'area-c' },
+    ]))
+
+    await updateTrainingAreas(staffId, areaIds)
+
+    expect(mockDb.delete).toHaveBeenCalledTimes(1)
+    expect(mockDb.insert).toHaveBeenCalledTimes(1)
+  })
+
+  it('lanza error de permiso cuando requireRole rechaza', async () => {
+    mockRequireRole.mockRejectedValue(new Error('Sin permiso para acceder'))
+
+    await expect(updateTrainingAreas('staff-id', ['area-1'])).rejects.toThrow('Sin permiso para acceder')
+  })
+})
+
+// ---- Cobertura de ramas adicionales ----------------------------------------
+
+describe('updateStaff — ramas de error', () => {
+  const validId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    // updateStaff without cedula skips select, goes straight to update
+    mockDb.update = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(
+      updateStaff(validId, { firstName: 'Test', lastName: 'User' }),
+    ).rejects.toThrow('Error al actualizar el funcionario')
+  })
+})
+
+describe('toggleStaffStatus — ramas de error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(
+      toggleStaffStatus('staff-1'),
+    ).rejects.toThrow('Error al cambiar el estado del funcionario')
+  })
+})
+
+describe('updateTrainingAreas — ramas de error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.delete = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(
+      updateTrainingAreas('staff-1', ['area-1']),
+    ).rejects.toThrow('Error al actualizar las areas de entrenamiento')
   })
 })

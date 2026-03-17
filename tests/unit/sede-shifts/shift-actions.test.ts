@@ -41,10 +41,12 @@ vi.mock('@/lib/db/schema/staff-members', () => ({
 }))
 
 import { db } from '@/lib/db'
+import { requireRole } from '@/features/auth/lib/require-role'
 import {
   upsertShift,
   deleteShift,
   getStaffOccupancy,
+  getWeeklyShifts,
 } from '@/features/sede-shifts/actions/shift-actions'
 
 // Helper to create a chainable drizzle mock
@@ -161,6 +163,28 @@ describe('deleteShift', () => {
 
     expect(mockDb.delete).toHaveBeenCalledTimes(1)
   })
+
+  it('elimina turno exitosamente sin lanzar errores', async () => {
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    await expect(deleteShift('shift-abc')).resolves.toBeUndefined()
+  })
+
+  it('propaga error de permiso sin envolver', async () => {
+    vi.mocked(requireRole).mockRejectedValueOnce(
+      new Error('No tienes permiso para realizar esta accion.'),
+    )
+
+    await expect(deleteShift('shift-abc')).rejects.toThrow('permiso')
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.delete = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(deleteShift('shift-abc')).rejects.toThrow('Error al eliminar el turno')
+  })
 })
 
 describe('getStaffOccupancy', () => {
@@ -240,5 +264,133 @@ describe('getStaffOccupancy', () => {
     expect(result).toHaveLength(1)
     expect(result[0].status).toBe('libre')
     expect(result[0].firstName).toBe('Luis')
+  })
+
+  it('retorna arreglo vacío cuando no hay personal activo', async () => {
+    let selectCallCount = 0
+    mockDb.select = vi.fn(() => {
+      selectCallCount++
+      if (selectCallCount === 1) return makeChain([])
+      return makeChain([])
+    })
+
+    const result = await getStaffOccupancy('2026-03-17')
+
+    expect(result).toHaveLength(0)
+  })
+
+  it('propaga error de permiso sin envolver', async () => {
+    vi.mocked(requireRole).mockRejectedValueOnce(
+      new Error('No tienes permiso para realizar esta accion.'),
+    )
+
+    await expect(getStaffOccupancy('2026-03-17')).rejects.toThrow('permiso')
+  })
+})
+
+// ---- Cobertura de ramas adicionales ----------------------------------------
+
+describe('upsertShift — ramas de error', () => {
+  const validInput = {
+    staffId: '550e8400-e29b-41d4-a716-446655440000',
+    shiftDate: '2026-03-17',
+    shiftType: 'diurno_completo' as const,
+    startTime: '07:00',
+    endTime: '19:00',
+    totalHours: 8,
+    isOvernight: false,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('envuelve errores de DB genéricos como "Error al guardar el turno"', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(upsertShift(validInput)).rejects.toThrow('Error al guardar el turno')
+  })
+})
+
+describe('getStaffOccupancy — ramas de error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(getStaffOccupancy('2026-03-17')).rejects.toThrow(
+      'Error al obtener la ocupacion del personal',
+    )
+  })
+})
+
+describe('getWeeklyShifts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('retorna staff activo y turnos agrupados por staffId', async () => {
+    const staffList = [
+      { id: 'staff-1', firstName: 'Ana', lastName: 'Garcia', isActive: true },
+      { id: 'staff-2', firstName: 'Luis', lastName: 'Perez', isActive: true },
+    ]
+    const shifts = [
+      { id: 'shift-1', staffId: 'staff-1', shiftDate: '2026-03-17', shiftType: 'diurno_completo', startTime: '07:00', endTime: '19:00', totalHours: 12, isOvernight: false },
+      { id: 'shift-2', staffId: 'staff-1', shiftDate: '2026-03-18', shiftType: 'noche', startTime: '19:00', endTime: '07:00', totalHours: 10, isOvernight: true },
+    ]
+
+    let callCount = 0
+    mockDb.select = vi.fn(() => {
+      callCount++
+      return makeChain(callCount === 1 ? staffList : shifts)
+    })
+
+    const result = await getWeeklyShifts('2026-03-17')
+
+    expect(result.staff).toHaveLength(2)
+    expect(result.shifts['staff-1']).toHaveLength(2)
+    expect(result.shifts['staff-2']).toBeUndefined()
+  })
+
+  it('retorna objeto vacío de shifts cuando no hay turnos', async () => {
+    const staffList = [
+      { id: 'staff-1', firstName: 'Ana', lastName: 'Garcia', isActive: true },
+    ]
+
+    let callCount = 0
+    mockDb.select = vi.fn(() => {
+      callCount++
+      return makeChain(callCount === 1 ? staffList : [])
+    })
+
+    const result = await getWeeklyShifts('2026-03-17')
+
+    expect(result.staff).toHaveLength(1)
+    expect(Object.keys(result.shifts)).toHaveLength(0)
+  })
+
+  it('lanza error cuando requireRole rechaza', async () => {
+    vi.mocked(requireRole).mockRejectedValueOnce(
+      new Error('No tienes permiso para realizar esta accion.'),
+    )
+
+    await expect(getWeeklyShifts('2026-03-17')).rejects.toThrow('permiso')
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(getWeeklyShifts('2026-03-17')).rejects.toThrow(
+      'Error al obtener los turnos semanales',
+    )
   })
 })

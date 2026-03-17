@@ -10,6 +10,20 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      exclude: [
+        // Schema/seed files are pure type definitions — no logic to test
+        'src/lib/db/schema/**',
+        'src/lib/db/seed/**',
+        'src/lib/db/migrations/**',
+        // Next.js infrastructure
+        'src/app/**',
+        'src/middleware.ts',
+        // UI components managed by shadcn (generated code)
+        'src/components/ui/**',
+        // Config files
+        '**/*.config.*',
+        '**/node_modules/**',
+      ],
       thresholds: {
         lines: 80,
         functions: 80,

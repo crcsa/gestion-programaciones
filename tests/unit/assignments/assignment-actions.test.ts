@@ -226,3 +226,110 @@ describe('getAssignedStaff', () => {
     expect(result[1].staffProfile).toBe('tecnico')
   })
 })
+
+// ---- Cobertura de ramas adicionales ----------------------------------------
+
+describe('assignStaff — ramas de error', () => {
+  const campaignId = '550e8400-e29b-41d4-a716-446655440000'
+  const staffId1 = '550e8400-e29b-41d4-a716-446655440001'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(
+      assignStaff({ campaignId, staffIds: [staffId1] }),
+    ).rejects.toThrow('Error al asignar personal')
+  })
+
+  it('no inserta cuando todos los staffIds ya están asignados', async () => {
+    mockDb.select = vi.fn(() => makeChain([{ staffId: staffId1 }]))
+    mockDb.insert = vi.fn()
+
+    await assignStaff({ campaignId, staffIds: [staffId1] })
+
+    expect(mockDb.insert).not.toHaveBeenCalled()
+  })
+})
+
+describe('removeAssignment — ramas de error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.update = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(removeAssignment('assign-1')).rejects.toThrow(
+      'Error al remover la asignacion',
+    )
+  })
+})
+
+describe('setCoordinator — ramas de error', () => {
+  const campaignId = '550e8400-e29b-41d4-a716-446655440000'
+  const staffId = '550e8400-e29b-41d4-a716-446655440001'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('lanza error de validación con datos inválidos', async () => {
+    await expect(
+      setCoordinator({ campaignId: 'no-es-uuid', staffId: 'tampoco-uuid' }),
+    ).rejects.toThrow()
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(setCoordinator({ campaignId, staffId })).rejects.toThrow(
+      'Error al designar coordinador',
+    )
+  })
+})
+
+describe('getAssignedStaff — ramas de error', () => {
+  const campaignId = '550e8400-e29b-41d4-a716-446655440000'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(getAssignedStaff(campaignId)).rejects.toThrow(
+      'Error al obtener el personal asignado',
+    )
+  })
+})
+
+describe('getAvailableStaff — ramas de error', () => {
+  const campaignId = '550e8400-e29b-41d4-a716-446655440000'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.select = vi.fn(() => {
+      throw new Error('connection refused')
+    })
+
+    await expect(getAvailableStaff(campaignId)).rejects.toThrow(
+      'Error al obtener el personal disponible',
+    )
+  })
+})
