@@ -190,38 +190,45 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
 
     const authUserId = authData.user.id
 
-    await db.insert(profiles).values({
-      id: authUserId,
-      email: input.email,
-      fullName: `${input.firstName} ${input.lastName}`,
-      role: 'operativo',
-    })
-
-    const [created] = await db
-      .insert(staffMembers)
-      .values({
-        profileId: authUserId,
-        firstName: input.firstName,
-        lastName: input.lastName,
-        cedula: input.cedula,
-        phone: input.phone ?? null,
+    try {
+      await db.insert(profiles).values({
+        id: authUserId,
         email: input.email,
-        staffProfile: input.staffProfile,
-        contractType: input.contractType,
-        weeklyHours: input.weeklyHours,
-        defaultShift: input.defaultShift,
-        hireDate: input.hireDate ?? null,
-        notes: input.notes ?? null,
+        fullName: `${input.firstName} ${input.lastName}`,
+        role: 'operativo',
       })
-      .returning()
 
-    return created
+      const [created] = await db
+        .insert(staffMembers)
+        .values({
+          profileId: authUserId,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          cedula: input.cedula,
+          phone: input.phone ?? null,
+          email: input.email,
+          staffProfile: input.staffProfile,
+          contractType: input.contractType,
+          weeklyHours: input.weeklyHours,
+          defaultShift: input.defaultShift,
+          hireDate: input.hireDate ?? null,
+          notes: input.notes ?? null,
+        })
+        .returning()
+
+      return created
+    } catch (dbError) {
+      // Rollback: delete the auth user so the email can be reused
+      await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => null)
+      throw new Error(`Error al guardar el funcionario en la base de datos: ${dbError instanceof Error ? dbError.message : String(dbError)}`)
+    }
   } catch (error) {
     if (error instanceof Error && (
       error.message === 'Ya existe un funcionario con esa cedula' ||
       error.message.includes('Ya existe una cuenta') ||
       error.message.includes('permiso') ||
-      error.message.includes('autenticaci')
+      error.message.includes('autenticaci') ||
+      error.message.includes('base de datos')
     )) {
       throw error
     }
