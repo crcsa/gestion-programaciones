@@ -179,6 +179,12 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
     })
 
     if (authError || !authData.user) {
+      const isEmailTaken = authError?.message?.toLowerCase().includes('already been registered')
+        || authError?.message?.toLowerCase().includes('already registered')
+        || authError?.message?.toLowerCase().includes('email address is already')
+      if (isEmailTaken) {
+        throw new Error('Ya existe una cuenta de acceso con ese correo electrónico. Use un correo diferente.')
+      }
       throw new Error(`Error al crear el usuario de autenticación: ${authError?.message ?? 'usuario nulo'}`)
     }
 
@@ -213,6 +219,7 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
   } catch (error) {
     if (error instanceof Error && (
       error.message === 'Ya existe un funcionario con esa cedula' ||
+      error.message.includes('Ya existe una cuenta') ||
       error.message.includes('permiso') ||
       error.message.includes('autenticaci')
     )) {
