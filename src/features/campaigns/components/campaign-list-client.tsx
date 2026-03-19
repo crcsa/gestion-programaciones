@@ -185,7 +185,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Campanas</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Campañas</h1>
           <p className="text-muted-foreground text-sm">
             Gestión de campañas de donación
           </p>
