@@ -9,6 +9,9 @@ import {
   CalendarDays,
   Settings,
   ChevronRight,
+  Clock,
+  Grid3x3,
+  Building2,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -45,6 +48,24 @@ const NAV_ITEMS: NavItem[] = [
     href: '/turnos',
     icon: CalendarDays,
     allowedRoles: ['admin', 'banco_sangre'],
+  },
+  {
+    label: 'Horas',
+    href: '/horas',
+    icon: Clock,
+    allowedRoles: ['admin', 'banco_sangre'],
+  },
+  {
+    label: 'Disponibilidad',
+    href: '/disponibilidad',
+    icon: Grid3x3,
+    allowedRoles: ['admin', 'banco_sangre'],
+  },
+  {
+    label: 'Empresas',
+    href: '/empresas',
+    icon: Building2,
+    allowedRoles: ['admin', 'comercial'],
   },
   {
     label: 'Configuración',

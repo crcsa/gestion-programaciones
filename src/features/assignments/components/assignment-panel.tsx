@@ -3,15 +3,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { RequirementsMeter } from './requirements-meter'
 import { AssignedStaffList } from './assigned-staff-list'
-import { StaffSelector } from './staff-selector'
+import { SmartStaffSelector } from './smart-staff-selector'
 import {
   getAssignedStaff,
-  getAvailableStaff,
-  assignStaff,
   removeAssignment,
   setCoordinator,
 } from '../actions/assignment-actions'
-import type { AssignedStaffMember, AvailableStaffMember } from '../actions/assignment-actions'
+import type { AssignedStaffMember } from '../actions/assignment-actions'
 import type { Role } from '@/types/roles'
 
 interface AssignmentPanelProps {
@@ -28,7 +26,6 @@ export function AssignmentPanel({
   currentRole,
 }: AssignmentPanelProps) {
   const [assigned, setAssigned] = useState<AssignedStaffMember[]>([])
-  const [available, setAvailable] = useState<AvailableStaffMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,12 +38,8 @@ export function AssignmentPanel({
     setError(null)
 
     try {
-      const [assignedData, availableData] = await Promise.all([
-        getAssignedStaff(campaignId),
-        getAvailableStaff(campaignId),
-      ])
+      const assignedData = await getAssignedStaff(campaignId)
       setAssigned(assignedData)
-      setAvailable(availableData)
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Error al cargar datos de asignación'
@@ -59,17 +52,6 @@ export function AssignmentPanel({
   useEffect(() => {
     fetchData()
   }, [fetchData])
-
-  const handleAssign = async (staffIds: string[]) => {
-    try {
-      await assignStaff({ campaignId, staffIds })
-      await fetchData()
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Error al asignar personal'
-      setError(message)
-    }
-  }
 
   const handleRemove = async (assignmentId: string) => {
     try {
@@ -125,14 +107,10 @@ export function AssignmentPanel({
         />
       </div>
 
-      {isEditable && available.length > 0 && (
+      {isEditable && (
         <div>
           <h3 className="font-semibold mb-3">Agregar personal</h3>
-          <StaffSelector
-            available={available}
-            onAssign={handleAssign}
-            isLoading={isLoading}
-          />
+          <SmartStaffSelector campaignId={campaignId} onAssigned={fetchData} />
         </div>
       )}
     </div>

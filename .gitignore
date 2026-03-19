@@ -39,3 +39,4 @@ drizzle/
 # Superpowers
 .superpowers/
 .tsconfig.tsbuildinfo
+.vercel

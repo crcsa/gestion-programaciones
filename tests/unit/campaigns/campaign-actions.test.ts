@@ -585,3 +585,30 @@ describe('getCampaignsList — ramas de error', () => {
     await expect(getCampaignsList()).rejects.toThrow('Error al obtener la lista de campanas')
   })
 })
+
+describe('confirmCampaign — generic error path', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('wraps generic DB error with friendly message', async () => {
+    mockDb.select = vi.fn(() => { throw new Error('DB down') })
+
+    await expect(confirmCampaign('00000000-0000-4000-8000-000000000001')).rejects.toThrow('Error al confirmar')
+  })
+})
+
+describe('getAssignedStaffForCommercial — error path', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('wraps generic DB error with friendly message', async () => {
+    mockDb.select = vi.fn(() => { throw new Error('DB down') })
+
+    const { getAssignedStaffForCommercial } = await import('@/features/campaigns/actions/campaign-actions')
+    await expect(getAssignedStaffForCommercial('00000000-0000-4000-8000-000000000001')).rejects.toThrow('Error al obtener')
+  })
+})

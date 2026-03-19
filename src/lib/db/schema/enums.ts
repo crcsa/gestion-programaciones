@@ -16,6 +16,16 @@ export const campaignModalityEnum = pgEnum('campaign_modality', ['presencial', '
 
 export const availabilityStatusEnum = pgEnum('availability_status', ['disponible', 'en_sede', 'en_campana', 'vacaciones', 'incapacidad', 'licencia'])
 
-export const timelineEventTypeEnum = pgEnum('timeline_event_type', ['inicio', 'llegada_sede', 'inicio_donaciones', 'fin_donaciones', 'regreso', 'fin'])
+export const timelineEventTypeEnum = pgEnum('timeline_event_type', [
+  'salida_sede',       // 1. Hora salida sede
+  'llegada_punto',     // 2. Hora llegada punto
+  'inicio_donaciones', // 3. Hora inicio campaña
+  'salida_almuerzo',   // 4. Hora salida almuerzo
+  'regreso_almuerzo',  // 5. Hora regreso almuerzo
+  'fin_donaciones',    // 6. Hora finalización campaña
+  'recogida',          // 7. Hora recogida
+  'llegada_sede',      // 8. Hora llegada sede
+  'fin',               // 9. Hora salida sede (fin)
+])
 
 export const auditActionEnum = pgEnum('audit_action', ['create', 'update', 'delete', 'login', 'logout'])

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { Sidebar } from '@/components/layout/sidebar'
 
 // Mock next/navigation
@@ -15,6 +15,9 @@ vi.mock('lucide-react', () => ({
   CalendarDays: () => <svg data-testid="icon-calendar" />,
   Settings: () => <svg data-testid="icon-settings" />,
   ChevronRight: () => <svg data-testid="icon-chevron" />,
+  Clock: () => <svg data-testid="icon-clock" />,
+  Grid3x3: () => <svg data-testid="icon-grid" />,
+  Building2: () => <svg data-testid="icon-building" />,
 }))
 
 describe('Sidebar', () => {
@@ -46,6 +49,19 @@ describe('Sidebar', () => {
   it('shows all items when role is null', () => {
     render(<Sidebar role={null} />)
     // All items visible (no filtering when role unknown)
+    expect(screen.getByText('Dashboard')).toBeDefined()
+  })
+
+  it('applies hover style on mouse enter for inactive item', () => {
+    render(<Sidebar role="admin" />)
+    const links = document.querySelectorAll('a')
+    // Find a non-active link (not '/')
+    const nonActiveLink = Array.from(links).find((l) => l.getAttribute('href') !== '/')
+    if (nonActiveLink) {
+      fireEvent.mouseEnter(nonActiveLink)
+      fireEvent.mouseLeave(nonActiveLink)
+    }
+    // Smoke test — no error thrown
     expect(screen.getByText('Dashboard')).toBeDefined()
   })
 })

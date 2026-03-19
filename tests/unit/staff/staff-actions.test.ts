@@ -457,6 +457,75 @@ describe('toggleStaffStatus — ramas de error', () => {
   })
 })
 
+describe('createStaff — validation and auth error paths', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('throws when input fails schema validation', async () => {
+    await expect(
+      createStaff({
+        firstName: '',  // too short
+        lastName: 'García',
+        cedula: '1234567890',
+        email: 'bad-email',  // invalid email
+        staffProfile: 'bacteriologo' as const,
+        contractType: 'indefinido' as const,
+        weeklyHours: 40,
+        defaultShift: 'diurno_completo' as const,
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('throws when supabase auth fails', async () => {
+    const { getSupabaseAdmin } = await import('@/lib/supabase/admin')
+    vi.mocked(getSupabaseAdmin).mockReturnValueOnce({
+      auth: {
+        admin: {
+          createUser: vi.fn().mockResolvedValue({ data: { user: null }, error: new Error('Auth service down') }),
+        },
+      },
+    } as unknown as ReturnType<typeof getSupabaseAdmin>)
+
+    mockDb.select = vi.fn(() => makeChain([]))  // cedula check passes
+
+    await expect(createStaff({
+      firstName: 'Ana',
+      lastName: 'García',
+      cedula: '9990001111',
+      email: 'ana@example.com',
+      staffProfile: 'bacteriologo' as const,
+      contractType: 'indefinido' as const,
+      weeklyHours: 40,
+      defaultShift: 'diurno_completo' as const,
+    })).rejects.toThrow('autenticacion')
+  })
+
+  it('wraps generic DB error with friendly message', async () => {
+    mockDb.select = vi.fn(() => makeChain([]))  // cedula check
+    mockDb.insert = vi.fn().mockImplementation(() => { throw new Error('DB down') })
+
+    await expect(createStaff({
+      firstName: 'Ana',
+      lastName: 'García',
+      cedula: '8881112222',
+      email: 'ana2@example.com',
+      staffProfile: 'bacteriologo' as const,
+      contractType: 'indefinido' as const,
+      weeklyHours: 40,
+      defaultShift: 'diurno_completo' as const,
+    })).rejects.toThrow('Error al crear el funcionario')
+  })
+})
+
+describe('updateStaff — schema validation failure', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('throws when id is not valid UUID', async () => {
+    await expect(
+      updateStaff('not-a-uuid', { firstName: 'Test' }),
+    ).rejects.toThrow()
+  })
+})
+
 describe('updateTrainingAreas — ramas de error', () => {
   beforeEach(() => {
     vi.clearAllMocks()

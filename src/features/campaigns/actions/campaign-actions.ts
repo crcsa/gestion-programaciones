@@ -1,9 +1,11 @@
 'use server'
 
-import { eq, ilike, and, or, sql, gte, lte, desc } from 'drizzle-orm'
+import { eq, ilike, and, or, sql, gte, lte, desc, asc } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { campaigns } from '@/lib/db/schema/campaigns'
 import { companies } from '@/lib/db/schema/companies'
+import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
+import { staffMembers } from '@/lib/db/schema/staff-members'
 import { requireRole } from '@/features/auth/lib/require-role'
 import {
   createCampaignSchema,
@@ -22,6 +24,8 @@ export interface CampaignListFilters {
   modality?: 'presencial' | 'virtual' | 'mixta' | 'movil' | 'institucional'
   dateFrom?: string
   dateTo?: string
+  companyId?: string
+  weekStart?: string  // filters campaigns in that week (Mon–Sun)
   page?: number
   limit?: number
 }
@@ -76,6 +80,20 @@ function buildListConditions(filters: CampaignListFilters) {
 
   if (filters.dateTo) {
     parts.push(lte(campaigns.campaignDate, filters.dateTo))
+  }
+
+  if (filters.companyId) {
+    parts.push(eq(campaigns.companyId, filters.companyId))
+  }
+
+  if (filters.weekStart) {
+    const weekEnd = (() => {
+      const d = new Date(`${filters.weekStart}T00:00:00`)
+      d.setDate(d.getDate() + 6)
+      return d.toISOString().slice(0, 10)
+    })()
+    parts.push(gte(campaigns.campaignDate, filters.weekStart))
+    parts.push(lte(campaigns.campaignDate, weekEnd))
   }
 
   if (parts.length === 1) return parts[0]
@@ -376,5 +394,48 @@ export async function cancelCampaign(
       throw error
     }
     throw new Error('Error al cancelar la campana')
+  }
+}
+
+// ---- Commercial view ------------------------------------------------------
+
+export interface CommercialStaffMember {
+  staffId: string
+  firstName: string
+  lastName: string
+  cedula: string
+  staffProfile: string
+  isCoordinator: boolean
+}
+
+export async function getAssignedStaffForCommercial(
+  campaignId: string,
+): Promise<CommercialStaffMember[]> {
+  await requireRole(['admin', 'comercial'])
+
+  try {
+    const rows = await db
+      .select({
+        staffId: campaignAssignments.staffId,
+        firstName: staffMembers.firstName,
+        lastName: staffMembers.lastName,
+        cedula: staffMembers.cedula,
+        staffProfile: staffMembers.staffProfile,
+        isCoordinator: campaignAssignments.isCoordinator,
+      })
+      .from(campaignAssignments)
+      .leftJoin(staffMembers, eq(campaignAssignments.staffId, staffMembers.id))
+      .where(
+        and(
+          eq(campaignAssignments.campaignId, campaignId),
+          eq(campaignAssignments.isActive, true),
+        ),
+      )
+      .orderBy(desc(campaignAssignments.isCoordinator), asc(staffMembers.lastName))
+
+    return rows as CommercialStaffMember[]
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('permiso')) throw error
+    throw new Error('Error al obtener el personal asignado para vista comercial')
   }
 }

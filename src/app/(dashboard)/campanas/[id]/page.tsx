@@ -4,9 +4,12 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/server'
 import { getCampaignById } from '@/features/campaigns/actions/campaign-actions'
+import { getCampaignTimeline } from '@/features/hours/actions/hours-balance-actions'
 import { CampaignStatusBadge } from '@/features/campaigns/components/campaign-status-badge'
 import { CampaignSizeBadge } from '@/features/campaigns/components/campaign-size-badge'
 import { AssignmentPanel } from '@/features/assignments/components/assignment-panel'
+import { TimelineForm } from '@/features/hours/components/timeline-form'
+import { CampaignCommercialView } from '@/features/campaigns/components/campaign-commercial-view'
 import { Button } from '@/components/ui/button'
 import {
   CAMPAIGN_MODALITY_LABELS,
@@ -45,10 +48,17 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
     notFound()
   }
 
-  const currentRole = await getCurrentRole()
+  const [currentRole, timelineEvents] = await Promise.all([
+    getCurrentRole(),
+    (campaign.status === 'confirmada' || campaign.status === 'ejecutada')
+      ? getCampaignTimeline(id).catch(() => [])
+      : Promise.resolve([]),
+  ])
 
   const isTentativa = campaign.status === 'tentativa'
   const canEdit = isTentativa && (currentRole === 'admin' || currentRole === 'comercial')
+  const isCoordinatorOrAdmin = currentRole === 'admin' || currentRole === 'banco_sangre'
+  const isCommercial = currentRole === 'admin' || currentRole === 'comercial'
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -113,15 +123,31 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
       </div>
 
       {(campaign.status === 'confirmada' || campaign.status === 'ejecutada') && (
-        <section>
-          <h2 className="text-lg font-semibold mb-4">Personal asignado</h2>
-          <AssignmentPanel
-            campaignId={campaign.id}
-            campaignSize={campaign.size}
-            campaignStatus={campaign.status}
-            currentRole={currentRole}
-          />
-        </section>
+        <>
+          <section>
+            <h2 className="text-lg font-semibold mb-4">Personal asignado</h2>
+            <AssignmentPanel
+              campaignId={campaign.id}
+              campaignSize={campaign.size}
+              campaignStatus={campaign.status}
+              currentRole={currentRole}
+            />
+          </section>
+
+          {isCoordinatorOrAdmin && (
+            <section className="rounded-lg border border-border p-4">
+              <TimelineForm
+                campaignId={campaign.id}
+                existingEvents={timelineEvents}
+                isCoordinator={isCoordinatorOrAdmin}
+              />
+            </section>
+          )}
+
+          {isCommercial && (
+            <CampaignCommercialView campaignId={campaign.id} size={campaign.size} />
+          )}
+        </>
       )}
 
       <div className="pt-2">
