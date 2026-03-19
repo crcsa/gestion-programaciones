@@ -75,7 +75,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         <div className="flex items-center gap-2">
           <CampaignStatusBadge status={campaign.status} />
           {canEdit && (
-            <Button variant="outline" render={<Link href={`/campanas/${id}/editar`} />}>
+            <Button variant="outline" nativeButton={false} render={<Link href={`/campanas/${id}/editar`} />}>
               Editar
             </Button>
           )}
@@ -151,7 +151,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
       )}
 
       <div className="pt-2">
-        <Button variant="outline" render={<Link href="/campanas" />}>
+        <Button variant="outline" nativeButton={false} render={<Link href="/campanas" />}>
           &larr; Campañas
         </Button>
       </div>

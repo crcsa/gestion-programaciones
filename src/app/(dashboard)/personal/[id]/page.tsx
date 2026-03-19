@@ -40,7 +40,7 @@ export default async function StaffDetailPage({ params }: StaffDetailPageProps) 
 
         <div className="flex items-center gap-2">
           <StaffStatusBadge isActive={staff.isActive} />
-          <Button variant="outline" render={<Link href={`/personal/${id}/editar`} />}>
+          <Button variant="outline" nativeButton={false} render={<Link href={`/personal/${id}/editar`} />}>
             Editar
           </Button>
         </div>
@@ -66,7 +66,7 @@ export default async function StaffDetailPage({ params }: StaffDetailPageProps) 
       )}
 
       <div className="pt-2">
-        <Button variant="outline" render={<Link href="/personal" />}>
+        <Button variant="outline" nativeButton={false} render={<Link href="/personal" />}>
           Volver al listado
         </Button>
       </div>
