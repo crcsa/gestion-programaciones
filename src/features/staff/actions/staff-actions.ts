@@ -196,6 +196,13 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
         email: input.email,
         fullName: `${input.firstName} ${input.lastName}`,
         role: 'operativo',
+      }).onConflictDoUpdate({
+        target: profiles.id,
+        set: {
+          email: input.email,
+          fullName: `${input.firstName} ${input.lastName}`,
+          role: 'operativo',
+        },
       })
 
       const [created] = await db
