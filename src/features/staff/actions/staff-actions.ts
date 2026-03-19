@@ -179,7 +179,7 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
     })
 
     if (authError || !authData.user) {
-      throw new Error('Error al crear el usuario de autenticacion')
+      throw new Error(`Error al crear el usuario de autenticación: ${authError?.message ?? 'usuario nulo'}`)
     }
 
     const authUserId = authData.user.id
@@ -214,7 +214,7 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
     if (error instanceof Error && (
       error.message === 'Ya existe un funcionario con esa cedula' ||
       error.message.includes('permiso') ||
-      error.message.includes('autenticacion')
+      error.message.includes('autenticaci')
     )) {
       throw error
     }
