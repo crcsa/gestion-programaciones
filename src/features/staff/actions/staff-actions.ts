@@ -212,14 +212,14 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
           firstName: input.firstName,
           lastName: input.lastName,
           cedula: input.cedula,
-          phone: input.phone ?? null,
+          phone: input.phone || null,
           email: input.email,
           staffProfile: input.staffProfile,
           contractType: input.contractType,
           weeklyHours: input.weeklyHours,
           defaultShift: input.defaultShift,
-          hireDate: input.hireDate ?? null,
-          notes: input.notes ?? null,
+          hireDate: input.hireDate || null,
+          notes: input.notes || null,
         })
         .returning()
 
