@@ -29,6 +29,7 @@ const mockStaff: StaffListRow[] = [
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
     trainingAreaNames: [],
+    trainingAreaIds: [],
   },
   {
     id: 'id-2',
@@ -48,6 +49,7 @@ const mockStaff: StaffListRow[] = [
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
     trainingAreaNames: [],
+    trainingAreaIds: [],
   },
 ]
 
@@ -125,8 +127,8 @@ describe('StaffTable', () => {
       />
     )
 
-    const verLinks = screen.getAllByText('Ver')
-    const editButtons = screen.getAllByText('Editar')
+    const verLinks = screen.getAllByRole('link', { name: /ver/i })
+    const editButtons = screen.getAllByRole('button', { name: /editar/i })
 
     expect(verLinks).toHaveLength(2)
     expect(editButtons).toHaveLength(2)
@@ -147,7 +149,7 @@ describe('StaffTable', () => {
       />
     )
 
-    fireEvent.click(screen.getAllByText('Editar')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /editar/i })[0])
     expect(onEdit).toHaveBeenCalledWith(mockStaff[0])
   })
 
@@ -176,8 +178,8 @@ describe('StaffTable', () => {
       />
     )
 
-    expect(screen.queryByText('Anterior')).toBeNull()
-    expect(screen.queryByText('Siguiente')).toBeNull()
+    expect(screen.queryByRole('button', { name: /página anterior/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /página siguiente/i })).toBeNull()
   })
 
   it('shows pagination when there are multiple pages', () => {
@@ -191,8 +193,8 @@ describe('StaffTable', () => {
       />
     )
 
-    expect(screen.getByText('Anterior')).toBeDefined()
-    expect(screen.getByText('Siguiente')).toBeDefined()
+    expect(screen.getByRole('button', { name: /página anterior/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /página siguiente/i })).toBeDefined()
   })
 
   it('calls onPageChange when Anterior is clicked', () => {
@@ -208,7 +210,7 @@ describe('StaffTable', () => {
       />
     )
 
-    fireEvent.click(screen.getByText('Anterior'))
+    fireEvent.click(screen.getByRole('button', { name: /página anterior/i }))
     expect(onPageChange).toHaveBeenCalledWith(1)
   })
 
@@ -225,7 +227,7 @@ describe('StaffTable', () => {
       />
     )
 
-    fireEvent.click(screen.getByText('Siguiente'))
+    fireEvent.click(screen.getByRole('button', { name: /página siguiente/i }))
     expect(onPageChange).toHaveBeenCalledWith(2)
   })
 
@@ -240,8 +242,8 @@ describe('StaffTable', () => {
       />
     )
 
-    const anteriorBtn = screen.getByText('Anterior').closest('button')
-    expect(anteriorBtn?.disabled).toBe(true)
+    const anteriorBtn = screen.getByRole('button', { name: /página anterior/i })
+    expect((anteriorBtn as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('disables Siguiente button on last page', () => {
@@ -255,7 +257,7 @@ describe('StaffTable', () => {
       />
     )
 
-    const siguienteBtn = screen.getByText('Siguiente').closest('button')
-    expect(siguienteBtn?.disabled).toBe(true)
+    const siguienteBtn = screen.getByRole('button', { name: /página siguiente/i })
+    expect((siguienteBtn as HTMLButtonElement).disabled).toBe(true)
   })
 })

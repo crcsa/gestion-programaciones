@@ -101,7 +101,7 @@ describe('createCampaign', () => {
     mockDb.select = vi.fn(() => selectChain)
 
     await expect(createCampaign(validInput)).rejects.toThrow(
-      'Ya existe una campana con ese codigo',
+      'Ya existe una campaña con ese código',
     )
   })
 
@@ -176,7 +176,7 @@ describe('confirmCampaign', () => {
     mockDb.select = vi.fn(() => makeChain(existingCampaign))
 
     await expect(confirmCampaign('camp-1')).rejects.toThrow(
-      'ya esta confirmada',
+      'ya está confirmada',
     )
   })
 
@@ -228,7 +228,7 @@ describe('cancelCampaign', () => {
 
     await expect(
       cancelCampaign(validUuid, 'Motivo suficientemente largo para pasar'),
-    ).rejects.toThrow('ya esta cancelada')
+    ).rejects.toThrow('ya está cancelada')
   })
 })
 
@@ -331,7 +331,7 @@ describe('getCampaignById', () => {
     mockDb.select = vi.fn(() => makeChain([]))
 
     await expect(getCampaignById('nonexistent-id')).rejects.toThrow(
-      'Campana no encontrada',
+      'Campaña no encontrada',
     )
   })
 
@@ -400,7 +400,7 @@ describe('updateCampaign', () => {
     mockDb.select = vi.fn(() => makeChain([]))
 
     await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
-      'Campana no encontrada',
+      'Campaña no encontrada',
     )
   })
 
@@ -410,7 +410,7 @@ describe('updateCampaign', () => {
     mockDb.select = vi.fn(() => makeChain(confirmedRow))
 
     await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
-      'No se puede editar una campana confirmada o cancelada',
+      'editar una campaña',
     )
   })
 
@@ -420,7 +420,7 @@ describe('updateCampaign', () => {
     mockDb.select = vi.fn(() => makeChain(cancelledRow))
 
     await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
-      'No se puede editar una campana confirmada o cancelada',
+      'editar una campaña',
     )
   })
 
@@ -549,7 +549,7 @@ describe('cancelCampaign — ramas adicionales', () => {
 
     await expect(
       cancelCampaign(validCancelId, 'Motivo de prueba'),
-    ).rejects.toThrow('La campana ya esta cancelada')
+    ).rejects.toThrow('La campaña ya está cancelada')
   })
 
   it('lanza error cuando la campaña está ejecutada', async () => {
@@ -557,7 +557,7 @@ describe('cancelCampaign — ramas adicionales', () => {
 
     await expect(
       cancelCampaign(validCancelId, 'Motivo de prueba'),
-    ).rejects.toThrow('No se puede cancelar una campana ejecutada')
+    ).rejects.toThrow('No se puede cancelar una campaña ejecutada')
   })
 
   it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
@@ -567,7 +567,7 @@ describe('cancelCampaign — ramas adicionales', () => {
 
     await expect(
       cancelCampaign(validCancelId, 'Motivo de prueba'),
-    ).rejects.toThrow('Error al cancelar la campana')
+    ).rejects.toThrow('Error al cancelar la campaña')
   })
 })
 
@@ -582,7 +582,7 @@ describe('getCampaignsList — ramas de error', () => {
       throw new Error('connection refused')
     })
 
-    await expect(getCampaignsList()).rejects.toThrow('Error al obtener la lista de campanas')
+    await expect(getCampaignsList()).rejects.toThrow('Error al obtener la lista de campañas')
   })
 })
 

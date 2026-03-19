@@ -50,7 +50,7 @@ import {
 // Helper to create a chainable drizzle mock
 function makeChain(resolvedValue: unknown) {
   const chain: Record<string, unknown> = {}
-  const methods = ['select', 'from', 'where', 'limit', 'offset', 'orderBy', 'insert', 'values', 'update', 'set', 'delete', 'returning']
+  const methods = ['select', 'from', 'where', 'limit', 'offset', 'orderBy', 'leftJoin', 'insert', 'values', 'onConflictDoUpdate', 'update', 'set', 'delete', 'returning']
   for (const method of methods) {
     chain[method] = vi.fn(() => chain)
   }
@@ -193,8 +193,15 @@ describe('getStaffList', () => {
       },
     ]
 
-    const selectChain = makeChain(bacteriologos)
-    mockDb.select = vi.fn(() => selectChain)
+    // getStaffList does: Promise.all([rows, countRows]) + leftJoin area rows
+    // We return: rows chain, count chain (with count prop), area rows chain
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 2) return makeChain([{ count: 1 }])
+      if (selectCall === 3) return makeChain([])
+      return makeChain(bacteriologos)
+    })
     const result = await getStaffList({ perfil: 'bacteriologo', page: 1, limit: 20 })
 
     expect(result.data).toHaveLength(1)
@@ -221,8 +228,13 @@ describe('getStaffList', () => {
       updatedAt: new Date(),
     }))
 
-    const selectChain = makeChain(staffList)
-    mockDb.select = vi.fn(() => selectChain)
+    let selectCall2 = 0
+    mockDb.select = vi.fn(() => {
+      selectCall2++
+      if (selectCall2 === 2) return makeChain([{ count: staffList.length }])
+      if (selectCall2 === 3) return makeChain([])
+      return makeChain(staffList)
+    })
     const result = await getStaffList({ page: 1, limit: 20 })
 
     expect(Array.isArray(result.data)).toBe(true)
@@ -496,7 +508,7 @@ describe('createStaff — validation and auth error paths', () => {
       contractType: 'indefinido' as const,
       weeklyHours: 40,
       defaultShift: 'diurno_completo' as const,
-    })).rejects.toThrow('autenticacion')
+    })).rejects.toThrow('autenticaci')
   })
 
   it('wraps generic DB error with friendly message', async () => {

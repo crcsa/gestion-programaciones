@@ -22,7 +22,7 @@ export interface StaffListFilters {
   limit?: number
 }
 
-export type StaffListRow = StaffMember & { trainingAreaNames: string[] }
+export type StaffListRow = StaffMember & { trainingAreaNames: string[]; trainingAreaIds: string[] }
 
 export interface StaffListResult {
   data: StaffListRow[]
@@ -57,18 +57,26 @@ export async function getStaffList(filters: StaffListFilters = {}): Promise<Staf
     const staffIds = rows.map((r) => r.id)
     const areaRows = staffIds.length > 0
       ? await db
-          .select({ staffId: staffTrainingAreas.staffId, name: trainingAreas.name })
+          .select({ staffId: staffTrainingAreas.staffId, trainingAreaId: staffTrainingAreas.trainingAreaId, name: trainingAreas.name })
           .from(staffTrainingAreas)
           .leftJoin(trainingAreas, eq(staffTrainingAreas.trainingAreaId, trainingAreas.id))
           .where(inArray(staffTrainingAreas.staffId, staffIds))
       : []
 
-    const areaMap = areaRows.reduce<Record<string, string[]>>((acc, r) => {
+    const areaNameMap = areaRows.reduce<Record<string, string[]>>((acc, r) => {
       if (!r.name) return acc
       return { ...acc, [r.staffId]: [...(acc[r.staffId] ?? []), r.name] }
     }, {})
 
-    const data: StaffListRow[] = rows.map((r) => ({ ...r, trainingAreaNames: areaMap[r.id] ?? [] }))
+    const areaIdMap = areaRows.reduce<Record<string, string[]>>((acc, r) => {
+      return { ...acc, [r.staffId]: [...(acc[r.staffId] ?? []), r.trainingAreaId] }
+    }, {})
+
+    const data: StaffListRow[] = rows.map((r) => ({
+      ...r,
+      trainingAreaNames: areaNameMap[r.id] ?? [],
+      trainingAreaIds: areaIdMap[r.id] ?? [],
+    }))
 
     return { data, total }
   } catch (error) {
@@ -261,7 +269,7 @@ export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>
     throw new Error(validated.error.issues[0].message)
   }
 
-  const { id: _id, ...fields } = validated.data
+  const { id: _id, trainingAreaIds, ...fields } = validated.data
 
   try {
     if (fields.cedula) {
@@ -291,6 +299,15 @@ export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>
 
     if (!updated) {
       throw new Error('Funcionario no encontrado')
+    }
+
+    if (trainingAreaIds !== undefined) {
+      await db.delete(staffTrainingAreas).where(eq(staffTrainingAreas.staffId, id))
+      if (trainingAreaIds.length > 0) {
+        await db.insert(staffTrainingAreas).values(
+          trainingAreaIds.map((trainingAreaId) => ({ staffId: id, trainingAreaId }))
+        )
+      }
     }
 
     return updated

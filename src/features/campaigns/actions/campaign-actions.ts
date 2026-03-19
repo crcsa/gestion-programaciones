@@ -164,14 +164,14 @@ export async function getCampaignById(
       .limit(1)
 
     if (!row) {
-      throw new Error('Campana no encontrada')
+      throw new Error('Campaña no encontrada')
     }
 
     return { ...row.campaign, companyName: row.companyName }
   } catch (error) {
     if (
       error instanceof Error &&
-      (error.message === 'Campana no encontrada' ||
+      (error.message === 'Campaña no encontrada' ||
         error.message.includes('permiso'))
     ) {
       throw error
@@ -227,7 +227,7 @@ export async function createCampaign(
   } catch (error) {
     if (
       error instanceof Error &&
-      (error.message.includes('codigo') || error.message.includes('permiso'))
+      (error.message.includes('código') || error.message.includes('permiso'))
     ) {
       throw error
     }
@@ -256,7 +256,7 @@ export async function updateCampaign(
       .limit(1)
 
     if (!current) {
-      throw new Error('Campana no encontrada')
+      throw new Error('Campaña no encontrada')
     }
 
     if (current.status !== 'tentativa') {
@@ -272,7 +272,7 @@ export async function updateCampaign(
       .returning()
 
     if (!updated) {
-      throw new Error('Campana no encontrada')
+      throw new Error('Campaña no encontrada')
     }
 
     return updated
@@ -300,7 +300,7 @@ export async function confirmCampaign(id: string): Promise<Campaign> {
       .limit(1)
 
     if (!current) {
-      throw new Error('Campana no encontrada')
+      throw new Error('Campaña no encontrada')
     }
 
     if (current.status === 'confirmada') {
@@ -360,7 +360,7 @@ export async function cancelCampaign(
       .limit(1)
 
     if (!current) {
-      throw new Error('Campana no encontrada')
+      throw new Error('Campaña no encontrada')
     }
 
     if (current.status === 'cancelada') {
