@@ -276,9 +276,16 @@ export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>
       }
     }
 
+    const sanitized = {
+      ...fields,
+      phone: fields.phone || null,
+      hireDate: fields.hireDate || null,
+      notes: fields.notes || null,
+    }
+
     const [updated] = await db
       .update(staffMembers)
-      .set({ ...fields, updatedAt: new Date() })
+      .set({ ...sanitized, updatedAt: new Date() })
       .where(eq(staffMembers.id, id))
       .returning()
 
