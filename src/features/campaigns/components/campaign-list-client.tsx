@@ -65,7 +65,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
         setData(result.data)
         setTotal(result.total)
       } catch {
-        setError('Error al cargar las campanas. Intente de nuevo.')
+        setError('Error al cargar las campañas. Intente de nuevo.')
       } finally {
         setIsLoading(false)
       }
@@ -113,7 +113,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
       })
       setModalOpen(true)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al cargar la campana')
+      toast.error(err instanceof Error ? err.message : 'Error al cargar la campaña')
     }
   }, [])
 
@@ -124,7 +124,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
       toast.success('Campana confirmada correctamente')
       await fetchData(filters, page)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al confirmar la campana')
+      toast.error(err instanceof Error ? err.message : 'Error al confirmar la campaña')
     } finally {
       setIsConfirming(false)
     }
@@ -145,7 +145,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
       setCancelingCampaign(null)
       await fetchData(filters, page)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al cancelar la campana')
+      toast.error(err instanceof Error ? err.message : 'Error al cancelar la campaña')
     } finally {
       setIsCancelLoading(false)
     }
@@ -175,7 +175,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
       setEditDefaultValues(undefined)
       await fetchData(filters, page)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al guardar la campana')
+      toast.error(err instanceof Error ? err.message : 'Error al guardar la campaña')
     } finally {
       setIsFormLoading(false)
     }
@@ -187,13 +187,13 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Campanas</h1>
           <p className="text-muted-foreground text-sm">
-            Gestion de campanas de donacion
+            Gestión de campañas de donación
           </p>
         </div>
 
         <RoleGate allowedRoles={['admin', 'banco_sangre', 'comercial']} currentRole={currentRole}>
           <Button onClick={handleNuevo}>
-            Nueva campana
+            Nueva campaña
           </Button>
         </RoleGate>
       </div>
@@ -226,7 +226,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
         <DialogContent className="!max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingCampaign ? 'Editar campana' : 'Nueva campana'}
+              {editingCampaign ? 'Editar campaña' : 'Nueva campaña'}
             </DialogTitle>
           </DialogHeader>
           <CampaignForm

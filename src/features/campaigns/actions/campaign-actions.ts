@@ -143,7 +143,7 @@ export async function getCampaignsList(
     return { data: rows, total }
   } catch (error) {
     if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al obtener la lista de campanas')
+    throw new Error('Error al obtener la lista de campañas')
   }
 }
 
@@ -176,7 +176,7 @@ export async function getCampaignById(
     ) {
       throw error
     }
-    throw new Error('Error al obtener la campana')
+    throw new Error('Error al obtener la campaña')
   }
 }
 
@@ -200,7 +200,7 @@ export async function createCampaign(
       .limit(1)
 
     if (existing.length > 0) {
-      throw new Error('Ya existe una campana con ese codigo')
+      throw new Error('Ya existe una campaña con ese código')
     }
 
     const [created] = await db
@@ -231,7 +231,7 @@ export async function createCampaign(
     ) {
       throw error
     }
-    throw new Error('Error al crear la campana')
+    throw new Error('Error al crear la campaña')
   }
 }
 
@@ -261,7 +261,7 @@ export async function updateCampaign(
 
     if (current.status !== 'tentativa') {
       throw new Error(
-        'No se puede editar una campana confirmada o cancelada',
+        'No se puede editar una campaña confirmada o cancelada',
       )
     }
 
@@ -279,13 +279,13 @@ export async function updateCampaign(
   } catch (error) {
     if (
       error instanceof Error &&
-      (error.message.includes('Campana') ||
+      (error.message.includes('Campaña') ||
         error.message.includes('editar') ||
         error.message.includes('permiso'))
     ) {
       throw error
     }
-    throw new Error('Error al actualizar la campana')
+    throw new Error('Error al actualizar la campaña')
   }
 }
 
@@ -304,12 +304,12 @@ export async function confirmCampaign(id: string): Promise<Campaign> {
     }
 
     if (current.status === 'confirmada') {
-      throw new Error('La campana ya esta confirmada')
+      throw new Error('La campaña ya está confirmada')
     }
 
     if (current.status !== 'tentativa') {
       throw new Error(
-        'Solo se pueden confirmar campanas en estado tentativa',
+        'Solo se pueden confirmar campañas en estado tentativa',
       )
     }
 
@@ -328,13 +328,13 @@ export async function confirmCampaign(id: string): Promise<Campaign> {
   } catch (error) {
     if (
       error instanceof Error &&
-      (error.message.includes('Campana') ||
-        error.message.includes('campana') ||
+      (error.message.includes('Campaña') ||
+        error.message.includes('campaña') ||
         error.message.includes('permiso'))
     ) {
       throw error
     }
-    throw new Error('Error al confirmar la campana')
+    throw new Error('Error al confirmar la campaña')
   }
 }
 
@@ -364,11 +364,11 @@ export async function cancelCampaign(
     }
 
     if (current.status === 'cancelada') {
-      throw new Error('La campana ya esta cancelada')
+      throw new Error('La campaña ya está cancelada')
     }
 
     if (current.status === 'ejecutada') {
-      throw new Error('No se puede cancelar una campana ejecutada')
+      throw new Error('No se puede cancelar una campaña ejecutada')
     }
 
     const [updated] = await db
@@ -385,15 +385,15 @@ export async function cancelCampaign(
   } catch (error) {
     if (
       error instanceof Error &&
-      (error.message.includes('Campana') ||
-        error.message.includes('campana') ||
+      (error.message.includes('Campaña') ||
+        error.message.includes('campaña') ||
         error.message.includes('cancelar') ||
         error.message.includes('motivo') ||
         error.message.includes('permiso'))
     ) {
       throw error
     }
-    throw new Error('Error al cancelar la campana')
+    throw new Error('Error al cancelar la campaña')
   }
 }
 

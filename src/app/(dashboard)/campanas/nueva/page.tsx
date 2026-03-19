@@ -31,7 +31,7 @@ export default async function NuevaCampanaPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Nueva Campana</h1>
         <p className="text-muted-foreground text-sm">
-          Complete los datos para registrar una nueva campana.
+          Complete los datos para registrar una nueva campaña.
         </p>
       </div>
 

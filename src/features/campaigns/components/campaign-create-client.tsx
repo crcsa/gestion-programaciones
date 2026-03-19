@@ -15,10 +15,10 @@ export function CampaignCreateClient() {
     setIsLoading(true)
     try {
       await createCampaign(data)
-      toast.success('Campana creada correctamente')
+      toast.success('Campaña creada correctamente')
       router.push('/campanas')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al crear la campana')
+      toast.error(err instanceof Error ? err.message : 'Error al crear la campaña')
     } finally {
       setIsLoading(false)
     }

@@ -21,10 +21,10 @@ export function CampaignEditClient({ campaignId, defaultValues }: CampaignEditCl
     try {
       const { code: _code, ...rest } = data
       await updateCampaign(campaignId, rest)
-      toast.success('Campana actualizada correctamente')
+      toast.success('Campaña actualizada correctamente')
       router.push(`/campanas/${campaignId}`)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al actualizar la campana')
+      toast.error(err instanceof Error ? err.message : 'Error al actualizar la campaña')
     } finally {
       setIsLoading(false)
     }

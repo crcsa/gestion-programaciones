@@ -19,11 +19,11 @@ export const createCampaignSchema = z.object({
 })
 
 export const updateCampaignSchema = createCampaignSchema.partial().extend({
-  id: z.uuid({ error: 'ID de campana no valido' }),
+  id: z.uuid({ error: 'ID de campaña no válido' }),
 })
 
 export const cancelCampaignSchema = z.object({
-  id: z.uuid({ error: 'ID de campana no valido' }),
+  id: z.uuid({ error: 'ID de campaña no válido' }),
   cancelReason: z.string().min(10, 'El motivo debe tener al menos 10 caracteres'),
 })
 

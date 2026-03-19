@@ -152,7 +152,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
 
       <div className="pt-2">
         <Button variant="outline" render={<Link href="/campanas" />}>
-          &larr; Campanas
+          &larr; Campañas
         </Button>
       </div>
     </div>
