@@ -1,6 +1,6 @@
 'use server'
 
-import { eq, ilike, and, or, sql } from 'drizzle-orm'
+import { eq, ilike, and, or, sql, inArray } from 'drizzle-orm'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { db } from '@/lib/db'
 import { staffMembers, staffTrainingAreas } from '@/lib/db/schema/staff-members'
@@ -22,8 +22,10 @@ export interface StaffListFilters {
   limit?: number
 }
 
+export type StaffListRow = StaffMember & { trainingAreaNames: string[] }
+
 export interface StaffListResult {
-  data: StaffMember[]
+  data: StaffListRow[]
   total: number
 }
 
@@ -45,22 +47,30 @@ export async function getStaffList(filters: StaffListFilters = {}): Promise<Staf
   try {
     const conditions = buildListConditions(search, perfil, estado)
 
-    const rows = await db
-      .select()
-      .from(staffMembers)
-      .where(conditions ?? undefined)
-      .limit(limit)
-      .offset(offset)
-      .orderBy(staffMembers.lastName)
-
-    const countRows = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(staffMembers)
-      .where(conditions ?? undefined)
+    const [rows, countRows] = await Promise.all([
+      db.select().from(staffMembers).where(conditions ?? undefined).limit(limit).offset(offset).orderBy(staffMembers.lastName),
+      db.select({ count: sql<number>`count(*)::int` }).from(staffMembers).where(conditions ?? undefined),
+    ])
 
     const total = countRows[0]?.count ?? 0
 
-    return { data: rows, total }
+    const staffIds = rows.map((r) => r.id)
+    const areaRows = staffIds.length > 0
+      ? await db
+          .select({ staffId: staffTrainingAreas.staffId, name: trainingAreas.name })
+          .from(staffTrainingAreas)
+          .leftJoin(trainingAreas, eq(staffTrainingAreas.trainingAreaId, trainingAreas.id))
+          .where(inArray(staffTrainingAreas.staffId, staffIds))
+      : []
+
+    const areaMap = areaRows.reduce<Record<string, string[]>>((acc, r) => {
+      if (!r.name) return acc
+      return { ...acc, [r.staffId]: [...(acc[r.staffId] ?? []), r.name] }
+    }, {})
+
+    const data: StaffListRow[] = rows.map((r) => ({ ...r, trainingAreaNames: areaMap[r.id] ?? [] }))
+
+    return { data, total }
   } catch (error) {
     if (error instanceof Error && error.message.includes('permiso')) throw error
     throw new Error('Error al obtener la lista de funcionarios')

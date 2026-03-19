@@ -9,8 +9,7 @@ import { RoleGate } from '@/features/auth/components/role-gate'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PAGE_LIMIT } from '@/features/staff/lib/constants'
-import type { StaffListFilters, StaffListResult } from '@/features/staff/actions/staff-actions'
-import type { StaffMember } from '@/lib/db/schema/staff-members'
+import type { StaffListFilters, StaffListResult, StaffListRow } from '@/features/staff/actions/staff-actions'
 import type { TrainingArea } from '@/lib/db/schema/training-areas'
 import type { Role } from '@/types/roles'
 
@@ -21,7 +20,7 @@ interface StaffListClientProps {
 }
 
 export function StaffListClient({ initialData, areas, currentRole }: StaffListClientProps) {
-  const [data, setData] = useState<StaffMember[]>(initialData.data)
+  const [data, setData] = useState<StaffListRow[]>(initialData.data)
   const [total, setTotal] = useState(initialData.total)
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<StaffListFilters>({})
@@ -29,7 +28,7 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
   const [error, setError] = useState<string | null>(null)
 
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null)
+  const [editingStaff, setEditingStaff] = useState<StaffListRow | null>(null)
 
   const fetchData = useCallback(
     async (nextFilters: StaffListFilters, nextPage: number) => {
@@ -62,7 +61,7 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
     setPage(newPage)
   }, [])
 
-  const handleEdit = useCallback((staff: StaffMember) => {
+  const handleEdit = useCallback((staff: StaffListRow) => {
     setEditingStaff(staff)
     setModalOpen(true)
   }, [])

@@ -13,17 +13,17 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { StaffStatusBadge } from './staff-status-badge'
 import { STAFF_PROFILE_LABELS, PAGE_LIMIT } from '@/features/staff/lib/constants'
-import type { StaffMember } from '@/lib/db/schema/staff-members'
+import type { StaffListRow } from '@/features/staff/actions/staff-actions'
 
 interface StaffTableProps {
-  data: StaffMember[]
+  data: StaffListRow[]
   total: number
   page: number
   onPageChange: (page: number) => void
-  onEdit: (staff: StaffMember) => void
+  onEdit: (staff: StaffListRow) => void
 }
 
-const columnHelper = createColumnHelper<StaffMember>()
+const columnHelper = createColumnHelper<StaffListRow>()
 
 export function StaffTable({ data, total, page, onPageChange, onEdit }: StaffTableProps) {
   const columns = useMemo(
@@ -44,13 +44,21 @@ export function StaffTable({ data, total, page, onPageChange, onEdit }: StaffTab
         header: 'Perfil',
         cell: (info) => STAFF_PROFILE_LABELS[info.getValue()] ?? info.getValue(),
       }),
+      columnHelper.accessor('trainingAreaNames', {
+        header: 'Área',
+        cell: (info) => {
+          const names = info.getValue()
+          if (names.length === 0) return <span className="text-muted-foreground text-xs">—</span>
+          return <span className="text-xs">{names.join(', ')}</span>
+        },
+      }),
       columnHelper.accessor('isActive', {
         header: 'Estado',
         cell: (info) => <StaffStatusBadge isActive={info.getValue()} />,
       }),
       columnHelper.display({
         id: 'acciones',
-        header: '',
+        header: 'Acciones',
         cell: (info) => (
           <TooltipProvider>
             <div className="flex items-center justify-end gap-1">
@@ -107,7 +115,7 @@ export function StaffTable({ data, total, page, onPageChange, onEdit }: StaffTab
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className={`px-4 py-3 text-left font-medium text-muted-foreground ${header.id === 'acciones' ? 'w-20 text-right' : ''}`}
+                    className={`px-4 py-3 text-left font-medium text-muted-foreground ${header.id === 'acciones' ? 'w-24 text-right' : ''}`}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>

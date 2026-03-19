@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { StaffTable } from '@/features/staff/components/staff-table'
-import type { StaffMember } from '@/lib/db/schema/staff-members'
+import type { StaffListRow } from '@/features/staff/actions/staff-actions'
 
 // Mock next/link to a simple anchor
 vi.mock('next/link', () => ({
@@ -10,7 +10,7 @@ vi.mock('next/link', () => ({
   ),
 }))
 
-const mockStaff: StaffMember[] = [
+const mockStaff: StaffListRow[] = [
   {
     id: 'id-1',
     profileId: null,
@@ -28,6 +28,7 @@ const mockStaff: StaffMember[] = [
     notes: null,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
+    trainingAreaNames: [],
   },
   {
     id: 'id-2',
@@ -46,6 +47,7 @@ const mockStaff: StaffMember[] = [
     notes: null,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
+    trainingAreaNames: [],
   },
 ]
 
