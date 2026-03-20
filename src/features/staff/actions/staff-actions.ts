@@ -241,6 +241,12 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
         })
         .returning()
 
+      if (input.trainingAreaIds && input.trainingAreaIds.length > 0) {
+        await db.insert(staffTrainingAreas).values(
+          input.trainingAreaIds.map((trainingAreaId) => ({ staffId: created.id, trainingAreaId }))
+        )
+      }
+
       return created
     } catch (dbError) {
       // Rollback: delete the auth user so the email can be reused
