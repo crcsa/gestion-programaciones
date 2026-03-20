@@ -125,7 +125,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
     setIsConfirming(true)
     try {
       await confirmCampaign(campaign.id)
-      toast.success('Campana confirmada correctamente')
+      toast.success('Campaña confirmada correctamente')
       await fetchData(filters, page)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al confirmar la campaña')
@@ -144,7 +144,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
     setIsCancelLoading(true)
     try {
       await cancelCampaign(cancelingCampaign.id, reason)
-      toast.success('Campana cancelada correctamente')
+      toast.success('Campaña cancelada correctamente')
       setCancelDialogOpen(false)
       setCancelingCampaign(null)
       await fetchData(filters, page)
@@ -170,10 +170,10 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
       if (editingCampaign) {
         const { code: _code, ...rest } = formData
         await updateCampaign(editingCampaign.id, rest)
-        toast.success('Campana actualizada correctamente')
+        toast.success('Campaña actualizada correctamente')
       } else {
         await createCampaign(formData)
-        toast.success('Campana creada correctamente')
+        toast.success('Campaña creada correctamente')
       }
       setModalOpen(false)
       setEditingCampaign(null)
