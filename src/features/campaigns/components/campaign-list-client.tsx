@@ -6,6 +6,7 @@ import { CampaignFilters } from './campaign-filters'
 import { CampaignTable } from './campaign-table'
 import { CampaignForm } from './campaign-form'
 import { CancelCampaignDialog } from './cancel-campaign-dialog'
+import { ExcelImportDialog } from './excel-import-dialog'
 import { RoleGate } from '@/features/auth/components/role-gate'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -192,9 +193,12 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
         </div>
 
         <RoleGate allowedRoles={['admin', 'banco_sangre', 'comercial']} currentRole={currentRole}>
-          <Button onClick={handleNuevo}>
-            Nueva campaña
-          </Button>
+          <div className="flex items-center gap-2">
+            <ExcelImportDialog onSuccess={() => fetchData(filters, page)} />
+            <Button onClick={handleNuevo}>
+              Nueva campaña
+            </Button>
+          </div>
         </RoleGate>
       </div>
 

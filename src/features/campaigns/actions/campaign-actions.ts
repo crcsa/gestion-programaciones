@@ -11,8 +11,9 @@ import {
   createCampaignSchema,
   updateCampaignSchema,
   cancelCampaignSchema,
+  importExcelRowSchema,
 } from '../schemas/campaign-schemas'
-import type { CreateCampaignInput } from '../schemas/campaign-schemas'
+import type { CreateCampaignInput, ImportExcelRow } from '../schemas/campaign-schemas'
 import type { Campaign } from '@/lib/db/schema/campaigns'
 
 // ---- Types ----------------------------------------------------------------
@@ -438,4 +439,91 @@ export async function getAssignedStaffForCommercial(
     if (error instanceof Error && error.message.includes('permiso')) throw error
     throw new Error('Error al obtener el personal asignado para vista comercial')
   }
+}
+
+// ---- Excel import ---------------------------------------------------------
+
+export interface ImportResult {
+  imported: number
+  skipped: number
+  errors: { row: number; code: string; reason: string }[]
+}
+
+export async function importCampaignsFromExcel(
+  rows: ImportExcelRow[],
+): Promise<ImportResult> {
+  await requireRole(['admin', 'banco_sangre', 'comercial'])
+
+  const result: ImportResult = { imported: 0, skipped: 0, errors: [] }
+
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i]
+    const rowNum = i + 2 // Excel row (1 = header)
+
+    const parsed = importExcelRowSchema.safeParse(raw)
+    if (!parsed.success) {
+      result.errors.push({
+        row: rowNum,
+        code: raw.code ?? `fila ${rowNum}`,
+        reason: parsed.error.issues[0].message,
+      })
+      continue
+    }
+
+    const data = parsed.data
+
+    try {
+      // Skip if code already exists
+      const existing = await db
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(eq(campaigns.code, data.code))
+        .limit(1)
+
+      if (existing.length > 0) {
+        result.skipped++
+        continue
+      }
+
+      // Find or create company by name (case-insensitive)
+      let companyId: string | null = null
+      const existingCompany = await db
+        .select({ id: companies.id })
+        .from(companies)
+        .where(ilike(companies.name, data.companyName))
+        .limit(1)
+
+      if (existingCompany.length > 0) {
+        companyId = existingCompany[0].id
+      } else {
+        const [newCompany] = await db
+          .insert(companies)
+          .values({ name: data.companyName, isActive: true })
+          .returning({ id: companies.id })
+        companyId = newCompany?.id ?? null
+      }
+
+      await db.insert(campaigns).values({
+        code: data.code,
+        companyId,
+        municipality: data.municipality,
+        campaignDate: data.campaignDate,
+        size: data.size,
+        modality: data.modality,
+        expectedDonations: data.expectedDonations ?? null,
+        observations: data.observations ?? null,
+        status: 'tentativa',
+      })
+
+      result.imported++
+    } catch {
+      result.errors.push({
+        row: rowNum,
+        code: data.code,
+        reason: 'Error al guardar en la base de datos',
+      })
+    }
+  }
+
+  return result
 }
