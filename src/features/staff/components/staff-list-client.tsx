@@ -1,13 +1,20 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import { toast } from 'sonner'
 import { StaffFilters } from './staff-filters'
 import { StaffTable } from './staff-table'
 import { StaffFormModal } from './staff-form-modal'
-import { getStaffList } from '@/features/staff/actions/staff-actions'
+import { getStaffList, deleteStaff } from '@/features/staff/actions/staff-actions'
 import { RoleGate } from '@/features/auth/components/role-gate'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { PAGE_LIMIT } from '@/features/staff/lib/constants'
 import type { StaffListFilters, StaffListResult, StaffListRow } from '@/features/staff/actions/staff-actions'
 import type { TrainingArea } from '@/lib/db/schema/training-areas'
@@ -29,6 +36,10 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingStaff, setEditingStaff] = useState<StaffListRow | null>(null)
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deletingStaff, setDeletingStaff] = useState<StaffListRow | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const fetchData = useCallback(
     async (nextFilters: StaffListFilters, nextPage: number) => {
@@ -80,6 +91,32 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
     fetchData(filters, page)
   }, [fetchData, filters, page])
 
+  const handleDeleteRequest = useCallback((staff: StaffListRow) => {
+    setDeletingStaff(staff)
+    setDeleteDialogOpen(true)
+  }, [])
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deletingStaff) return
+    setIsDeleting(true)
+    try {
+      await deleteStaff(deletingStaff.id)
+      toast.success(`${deletingStaff.firstName} ${deletingStaff.lastName} eliminado correctamente`)
+      setDeleteDialogOpen(false)
+      setDeletingStaff(null)
+      fetchData(filters, page)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al eliminar el funcionario')
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [deletingStaff, fetchData, filters, page])
+
+  const handleDeleteDialogChange = useCallback((open: boolean) => {
+    setDeleteDialogOpen(open)
+    if (!open) setDeletingStaff(null)
+  }, [])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -116,8 +153,41 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
           page={page}
           onPageChange={handlePageChange}
           onEdit={handleEdit}
+          onDelete={handleDeleteRequest}
+          isAdmin={currentRole === 'admin'}
         />
       )}
+
+      <Dialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogChange}>
+        <DialogContent className="!max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Eliminar funcionario</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            ¿Está seguro que desea eliminar a{' '}
+            <span className="font-medium text-foreground">
+              {deletingStaff?.firstName} {deletingStaff?.lastName}
+            </span>
+            ? Esta acción eliminará también su acceso al sistema y no se puede deshacer.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => handleDeleteDialogChange(false)}
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {editingStaff !== null ? (
         <StaffFormModal

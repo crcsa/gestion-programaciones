@@ -329,6 +329,38 @@ export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>
   }
 }
 
+export async function deleteStaff(id: string): Promise<void> {
+  await requireRole(['admin'])
+
+  try {
+    const [staff] = await db
+      .select({ id: staffMembers.id, profileId: staffMembers.profileId })
+      .from(staffMembers)
+      .where(eq(staffMembers.id, id))
+      .limit(1)
+
+    if (!staff) {
+      throw new Error('Funcionario no encontrado')
+    }
+
+    await db.delete(staffTrainingAreas).where(eq(staffTrainingAreas.staffId, id))
+    await db.delete(staffMembers).where(eq(staffMembers.id, id))
+
+    if (staff.profileId) {
+      const supabaseAdmin = getSupabaseAdmin()
+      await supabaseAdmin.auth.admin.deleteUser(staff.profileId).catch(() => null)
+    }
+  } catch (error) {
+    if (error instanceof Error && (
+      error.message === 'Funcionario no encontrado' ||
+      error.message.includes('permiso')
+    )) {
+      throw error
+    }
+    throw new Error('Error al eliminar el funcionario')
+  }
+}
+
 export async function toggleStaffStatus(id: string): Promise<StaffMember> {
   await requireRole(['admin', 'banco_sangre'])
 

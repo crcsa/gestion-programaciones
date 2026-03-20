@@ -8,7 +8,7 @@ import {
   createColumnHelper,
 } from '@tanstack/react-table'
 import Link from 'next/link'
-import { Eye, Pencil, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Eye, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { StaffStatusBadge } from './staff-status-badge'
@@ -21,11 +21,13 @@ interface StaffTableProps {
   page: number
   onPageChange: (page: number) => void
   onEdit: (staff: StaffListRow) => void
+  onDelete?: (staff: StaffListRow) => void
+  isAdmin?: boolean
 }
 
 const columnHelper = createColumnHelper<StaffListRow>()
 
-export function StaffTable({ data, total, page, onPageChange, onEdit }: StaffTableProps) {
+export function StaffTable({ data, total, page, onPageChange, onEdit, onDelete, isAdmin = false }: StaffTableProps) {
   const columns = useMemo(
     () => [
       columnHelper.accessor(
@@ -87,12 +89,27 @@ export function StaffTable({ data, total, page, onPageChange, onEdit }: StaffTab
                 } />
                 <TooltipContent>Editar</TooltipContent>
               </Tooltip>
+              {isAdmin && onDelete && (
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <button
+                      type="button"
+                      onClick={() => onDelete(info.row.original)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="sr-only">Eliminar</span>
+                    </button>
+                  } />
+                  <TooltipContent>Eliminar</TooltipContent>
+                </Tooltip>
+              )}
             </div>
           </TooltipProvider>
         ),
       }),
     ],
-    [onEdit]
+    [onEdit, onDelete, isAdmin]
   )
 
   const table = useReactTable({
