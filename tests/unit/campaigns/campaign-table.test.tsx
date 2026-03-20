@@ -9,12 +9,14 @@ vi.mock('next/link', () => ({
     href,
     children,
     className,
+    'aria-label': ariaLabel,
   }: {
     href: string
     children: React.ReactNode
     className?: string
+    'aria-label'?: string
   }) => (
-    <a href={href} className={className}>
+    <a href={href} className={className} aria-label={ariaLabel}>
       {children}
     </a>
   ),
@@ -23,7 +25,16 @@ vi.mock('next/link', () => ({
 // Mock tooltip to avoid portal issues in jsdom
 vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({
+    children,
+    render,
+  }: {
+    children: React.ReactNode
+    render?: React.ReactElement
+  }) => {
+    if (render) return <>{render}{children}</>
+    return <>{children}</>
+  },
   TooltipContent: () => null,
   TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
@@ -124,7 +135,7 @@ describe('CampaignTable', () => {
       />
     )
 
-    const verLinks = screen.getAllByText('Ver')
+    const verLinks = screen.getAllByRole('link', { name: 'Ver detalle' })
     expect(verLinks).toHaveLength(2)
     expect(verLinks[0].getAttribute('href')).toBe('/campanas/id-1')
   })
@@ -143,7 +154,7 @@ describe('CampaignTable', () => {
     )
 
     // Only CMP-001 has status tentativa
-    const editButtons = screen.getAllByText('Editar')
+    const editButtons = screen.getAllByRole('button', { name: 'Editar' })
     expect(editButtons).toHaveLength(1)
 
     fireEvent.click(editButtons[0])
@@ -175,8 +186,8 @@ describe('CampaignTable', () => {
       />
     )
 
-    expect(screen.getByText('Anterior')).toBeDefined()
-    expect(screen.getByText('Siguiente')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Página anterior' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Página siguiente' })).toBeDefined()
   })
 
   it('calls onPageChange when Siguiente is clicked', () => {
@@ -192,7 +203,7 @@ describe('CampaignTable', () => {
       />
     )
 
-    fireEvent.click(screen.getByText('Siguiente'))
+    fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }))
     expect(onPageChange).toHaveBeenCalledWith(2)
   })
 
@@ -207,8 +218,8 @@ describe('CampaignTable', () => {
       />
     )
 
-    const anteriorBtn = screen.getByText('Anterior').closest('button')
-    expect(anteriorBtn?.disabled).toBe(true)
+    const anteriorBtn = screen.getByRole('button', { name: 'Página anterior' }) as HTMLButtonElement
+    expect(anteriorBtn.disabled).toBe(true)
   })
 
   it('does not show pagination when total fits in one page', () => {
@@ -222,8 +233,8 @@ describe('CampaignTable', () => {
       />
     )
 
-    expect(screen.queryByText('Anterior')).toBeNull()
-    expect(screen.queryByText('Siguiente')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Página anterior' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Página siguiente' })).toBeNull()
   })
 
   it('shows dash when companyName is null', () => {

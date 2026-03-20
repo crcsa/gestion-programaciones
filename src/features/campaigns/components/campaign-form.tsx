@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Input } from '@/components/ui/input'
@@ -17,15 +18,18 @@ import {
   createCampaignSchema,
   type CreateCampaignInput,
 } from '@/features/campaigns/schemas/campaign-schemas'
+import { CompanySelector } from './company-selector'
 
 interface CampaignFormProps {
   defaultValues?: Partial<CreateCampaignInput>
+  defaultCompanyName?: string
   onSubmit: (data: CreateCampaignInput) => Promise<void>
   isLoading?: boolean
 }
 
 export function CampaignForm({
   defaultValues,
+  defaultCompanyName,
   onSubmit,
   isLoading = false,
 }: CampaignFormProps) {
@@ -44,6 +48,8 @@ export function CampaignForm({
 
   const size = watch('size')
   const modality = watch('modality')
+  const companyId = watch('companyId')
+  const [selectedCompanyName, setSelectedCompanyName] = useState<string | undefined>(defaultCompanyName)
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -59,6 +65,19 @@ export function CampaignForm({
           {errors.code && (
             <p className="text-sm text-destructive">{errors.code.message}</p>
           )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Empresa</Label>
+          <CompanySelector
+            value={companyId}
+            selectedName={selectedCompanyName}
+            onChange={(id, name) => {
+              setValue('companyId', id, { shouldValidate: true })
+              setSelectedCompanyName(name)
+            }}
+            error={errors.companyId?.message}
+          />
         </div>
 
         <div className="space-y-1.5">

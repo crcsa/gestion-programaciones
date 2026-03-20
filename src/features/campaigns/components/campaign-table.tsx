@@ -10,7 +10,9 @@ import {
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { Eye, Pencil, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { CampaignStatusBadge } from './campaign-status-badge'
 import { CampaignSizeBadge } from './campaign-size-badge'
 import { CAMPAIGN_MODALITY_LABELS, PAGE_LIMIT } from '@/features/campaigns/lib/constants'
@@ -27,6 +29,36 @@ interface CampaignTableProps {
 }
 
 const columnHelper = createColumnHelper<CampaignListItem>()
+
+function IconButton({
+  label,
+  onClick,
+  className,
+  children,
+}: {
+  label: string
+  onClick?: () => void
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            onClick={onClick}
+            aria-label={label}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted ${className ?? ''}`}
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 export function CampaignTable({
   data,
@@ -87,41 +119,54 @@ export function CampaignTable({
             campaign.status !== 'cancelada' && campaign.status !== 'ejecutada'
 
           return (
-            <div className="flex items-center gap-2 flex-wrap">
-              <Link
-                href={`/campanas/${campaign.id}`}
-                className="text-sm text-primary underline-offset-4 hover:underline"
-              >
-                Ver
-              </Link>
-              {isTentativa && (
-                <button
-                  type="button"
-                  onClick={() => onEdit(campaign)}
-                  className="text-sm text-primary underline-offset-4 hover:underline"
-                >
-                  Editar
-                </button>
-              )}
-              {isTentativa && onConfirm && (
-                <button
-                  type="button"
-                  onClick={() => onConfirm(campaign)}
-                  className="text-sm text-green-600 underline-offset-4 hover:underline"
-                >
-                  Confirmar
-                </button>
-              )}
-              {canCancel && onCancel && (
-                <button
-                  type="button"
-                  onClick={() => onCancel(campaign)}
-                  className="text-sm text-destructive underline-offset-4 hover:underline"
-                >
-                  Cancelar
-                </button>
-              )}
-            </div>
+            <TooltipProvider>
+              <div className="flex items-center gap-0.5">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Link
+                        href={`/campanas/${campaign.id}`}
+                        aria-label="Ver detalle"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      />
+                    }
+                  >
+                    <Eye className="h-4 w-4" />
+                  </TooltipTrigger>
+                  <TooltipContent>Ver detalle</TooltipContent>
+                </Tooltip>
+
+                {isTentativa && (
+                  <IconButton
+                    label="Editar"
+                    onClick={() => onEdit(campaign)}
+                    className="hover:text-foreground"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </IconButton>
+                )}
+
+                {isTentativa && onConfirm && (
+                  <IconButton
+                    label="Confirmar"
+                    onClick={() => onConfirm(campaign)}
+                    className="hover:bg-green-100 hover:text-green-700 dark:hover:bg-green-900/30 dark:hover:text-green-400"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                  </IconButton>
+                )}
+
+                {canCancel && onCancel && (
+                  <IconButton
+                    label="Cancelar campaña"
+                    onClick={() => onCancel(campaign)}
+                    className="hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </IconButton>
+                )}
+              </div>
+            </TooltipProvider>
           )
         },
       }),
@@ -202,16 +247,18 @@ export function CampaignTable({
               size="sm"
               disabled={!hasPrev}
               onClick={() => onPageChange(page - 1)}
+              aria-label="Página anterior"
             >
-              Anterior
+              <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
               size="sm"
               disabled={!hasNext}
               onClick={() => onPageChange(page + 1)}
+              aria-label="Página siguiente"
             >
-              Siguiente
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>

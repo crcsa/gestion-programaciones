@@ -49,6 +49,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
   const [modalOpen, setModalOpen] = useState(false)
   const [editingCampaign, setEditingCampaign] = useState<CampaignListItem | null>(null)
   const [editDefaultValues, setEditDefaultValues] = useState<Partial<CreateCampaignInput> | undefined>(undefined)
+  const [editDefaultCompanyName, setEditDefaultCompanyName] = useState<string | undefined>(undefined)
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [cancelingCampaign, setCancelingCampaign] = useState<CampaignListItem | null>(null)
@@ -91,6 +92,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
   const handleNuevo = useCallback(() => {
     setEditingCampaign(null)
     setEditDefaultValues(undefined)
+    setEditDefaultCompanyName(undefined)
     setModalOpen(true)
   }, [])
 
@@ -98,6 +100,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
     try {
       const full = await getCampaignById(campaign.id)
       setEditingCampaign(campaign)
+      setEditDefaultCompanyName(full.companyName ?? undefined)
       setEditDefaultValues({
         code: full.code,
         companyId: full.companyId ?? undefined,
@@ -157,6 +160,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
     if (!open) {
       setEditingCampaign(null)
       setEditDefaultValues(undefined)
+      setEditDefaultCompanyName(undefined)
     }
   }, [])
 
@@ -174,6 +178,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
       setModalOpen(false)
       setEditingCampaign(null)
       setEditDefaultValues(undefined)
+      setEditDefaultCompanyName(undefined)
       await fetchData(filters, page)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar la campaña')
@@ -235,6 +240,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
           </DialogHeader>
           <CampaignForm
             defaultValues={editDefaultValues}
+            defaultCompanyName={editDefaultCompanyName}
             onSubmit={handleFormSubmit}
             isLoading={isFormLoading}
           />
