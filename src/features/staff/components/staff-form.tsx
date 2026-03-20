@@ -41,8 +41,6 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }:
   })
 
   const staffProfile = watch('staffProfile')
-  const contractType = watch('contractType')
-  const defaultShift = watch('defaultShift')
 
   const filteredAreas = staffProfile
     ? areas.filter((a) => a.forProfiles.includes(staffProfile))
@@ -132,27 +130,6 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }:
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="contractType">Tipo de Contrato</Label>
-          <Select
-            value={contractType ?? ''}
-            onValueChange={(v) => setValue('contractType', v as CreateStaffInput['contractType'], { shouldValidate: true })}
-          >
-            <SelectTrigger id="contractType" aria-invalid={!!errors.contractType} className="w-full">
-              <SelectValue placeholder="Seleccionar contrato" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="indefinido">Indefinido</SelectItem>
-              <SelectItem value="fijo">Fijo</SelectItem>
-              <SelectItem value="prestacion_servicios">Prestación de Servicios</SelectItem>
-              <SelectItem value="aprendizaje">Aprendizaje</SelectItem>
-            </SelectContent>
-          </Select>
-          {errors.contractType && (
-            <p className="text-sm text-destructive">{errors.contractType.message}</p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
           <Label htmlFor="weeklyHours">Horas/semana</Label>
           <Input
             id="weeklyHours"
@@ -164,26 +141,6 @@ export function StaffForm({ defaultValues, onSubmit, isLoading = false, areas }:
           />
           {errors.weeklyHours && (
             <p className="text-sm text-destructive">{errors.weeklyHours.message}</p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="defaultShift">Turno por defecto</Label>
-          <Select
-            value={defaultShift ?? ''}
-            onValueChange={(v) => setValue('defaultShift', v as CreateStaffInput['defaultShift'], { shouldValidate: true })}
-          >
-            <SelectTrigger id="defaultShift" aria-invalid={!!errors.defaultShift} className="w-full">
-              <SelectValue placeholder="Seleccionar turno" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="diurno_completo">Diurno Completo</SelectItem>
-              <SelectItem value="noche">Noche</SelectItem>
-              <SelectItem value="posturno">Posturno</SelectItem>
-            </SelectContent>
-          </Select>
-          {errors.defaultShift && (
-            <p className="text-sm text-destructive">{errors.defaultShift.message}</p>
           )}
         </div>
 

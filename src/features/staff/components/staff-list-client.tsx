@@ -202,9 +202,7 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
             phone: editingStaff.phone ?? undefined,
             email: editingStaff.email ?? undefined,
             staffProfile: editingStaff.staffProfile,
-            contractType: editingStaff.contractType,
             weeklyHours: editingStaff.weeklyHours,
-            defaultShift: editingStaff.defaultShift,
             trainingAreaIds: editingStaff.trainingAreaIds,
           }}
           areas={areas}

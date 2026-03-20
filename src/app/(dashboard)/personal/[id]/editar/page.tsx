@@ -50,9 +50,7 @@ export default async function EditStaffPage({ params }: EditStaffPageProps) {
     email: staff.email ?? undefined,
     phone: staff.phone ?? undefined,
     staffProfile: staff.staffProfile,
-    contractType: staff.contractType,
     weeklyHours: staff.weeklyHours,
-    defaultShift: staff.defaultShift,
     hireDate: staff.hireDate ?? undefined,
     trainingAreaIds: staff.trainingAreaIds ?? [],
   }

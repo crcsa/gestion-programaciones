@@ -4,11 +4,7 @@ import { format } from 'date-fns'
 import { getStaffById } from '@/features/staff/actions/staff-actions'
 import { StaffStatusBadge } from '@/features/staff/components/staff-status-badge'
 import { Button } from '@/components/ui/button'
-import {
-  STAFF_PROFILE_LABELS,
-  CONTRACT_TYPE_LABELS,
-  SHIFT_LABELS,
-} from '@/features/staff/lib/constants'
+import { STAFF_PROFILE_LABELS } from '@/features/staff/lib/constants'
 
 interface StaffDetailPageProps {
   params: Promise<{ id: string }>
@@ -48,9 +44,7 @@ export default async function StaffDetailPage({ params }: StaffDetailPageProps) 
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 rounded-lg border border-border p-4">
         <DetailRow label="Perfil" value={STAFF_PROFILE_LABELS[staff.staffProfile] ?? staff.staffProfile} />
-        <DetailRow label="Tipo de Contrato" value={CONTRACT_TYPE_LABELS[staff.contractType] ?? staff.contractType} />
         <DetailRow label="Horas semanales" value={`${staff.weeklyHours}h`} />
-        <DetailRow label="Turno por defecto" value={SHIFT_LABELS[staff.defaultShift] ?? staff.defaultShift} />
         {staff.email && <DetailRow label="Correo" value={staff.email} />}
         {staff.phone && <DetailRow label="Teléfono" value={staff.phone} />}
         {staff.hireDate && <DetailRow label="Fecha de ingreso" value={format(new Date(staff.hireDate), 'dd/MM/yyyy')} />}

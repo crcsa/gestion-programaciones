@@ -17,7 +17,7 @@ export const createStaffSchema = z.object({
   contractType: z.enum(
     ['indefinido', 'fijo', 'prestacion_servicios', 'aprendizaje'],
     { error: 'Tipo de contrato no valido' }
-  ),
+  ).optional(),
   weeklyHours: z
     .number()
     .int('Las horas semanales deben ser un numero entero')
@@ -26,7 +26,7 @@ export const createStaffSchema = z.object({
   defaultShift: z.enum(
     ['diurno_completo', 'noche', 'posturno'],
     { error: 'Turno no valido' }
-  ),
+  ).optional(),
   hireDate: z.string().optional(),
   notes: z.string().optional(),
   trainingAreaIds: z.array(z.string().uuid()).optional(),
