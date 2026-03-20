@@ -22,13 +22,14 @@ vi.mock('@/lib/supabase/admin', () => ({
           data: { user: { id: 'auth-user-456' } },
           error: null,
         }),
+        deleteUser: vi.fn().mockResolvedValue({ error: null }),
       },
     },
   })),
 }))
 
 vi.mock('@/lib/db/schema/staff-members', () => ({
-  staffMembers: { id: 'id', cedula: 'cedula', staffProfile: 'staff_profile', isActive: 'is_active' },
+  staffMembers: { id: 'id', cedula: 'cedula', staffProfile: 'staff_profile', isActive: 'is_active', profileId: 'profile_id' },
   staffTrainingAreas: { staffId: 'staff_id', trainingAreaId: 'training_area_id' },
 }))
 
@@ -45,6 +46,7 @@ import {
   toggleStaffStatus,
   getStaffById,
   updateStaff,
+  deleteStaff,
 } from '@/features/staff/actions/staff-actions'
 
 // Helper to create a chainable drizzle mock
@@ -524,7 +526,7 @@ describe('createStaff — validation and auth error paths', () => {
       contractType: 'indefinido' as const,
       weeklyHours: 40,
       defaultShift: 'diurno_completo' as const,
-    })).rejects.toThrow('Error al crear el funcionario')
+    })).rejects.toThrow('base de datos')
   })
 })
 
@@ -552,5 +554,108 @@ describe('updateTrainingAreas — ramas de error', () => {
     await expect(
       updateTrainingAreas('staff-1', ['area-1']),
     ).rejects.toThrow('Error al actualizar las areas de entrenamiento')
+  })
+})
+
+// ---- updateStaff con trainingAreaIds ----------------------------------------
+
+describe('updateStaff — con trainingAreaIds', () => {
+  const staffId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  const areaUuid1 = '00000000-0000-4000-8000-000000000a01'
+  const areaUuid2 = '00000000-0000-4000-8000-000000000a02'
+
+  it('elimina y reinserta areas cuando trainingAreaIds es provisto', async () => {
+    const updated = { id: staffId, firstName: 'Test', lastName: 'User', isActive: true }
+    mockDb.select = vi.fn(() => makeChain([]))   // cedula check
+    mockDb.update = vi.fn(() => makeChain([updated]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+    mockDb.insert = vi.fn(() => makeChain([]))
+
+    const result = await updateStaff(staffId, {
+      firstName: 'Test',
+      lastName: 'User',
+      trainingAreaIds: [areaUuid1, areaUuid2],
+    })
+
+    expect(result.id).toBe(staffId)
+    expect(mockDb.delete).toHaveBeenCalledTimes(1)
+    expect(mockDb.insert).toHaveBeenCalledTimes(1)
+  })
+
+  it('solo elimina areas cuando trainingAreaIds es array vacío', async () => {
+    const updated = { id: staffId, firstName: 'Test', lastName: 'User', isActive: true }
+    mockDb.select = vi.fn(() => makeChain([]))
+    mockDb.update = vi.fn(() => makeChain([updated]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+    mockDb.insert = vi.fn(() => makeChain([]))
+
+    await updateStaff(staffId, { firstName: 'Test', lastName: 'User', trainingAreaIds: [] })
+
+    expect(mockDb.delete).toHaveBeenCalledTimes(1)
+    expect(mockDb.insert).not.toHaveBeenCalled()
+  })
+
+  it('no toca areas cuando trainingAreaIds es undefined', async () => {
+    const updated = { id: staffId, firstName: 'Test', lastName: 'User', isActive: true }
+    mockDb.select = vi.fn(() => makeChain([]))
+    mockDb.update = vi.fn(() => makeChain([updated]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    await updateStaff(staffId, { firstName: 'Test', lastName: 'User' })
+
+    expect(mockDb.delete).not.toHaveBeenCalled()
+  })
+})
+
+// ---- deleteStaff ------------------------------------------------------------
+
+describe('deleteStaff', () => {
+  const staffId = 'b2c3d4e5-f6a7-8901-bcde-f12345678901'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('elimina funcionario con profileId (llama supabase deleteUser)', async () => {
+    const staffRow = { id: staffId, profileId: 'auth-user-abc' }
+    mockDb.select = vi.fn(() => makeChain([staffRow]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    await expect(deleteStaff(staffId)).resolves.toBeUndefined()
+    expect(mockDb.delete).toHaveBeenCalledTimes(2) // training areas + staff
+  })
+
+  it('elimina funcionario sin profileId (no llama supabase)', async () => {
+    const staffRow = { id: staffId, profileId: null }
+    mockDb.select = vi.fn(() => makeChain([staffRow]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    await expect(deleteStaff(staffId)).resolves.toBeUndefined()
+    expect(mockDb.delete).toHaveBeenCalledTimes(2)
+  })
+
+  it('lanza error cuando el funcionario no existe', async () => {
+    mockDb.select = vi.fn(() => makeChain([]))
+
+    await expect(deleteStaff(staffId)).rejects.toThrow('Funcionario no encontrado')
+  })
+
+  it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
+    mockDb.select = vi.fn(() => { throw new Error('DB down') })
+
+    await expect(deleteStaff(staffId)).rejects.toThrow('Error al eliminar el funcionario')
+  })
+
+  it('lanza error de permiso cuando requireRole rechaza', async () => {
+    vi.mocked(requireRole).mockRejectedValue(new Error('Sin permiso'))
+
+    await expect(deleteStaff(staffId)).rejects.toThrow('Sin permiso')
   })
 })

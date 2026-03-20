@@ -112,4 +112,12 @@ describe('decrementMonthlyCounters', () => {
 
     expect(mockDb.update).toHaveBeenCalledTimes(1)
   })
+
+  it('throws meaningful error on DB failure', async () => {
+    mockDb.select = vi.fn(() => { throw new Error('DB error') })
+
+    await expect(
+      decrementMonthlyCounters({ staffId, year: 2026, month: 3, isSunday: false, isOvernight: false }),
+    ).rejects.toThrow('Error al decrementar contadores mensuales')
+  })
 })

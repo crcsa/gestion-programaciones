@@ -53,6 +53,7 @@ import {
   getCampaignsList,
   getCampaignById,
   updateCampaign,
+  importCampaignsFromExcel,
 } from '@/features/campaigns/actions/campaign-actions'
 
 // Helper to create a chainable drizzle mock
@@ -610,5 +611,170 @@ describe('getAssignedStaffForCommercial — error path', () => {
 
     const { getAssignedStaffForCommercial } = await import('@/features/campaigns/actions/campaign-actions')
     await expect(getAssignedStaffForCommercial('00000000-0000-4000-8000-000000000001')).rejects.toThrow('Error al obtener')
+  })
+})
+
+// ---- getCampaignsList — filtros weekStart y companyId -----------------------
+
+describe('getCampaignsList — filtros weekStart y companyId', () => {
+  const makeRow = (overrides: Record<string, unknown> = {}) => ({
+    id: 'camp-1', code: 'CAM-001', municipality: 'Medellin',
+    campaignDate: '2026-04-14', size: 'M', modality: 'presencial',
+    status: 'tentativa', expectedDonations: 50, companyName: null, createdAt: new Date(),
+    ...overrides,
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('filtra por companyId correctamente', async () => {
+    const rows = [makeRow({ companyName: 'Acme' })]
+    mockDb.select = vi.fn(() => makeChain(rows))
+
+    const result = await getCampaignsList({ companyId: 'company-uuid-1' })
+    expect(Array.isArray(result.data)).toBe(true)
+  })
+
+  it('filtra por weekStart calculando el rango lunes-domingo', async () => {
+    const rows = [makeRow({ campaignDate: '2026-04-14' })]
+    mockDb.select = vi.fn(() => makeChain(rows))
+
+    const result = await getCampaignsList({ weekStart: '2026-04-13' })
+    expect(Array.isArray(result.data)).toBe(true)
+  })
+
+  it('filtra por search (code e ilike municipio)', async () => {
+    const rows = [makeRow()]
+    mockDb.select = vi.fn(() => makeChain(rows))
+
+    const result = await getCampaignsList({ search: 'CAM' })
+    expect(Array.isArray(result.data)).toBe(true)
+  })
+})
+
+// ---- importCampaignsFromExcel -----------------------------------------------
+
+const validRow = {
+  code: 'IMP-001',
+  companyName: 'Empresa Importada',
+  municipality: 'Medellín',
+  campaignDate: '2026-05-10',
+  size: 'M' as const,
+  modality: 'presencial' as const,
+}
+
+describe('importCampaignsFromExcel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('importa fila válida con empresa nueva', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) return makeChain([])  // code check → no duplicate
+      if (selectCall === 2) return makeChain([])  // company by name → not found
+      return makeChain([])
+    })
+    mockDb.insert = vi.fn(() => makeChain([{ id: 'new-company-id' }]))
+
+    const result = await importCampaignsFromExcel([validRow])
+
+    expect(result.imported).toBe(1)
+    expect(result.skipped).toBe(0)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it('importa fila válida con empresa existente', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) return makeChain([])                      // code check → no dup
+      if (selectCall === 2) return makeChain([{ id: 'existing-co' }]) // company found
+      return makeChain([])
+    })
+    mockDb.insert = vi.fn(() => makeChain([]))
+
+    const result = await importCampaignsFromExcel([validRow])
+
+    expect(result.imported).toBe(1)
+    expect(mockDb.insert).toHaveBeenCalledTimes(1)  // only campaign insert, no company insert
+  })
+
+  it('omite fila con código duplicado', async () => {
+    mockDb.select = vi.fn(() => makeChain([{ id: 'existing-campaign' }]))
+
+    const result = await importCampaignsFromExcel([validRow])
+
+    expect(result.imported).toBe(0)
+    expect(result.skipped).toBe(1)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it('registra error de validación cuando code es vacío', async () => {
+    const invalidRow = { ...validRow, code: '' }
+
+    const result = await importCampaignsFromExcel([invalidRow])
+
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0].row).toBe(2)
+    expect(result.imported).toBe(0)
+  })
+
+  it('registra error cuando hay fallo de DB en la inserción', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) return makeChain([])  // code check → no dup
+      if (selectCall === 2) return makeChain([])  // company → not found
+      return makeChain([])
+    })
+    // insert company OK, but campaigns insert throws
+    let insertCall = 0
+    mockDb.insert = vi.fn(() => {
+      insertCall++
+      if (insertCall === 1) return makeChain([{ id: 'new-company' }])  // company OK
+      throw new Error('DB write error')                                 // campaign fails
+    })
+
+    const result = await importCampaignsFromExcel([validRow])
+
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0].reason).toBe('Error al guardar en la base de datos')
+  })
+
+  it('procesa múltiples filas: importadas + omitidas + errores', async () => {
+    const rows = [
+      validRow,
+      { ...validRow, code: 'IMP-002', companyName: 'Otra Empresa' },
+      { ...validRow, code: '' },  // invalid
+    ]
+
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      // Row 1: code not dup, company not found
+      if (selectCall === 1) return makeChain([])
+      if (selectCall === 2) return makeChain([])
+      // Row 2: code IS dup → skip
+      if (selectCall === 3) return makeChain([{ id: 'dup' }])
+      return makeChain([])
+    })
+    mockDb.insert = vi.fn(() => makeChain([{ id: 'nc' }]))
+
+    const result = await importCampaignsFromExcel(rows)
+
+    expect(result.imported).toBe(1)
+    expect(result.skipped).toBe(1)
+    expect(result.errors).toHaveLength(1)
+  })
+
+  it('lanza error cuando requireRole rechaza', async () => {
+    vi.mocked(requireRole).mockRejectedValue(new Error('Sin permiso'))
+
+    await expect(importCampaignsFromExcel([validRow])).rejects.toThrow('Sin permiso')
   })
 })
