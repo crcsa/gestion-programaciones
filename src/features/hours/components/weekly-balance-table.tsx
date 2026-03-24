@@ -2,6 +2,7 @@
 
 import { Badge } from '@/components/ui/badge'
 import { HoursTrafficLight } from './hours-traffic-light'
+import { WEEKLY_HOURS_CONTRACT } from '@/features/assignments/lib/validation-constants'
 import type { WeeklyBalanceRow } from '../actions/hours-actions'
 
 interface WeeklyBalanceTableProps {
@@ -64,7 +65,7 @@ export function WeeklyBalanceTable({ rows, isLoading }: WeeklyBalanceTableProps)
             <th className="px-4 py-2 text-right font-medium text-muted-foreground">Pernoc.</th>
             <th className="px-4 py-2 text-center font-medium text-muted-foreground">Estado</th>
             <th className="px-4 py-2 text-center font-medium text-muted-foreground">Semáforo</th>
-            <th className="px-4 py-2 text-right font-medium text-muted-foreground">Saldo arrastre</th>
+            <th className="px-4 py-2 text-right font-medium text-muted-foreground">Saldo</th>
           </tr>
         </thead>
         <tbody>
@@ -97,19 +98,22 @@ export function WeeklyBalanceTable({ rows, isLoading }: WeeklyBalanceTableProps)
                 <HoursTrafficLight workedHours={row.workedHours} size="sm" />
               </td>
               <td className="px-4 py-2 text-right">
-                {row.carryOverHours !== 0 ? (
-                  <span
-                    className={
-                      row.carryOverHours > 0
-                        ? 'text-yellow-600 dark:text-yellow-400'
-                        : 'text-red-600 dark:text-red-400'
-                    }
-                  >
-                    {row.carryOverHours > 0 ? '+' : ''}{row.carryOverHours}h
-                  </span>
-                ) : (
-                  '—'
-                )}
+                {(() => {
+                  const diff = row.workedHours - WEEKLY_HOURS_CONTRACT
+                  return (
+                    <span
+                      className={
+                        diff > 0
+                          ? 'text-yellow-600 dark:text-yellow-400'
+                          : diff < 0
+                            ? 'text-red-600 dark:text-red-400'
+                            : 'text-green-600 dark:text-green-400'
+                      }
+                    >
+                      {diff > 0 ? '+' : ''}{diff}h
+                    </span>
+                  )
+                })()}
               </td>
             </tr>
           ))}
