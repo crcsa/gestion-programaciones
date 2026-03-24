@@ -683,3 +683,94 @@ describe('deleteStaff', () => {
     await expect(deleteStaff(staffId)).rejects.toThrow('Sin permiso')
   })
 })
+
+// ---- Branch coverage gaps ---------------------------------------------------
+
+describe('getStaffList — empty result skips DB area query', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-1', role: 'admin' })
+  })
+
+  it('returns empty data when no staff members found (covers ternary [] branch)', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 2) return makeChain([{ count: 0 }])
+      return makeChain([])  // rows = [] → staffIds = [] → areaRows = []
+    })
+
+    const result = await getStaffList({})
+    expect(result.data).toHaveLength(0)
+    expect(result.total).toBe(0)
+    // Should NOT call select a third time (no area query needed when empty)
+    expect(selectCall).toBe(2)
+  })
+})
+
+describe('createStaff — email already taken branch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-1', role: 'admin' })
+  })
+
+  it('throws Ya existe una cuenta when auth returns already been registered error', async () => {
+    const { getSupabaseAdmin } = await import('@/lib/supabase/admin')
+    vi.mocked(getSupabaseAdmin).mockReturnValueOnce({
+      auth: {
+        admin: {
+          createUser: vi.fn().mockResolvedValue({
+            data: { user: null },
+            error: { message: 'User already been registered' },
+          }),
+        },
+      },
+    } as unknown as ReturnType<typeof getSupabaseAdmin>)
+
+    mockDb.select = vi.fn(() => makeChain([]))  // cedula check passes
+
+    await expect(createStaff({
+      firstName: 'María',
+      lastName: 'Pérez',
+      cedula: '5556667778',
+      email: 'maria@example.com',
+      staffProfile: 'bacteriologo' as const,
+      contractType: 'indefinido' as const,
+      weeklyHours: 40,
+      defaultShift: 'diurno_completo' as const,
+    })).rejects.toThrow('Ya existe una cuenta de acceso con ese correo')
+  })
+})
+
+describe('createStaff — with trainingAreaIds inserts area rows', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-1', role: 'admin' })
+  })
+
+  it('inserts training area rows when trainingAreaIds provided', async () => {
+    const createdStaff = {
+      id: 'new-id-2', firstName: 'Pedro', lastName: 'Ruiz', cedula: '7778889990',
+      email: 'pedro@example.com', staffProfile: 'tecnico' as const,
+      contractType: 'indefinido' as const, weeklyHours: 40,
+      defaultShift: 'diurno_completo' as const, profileId: 'auth-id-2',
+      isActive: true, hireDate: null, notes: null, phone: null,
+      createdAt: new Date(), updatedAt: new Date(),
+    }
+
+    mockDb.select = vi.fn(() => makeChain([]))
+    let insertCount = 0
+    mockDb.insert = vi.fn(() => { insertCount++; return makeChain([createdStaff]) })
+
+    const areaId = '00000000-0000-4000-8000-000000000011'
+    await createStaff({
+      firstName: 'Pedro', lastName: 'Ruiz', cedula: '7778889990',
+      email: 'pedro@example.com', staffProfile: 'tecnico',
+      contractType: 'indefinido', weeklyHours: 40, defaultShift: 'diurno_completo',
+      trainingAreaIds: [areaId],
+    })
+
+    // 3 inserts: profiles + staffMembers + staffTrainingAreas
+    expect(insertCount).toBe(3)
+  })
+})

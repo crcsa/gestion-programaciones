@@ -54,6 +54,7 @@ import {
   getWeeklyBalances,
   getStaffWeeklyBalance,
   recalculateWeeklyBalance,
+  recalculateAllWeeklyBalances,
 } from '@/features/hours/actions/hours-actions'
 
 function makeChain(resolvedValue: unknown) {
@@ -241,6 +242,91 @@ describe('recalculateWeeklyBalance', () => {
     await expect(
       recalculateWeeklyBalance(staffId, '2026-03-16'),
     ).rejects.toThrow('Error al recalcular')
+  })
+})
+
+describe('recalculateWeeklyBalance — campaign hours calculation', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('calculates hours from campaign with startTime and endTime', async () => {
+    // sede shifts (Promise.all slot 1), campaign rows (Promise.all slot 2)
+    let selectCount = 0
+    mockDb.select = vi.fn(() => {
+      selectCount++
+      if (selectCount === 1) return makeChain([])  // sede shifts: empty
+      if (selectCount === 2) return makeChain([{ campaignDate: '2026-03-18', startTime: '08:00', endTime: '16:00' }])
+      return makeChain([])
+    })
+    mockDb.insert = vi.fn(() => makeChain([]))
+
+    await expect(recalculateWeeklyBalance(staffId, '2026-03-16')).resolves.toBeUndefined()
+    expect(mockDb.insert).toHaveBeenCalledTimes(1)
+  })
+
+  it('handles overnight campaign (endTime < startTime → mins < 0)', async () => {
+    let selectCount = 0
+    mockDb.select = vi.fn(() => {
+      selectCount++
+      if (selectCount === 1) return makeChain([])
+      if (selectCount === 2) return makeChain([{ campaignDate: '2026-03-18', startTime: '22:00', endTime: '06:00' }])
+      return makeChain([])
+    })
+    mockDb.insert = vi.fn(() => makeChain([]))
+
+    await expect(recalculateWeeklyBalance(staffId, '2026-03-16')).resolves.toBeUndefined()
+    expect(mockDb.insert).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses 8h default for campaign row with missing startTime or endTime', async () => {
+    let selectCount = 0
+    mockDb.select = vi.fn(() => {
+      selectCount++
+      if (selectCount === 1) return makeChain([])
+      if (selectCount === 2) return makeChain([{ campaignDate: '2026-03-18', startTime: null, endTime: null }])
+      return makeChain([])
+    })
+    mockDb.insert = vi.fn(() => makeChain([]))
+
+    await expect(recalculateWeeklyBalance(staffId, '2026-03-16')).resolves.toBeUndefined()
+    // insert should be called with campaignHours: 8 (default)
+    expect(mockDb.insert).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('recalculateAllWeeklyBalances', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('recalculates for all active staff members sequentially', async () => {
+    const staff = [{ id: staffId }, { id: '550e8400-e29b-41d4-a716-446655440002' }]
+    let selectCount = 0
+    mockDb.select = vi.fn(() => {
+      selectCount++
+      if (selectCount === 1) return makeChain(staff)   // active staff list
+      // subsequent pairs: sede shifts + campaign rows per staff member
+      return makeChain([])
+    })
+    mockDb.insert = vi.fn(() => makeChain([]))
+
+    const result = await recalculateAllWeeklyBalances('2026-03-16')
+    expect(result.updated).toBe(2)
+    expect(result.errors).toHaveLength(0)
+    expect(mockDb.insert).toHaveBeenCalledTimes(2)
+  })
+
+  it('continues even when individual staff recalculation fails', async () => {
+    const staff = [{ id: staffId }]
+    let selectCount = 0
+    mockDb.select = vi.fn(() => {
+      selectCount++
+      if (selectCount === 1) return makeChain(staff)
+      // Throw on subsequent selects to simulate per-staff failure
+      throw new Error('DB error')
+    })
+    mockDb.insert = vi.fn(() => makeChain([]))
+
+    const result = await recalculateAllWeeklyBalances('2026-03-16')
+    expect(result.updated).toBe(0)
+    expect(result.errors).toHaveLength(1)
   })
 })
 

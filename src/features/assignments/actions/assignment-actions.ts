@@ -3,11 +3,21 @@
 import { eq, and, desc, asc } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
+import { campaigns } from '@/lib/db/schema/campaigns'
 import { staffMembers } from '@/lib/db/schema/staff-members'
 import { requireRole } from '@/features/auth/lib/require-role'
 import { logAudit } from '@/lib/audit/log-audit'
+import { computeAndSaveWeeklyBalance } from '@/features/hours/lib/balance-calculator'
 import { assignStaffSchema, setCoordinatorSchema } from '../schemas/assignment-schemas'
 import type { AssignStaffInput, SetCoordinatorInput } from '../schemas/assignment-schemas'
+
+function getMondayOfWeek(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00`)
+  const day = d.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  d.setDate(d.getDate() + diff)
+  return d.toISOString().slice(0, 10)
+}
 
 // ---- Types ----------------------------------------------------------------
 
@@ -132,6 +142,22 @@ export async function assignStaff(data: AssignStaffInput): Promise<void> {
       })),
     )
 
+    // Recalculate weekly balance for each newly assigned staff member
+    const [campaign] = await db
+      .select({ campaignDate: campaigns.campaignDate })
+      .from(campaigns)
+      .where(eq(campaigns.id, campaignId))
+      .limit(1)
+
+    if (campaign?.campaignDate) {
+      const weekStart = getMondayOfWeek(campaign.campaignDate)
+      await Promise.all(
+        newIds.map((staffId) =>
+          computeAndSaveWeeklyBalance(staffId, weekStart).catch(() => undefined),
+        ),
+      )
+    }
+
     await logAudit({
       profileId: userId,
       action: 'create',
@@ -158,6 +184,18 @@ export async function removeAssignment(assignmentId: string): Promise<void> {
 
     if (!updated) {
       throw new Error('Asignacion no encontrada')
+    }
+
+    // Recalculate weekly balance for the removed staff member
+    const [campaign] = await db
+      .select({ campaignDate: campaigns.campaignDate })
+      .from(campaigns)
+      .where(eq(campaigns.id, updated.campaignId))
+      .limit(1)
+
+    if (campaign?.campaignDate) {
+      const weekStart = getMondayOfWeek(campaign.campaignDate)
+      computeAndSaveWeeklyBalance(updated.staffId, weekStart).catch(() => undefined)
     }
 
     await logAudit({

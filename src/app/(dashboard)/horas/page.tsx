@@ -2,6 +2,7 @@ import { requireRole } from '@/features/auth/lib/require-role'
 import { getWeeklyBalances } from '@/features/hours/actions/hours-actions'
 import { WeeklyBalanceTable } from '@/features/hours/components/weekly-balance-table'
 import { WeekSelector } from '@/features/availability/components/week-selector'
+import { RecalculateButton } from '@/features/hours/components/recalculate-button'
 
 interface HorasPageProps {
   searchParams: Promise<{ semana?: string }>
@@ -29,9 +30,12 @@ export default async function HorasPage({ searchParams }: HorasPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight">Control de Horas</h1>
-        <WeekSelector weekStart={weekStart} paramName="semana" />
+        <div className="flex items-center gap-2">
+          <RecalculateButton weekStart={weekStart} />
+          <WeekSelector weekStart={weekStart} paramName="semana" />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

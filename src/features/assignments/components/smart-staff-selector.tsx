@@ -117,12 +117,10 @@ export function SmartStaffSelector({ campaignId, onAssigned }: SmartStaffSelecto
                 </Button>
               ) : (
                 <Tooltip>
-                  <TooltipTrigger>
-                    <span>
-                      <Button size="sm" variant="outline" disabled>
-                        Bloqueado
-                      </Button>
-                    </span>
+                  <TooltipTrigger render={<span />}>
+                    <Button size="sm" variant="outline" disabled>
+                      Bloqueado
+                    </Button>
                   </TooltipTrigger>
                   <TooltipContent side="left" className="max-w-xs text-xs">
                     {blockMessages}

@@ -4,11 +4,9 @@ import { eq, and, asc } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { staffMembers } from '@/lib/db/schema/staff-members'
 import { weeklyBalance } from '@/lib/db/schema/weekly-balance'
-import { sedeShifts } from '@/lib/db/schema/sede-shifts'
-import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
-import { campaigns } from '@/lib/db/schema/campaigns'
 import { requireRole } from '@/features/auth/lib/require-role'
 import { WEEKLY_HOURS_CONTRACT } from '@/features/assignments/lib/validation-constants'
+import { computeAndSaveWeeklyBalance } from '../lib/balance-calculator'
 
 // ---- Types ----------------------------------------------------------------
 
@@ -26,6 +24,11 @@ export interface WeeklyBalanceRow {
   overnightCount: number
   balanceState: 'cumplió' | 'horas_extras' | 'debe_horas'
   carryOverHours: number
+}
+
+export interface RecalculateResult {
+  updated: number
+  errors: string[]
 }
 
 // ---- Helpers --------------------------------------------------------------
@@ -187,102 +190,37 @@ export async function recalculateWeeklyBalance(
   weekStart: string,
 ): Promise<void> {
   await requireRole(['admin', 'banco_sangre'])
-
   try {
-    const weekEnd = (() => {
-      const d = new Date(`${weekStart}T00:00:00`)
-      d.setDate(d.getDate() + 6)
-      return d.toISOString().slice(0, 10)
-    })()
-
-    const shifts = await db
-      .select({ totalHours: sedeShifts.totalHours, shiftDate: sedeShifts.shiftDate, isOvernight: sedeShifts.isOvernight })
-      .from(sedeShifts)
-      .where(
-        and(
-          eq(sedeShifts.staffId, staffId),
-          eq(sedeShifts.shiftDate, weekStart),
-        ),
-      )
-
-    // Get all sede shifts in the week range
-    const allShifts = await db
-      .select({ totalHours: sedeShifts.totalHours, shiftDate: sedeShifts.shiftDate, isOvernight: sedeShifts.isOvernight })
-      .from(sedeShifts)
-      .where(eq(sedeShifts.staffId, staffId))
-
-    const weekShifts = allShifts.filter(
-      (s) => s.shiftDate >= weekStart && s.shiftDate <= weekEnd,
-    )
-
-    // Get campaign assignments with campaign data in the week range
-    const campaignRows = await db
-      .select({
-        campaignDate: campaigns.campaignDate,
-        startTime: campaigns.startTime,
-        endTime: campaigns.endTime,
-      })
-      .from(campaignAssignments)
-      .leftJoin(campaigns, eq(campaignAssignments.campaignId, campaigns.id))
-      .where(
-        and(
-          eq(campaignAssignments.staffId, staffId),
-          eq(campaignAssignments.isActive, true),
-        ),
-      )
-
-    const weekCampaigns = campaignRows.filter(
-      (c) =>
-        c.campaignDate !== null &&
-        c.campaignDate >= weekStart &&
-        c.campaignDate <= weekEnd,
-    )
-
-    const sedeHours = weekShifts.reduce((sum, s) => sum + s.totalHours, 0)
-    const campaignHours = weekCampaigns.reduce((sum, c) => {
-      if (!c.startTime || !c.endTime) return sum
-      const [sh, sm] = c.startTime.split(':').map(Number)
-      const [eh, em] = c.endTime.split(':').map(Number)
-      let mins = eh * 60 + em - (sh * 60 + sm)
-      if (mins < 0) mins += 24 * 60
-      return sum + mins / 60
-    }, 0)
-
-    const workedHours = sedeHours + Math.round(campaignHours)
-    const extraHours = Math.max(0, workedHours - WEEKLY_HOURS_CONTRACT)
-
-    const sundayCount = weekShifts.filter((s) => new Date(`${s.shiftDate}T00:00:00`).getDay() === 0).length
-    const overnightCount = weekShifts.filter((s) => s.isOvernight).length
-
-    void shifts  // suppress unused var
-
-    await db
-      .insert(weeklyBalance)
-      .values({
-        staffId,
-        weekStart,
-        scheduledHours: WEEKLY_HOURS_CONTRACT,
-        workedHours,
-        sedeHours,
-        campaignHours: Math.round(campaignHours),
-        extraHours,
-        sundayCount,
-        overnightCount,
-      })
-      .onConflictDoUpdate({
-        target: [weeklyBalance.staffId, weeklyBalance.weekStart],
-        set: {
-          workedHours,
-          sedeHours,
-          campaignHours: Math.round(campaignHours),
-          extraHours,
-          sundayCount,
-          overnightCount,
-          updatedAt: new Date(),
-        },
-      })
+    await computeAndSaveWeeklyBalance(staffId, weekStart)
   } catch (error) {
     if (error instanceof Error && error.message.includes('permiso')) throw error
     throw new Error('Error al recalcular el balance semanal')
   }
+}
+
+/** Recalculates weekly balance for ALL active staff members in a given week. */
+export async function recalculateAllWeeklyBalances(
+  weekStart: string,
+): Promise<RecalculateResult> {
+  await requireRole(['admin', 'banco_sangre'])
+
+  const activeStaff = await db
+    .select({ id: staffMembers.id })
+    .from(staffMembers)
+    .where(eq(staffMembers.isActive, true))
+    .orderBy(asc(staffMembers.lastName))
+
+  let updated = 0
+  const errors: string[] = []
+
+  for (const s of activeStaff) {
+    try {
+      await computeAndSaveWeeklyBalance(s.id, weekStart)
+      updated++
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  return { updated, errors }
 }

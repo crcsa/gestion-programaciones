@@ -61,18 +61,18 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
   const isCommercial = currentRole === 'admin' || currentRole === 'comercial'
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex items-start justify-between">
+    <div className="space-y-6 max-w-5xl">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Campana {campaign.code}
+            Campaña {campaign.code}
           </h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-sm mt-0.5">
             {campaign.companyName ?? 'Sin empresa asignada'}
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <CampaignStatusBadge status={campaign.status} />
           {canEdit && (
             <Button variant="outline" nativeButton={false} render={<Link href={`/campanas/${id}/editar`} />}>
@@ -82,17 +82,15 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 rounded-lg border border-border p-4">
-        <DetailRow label="Codigo" value={campaign.code} />
-        <DetailRow label="Empresa" value={campaign.companyName ?? '\u2014'} />
+      {/* Info grid — 3 columns on wide screens */}
+      <div className="rounded-lg border border-border p-5 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
+        <DetailRow label="Código" value={campaign.code} />
+        <DetailRow label="Empresa" value={campaign.companyName ?? '—'} />
         <DetailRow label="Municipio" value={campaign.municipality} />
-        <DetailRow
-          label="Fecha"
-          value={formatCampaignDate(campaign.campaignDate)}
-        />
+        <DetailRow label="Fecha" value={formatCampaignDate(campaign.campaignDate)} />
         <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tamano</p>
-          <div className="mt-0.5">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tamaño</p>
+          <div className="mt-1">
             <CampaignSizeBadge size={campaign.size} />
           </div>
         </div>
@@ -102,33 +100,28 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         />
         <DetailRow
           label="Donaciones esperadas"
-          value={campaign.expectedDonations != null ? String(campaign.expectedDonations) : '\u2014'}
+          value={campaign.expectedDonations != null ? String(campaign.expectedDonations) : '—'}
         />
-        {campaign.startTime && (
-          <DetailRow label="Hora de inicio" value={campaign.startTime} />
-        )}
-        {campaign.endTime && (
-          <DetailRow label="Hora de fin" value={campaign.endTime} />
-        )}
-        {campaign.hexabankCode && (
-          <DetailRow label="Codigo Hexabank" value={campaign.hexabankCode} />
-        )}
+        {campaign.startTime && <DetailRow label="Hora de inicio" value={campaign.startTime} />}
+        {campaign.endTime && <DetailRow label="Hora de fin" value={campaign.endTime} />}
+        {campaign.hexabankCode && <DetailRow label="Código Hexabank" value={campaign.hexabankCode} />}
         {campaign.observations && (
-          <div className="sm:col-span-2">
+          <div className="col-span-2 sm:col-span-3">
             <DetailRow label="Observaciones" value={campaign.observations} />
           </div>
         )}
         {campaign.cancelReason && (
-          <div className="sm:col-span-2">
-            <DetailRow label="Motivo de cancelacion" value={campaign.cancelReason} />
+          <div className="col-span-2 sm:col-span-3">
+            <DetailRow label="Motivo de cancelación" value={campaign.cancelReason} />
           </div>
         )}
       </div>
 
+      {/* Assignment + Timeline */}
       {(campaign.status === 'confirmada' || campaign.status === 'ejecutada') && (
-        <>
-          <section>
-            <h2 className="text-lg font-semibold mb-4">Personal asignado</h2>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <section className="rounded-lg border border-border p-5">
+            <h2 className="text-base font-semibold mb-4">Personal asignado</h2>
             <AssignmentPanel
               campaignId={campaign.id}
               campaignSize={campaign.size}
@@ -137,25 +130,26 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
             />
           </section>
 
-          {isCoordinatorOrAdmin && (
-            <section className="rounded-lg border border-border p-4">
-              <TimelineForm
-                campaignId={campaign.id}
-                existingEvents={timelineEvents}
-                isCoordinator={isCoordinatorOrAdmin}
-              />
-            </section>
-          )}
-
-          {isCommercial && (
-            <CampaignCommercialView campaignId={campaign.id} size={campaign.size} />
-          )}
-        </>
+          <div className="space-y-6">
+            {isCoordinatorOrAdmin && (
+              <section className="rounded-lg border border-border p-5">
+                <TimelineForm
+                  campaignId={campaign.id}
+                  existingEvents={timelineEvents}
+                  isCoordinator={isCoordinatorOrAdmin}
+                />
+              </section>
+            )}
+            {isCommercial && (
+              <CampaignCommercialView campaignId={campaign.id} size={campaign.size} />
+            )}
+          </div>
+        </div>
       )}
 
-      <div className="pt-2">
+      <div>
         <Button variant="outline" nativeButton={false} render={<Link href="/campanas" />}>
-          &larr; Campañas
+          ← Campañas
         </Button>
       </div>
     </div>
