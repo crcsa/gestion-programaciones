@@ -1,30 +1,8 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireRole } from '@/features/auth/lib/require-role'
 import { CampaignCreateClient } from '@/features/campaigns/components/campaign-create-client'
-import type { Role } from '@/types/roles'
-
-const ALLOWED_ROLES: Role[] = ['admin', 'banco_sangre', 'comercial']
-
-async function getCurrentRole(): Promise<Role | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  return (profile?.role as Role) ?? null
-}
 
 export default async function NuevaCampanaPage() {
-  const currentRole = await getCurrentRole()
-
-  if (!currentRole || !ALLOWED_ROLES.includes(currentRole)) {
-    redirect('/campanas')
-  }
+  await requireRole(['admin', 'banco_sangre', 'comercial'])
 
   return (
     <div className="space-y-6 max-w-3xl">

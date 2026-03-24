@@ -30,16 +30,20 @@ export function CompanySelector({ value, selectedName, onChange, error }: Compan
   const [newCompanyDialogOpen, setNewCompanyDialogOpen] = useState(false)
   const [newCompanyName, setNewCompanyName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Load companies on first open
   useEffect(() => {
     if (!open) return
     setIsLoading(true)
+    setLoadError(null)
     getCompaniesList({ isActive: true, limit: 200 })
       .then((r) => setCompanies(r.data))
-      .catch(() => {})
+      .catch(() => setLoadError('Error al cargar empresas'))
       .finally(() => setIsLoading(false))
   }, [open])
 
@@ -80,6 +84,7 @@ export function CompanySelector({ value, selectedName, onChange, error }: Compan
   async function handleCreateCompany() {
     if (!newCompanyName.trim()) return
     setIsCreating(true)
+    setCreateError(null)
     try {
       const created = await createCompany({ name: newCompanyName.trim(), department: 'Antioquia' })
       setCompanies((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)))
@@ -88,7 +93,7 @@ export function CompanySelector({ value, selectedName, onChange, error }: Compan
       setNewCompanyName('')
       setOpen(false)
     } catch (err) {
-      // keep dialog open so user sees the error
+      setCreateError(err instanceof Error ? err.message : 'Error al crear la empresa')
     } finally {
       setIsCreating(false)
     }
@@ -104,7 +109,6 @@ export function CompanySelector({ value, selectedName, onChange, error }: Compan
           type="button"
           aria-haspopup="listbox"
           aria-expanded={open}
-          aria-invalid={!!error}
           onClick={() => setOpen((o) => !o)}
           className={`flex h-9 w-full items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors
             ${error ? 'border-destructive' : 'border-input'}
@@ -149,13 +153,17 @@ export function CompanySelector({ value, selectedName, onChange, error }: Compan
                 </li>
               )}
 
-              {!isLoading && filtered.length === 0 && (
+              {!isLoading && loadError && (
+                <li className="px-3 py-4 text-center text-sm text-destructive">{loadError}</li>
+              )}
+
+              {!isLoading && !loadError && filtered.length === 0 && (
                 <li className="px-3 py-4 text-center text-sm text-muted-foreground">
                   Sin resultados
                 </li>
               )}
 
-              {!isLoading && filtered.map((company) => (
+              {!isLoading && !loadError && filtered.map((company) => (
                 <li
                   key={company.id}
                   role="option"
@@ -209,6 +217,9 @@ export function CompanySelector({ value, selectedName, onChange, error }: Compan
                 autoFocus
               />
             </div>
+            {createError && (
+              <p className="text-sm text-destructive">{createError}</p>
+            )}
             <div className="flex justify-end gap-2 pt-1">
               <Button
                 variant="outline"

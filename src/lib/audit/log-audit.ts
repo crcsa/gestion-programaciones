@@ -22,5 +22,5 @@ export async function logAudit(params: AuditParams): Promise<void> {
       oldData: params.oldData ?? null,
       newData: params.newData ?? null,
     })
-    .catch(() => undefined)
+    .catch((err: unknown) => console.error('[audit] failed to write log:', err))
 }

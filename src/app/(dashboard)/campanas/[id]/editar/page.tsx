@@ -9,11 +9,7 @@ interface EditCampaignPageProps {
 }
 
 export default async function EditCampaignPage({ params }: EditCampaignPageProps) {
-  try {
-    await requireRole(['admin', 'banco_sangre', 'comercial'])
-  } catch {
-    redirect('/')
-  }
+  await requireRole(['admin', 'banco_sangre', 'comercial'])
 
   const { id } = await params
 

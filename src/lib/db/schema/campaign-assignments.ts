@@ -1,4 +1,4 @@
-import { pgTable, uuid, boolean, timestamp } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, boolean, timestamp, unique } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { campaigns } from './campaigns'
 import { staffMembers } from './staff-members'
@@ -11,7 +11,9 @@ export const campaignAssignments = pgTable('campaign_assignments', {
   assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
   removedAt: timestamp('removed_at', { withTimezone: true }),
   isActive: boolean('is_active').notNull().default(true),
-})
+}, (t) => [
+  unique('campaign_assignments_campaign_staff_unique').on(t.campaignId, t.staffId),
+])
 
 export const campaignAssignmentsRelations = relations(campaignAssignments, ({ one }) => ({
   campaign: one(campaigns, { fields: [campaignAssignments.campaignId], references: [campaigns.id] }),

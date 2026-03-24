@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useDebounce } from '@/hooks/use-debounce'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CompanyTable } from '@/features/companies/components/company-table'
@@ -13,6 +14,7 @@ export default function EmpresasPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [showForm, setShowForm] = useState(false)
   const [editingCompany, setEditingCompany] = useState<Company | undefined>()
 
@@ -20,14 +22,14 @@ export default function EmpresasPage() {
     setIsLoading(true)
     setError(null)
     try {
-      const result = await getCompaniesList({ search: search || undefined })
+      const result = await getCompaniesList({ search: debouncedSearch || undefined })
       setCompanies(result.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar empresas')
     } finally {
       setIsLoading(false)
     }
-  }, [search])
+  }, [debouncedSearch])
 
   useEffect(() => {
     fetchCompanies()

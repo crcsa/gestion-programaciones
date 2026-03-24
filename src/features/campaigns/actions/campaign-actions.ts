@@ -227,9 +227,34 @@ async function getOperativoCampaigns(
 export async function getCampaignById(
   id: string,
 ): Promise<Campaign & { companyName: string | null }> {
-  await requireRole(['admin', 'banco_sangre', 'comercial'])
+  const { userId, role } = await requireRole(['admin', 'banco_sangre', 'comercial', 'operativo'])
 
   try {
+    // Operativo: only see campaigns they are actively assigned to
+    if (role === 'operativo') {
+      const [staffRow] = await db
+        .select({ id: staffMembers.id })
+        .from(staffMembers)
+        .where(eq(staffMembers.profileId, userId))
+        .limit(1)
+
+      if (!staffRow) throw new Error('Campaña no encontrada')
+
+      const [assignment] = await db
+        .select({ campaignId: campaignAssignments.campaignId })
+        .from(campaignAssignments)
+        .where(
+          and(
+            eq(campaignAssignments.staffId, staffRow.id),
+            eq(campaignAssignments.campaignId, id),
+            eq(campaignAssignments.isActive, true),
+          ),
+        )
+        .limit(1)
+
+      if (!assignment) throw new Error('Campaña no encontrada')
+    }
+
     const [row] = await db
       .select({
         campaign: campaigns,

@@ -1,31 +1,15 @@
-import { createClient } from '@/lib/supabase/server'
-import { db } from '@/lib/db'
-import { profiles } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
 import { Sidebar } from './sidebar'
 import { Topbar } from './topbar'
 import { MobileNav } from './mobile-nav'
-import { parseRole, type Role } from '@/types/roles'
+import type { Role } from '@/types/roles'
 
-export async function AppShell({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+interface AppShellProps {
+  children: React.ReactNode
+  role: Role | null
+  email: string | undefined
+}
 
-  let role: Role | null = null
-  let email: string | undefined
-
-  if (user) {
-    email = user.email
-    const [profile] = await db
-      .select({ role: profiles.role })
-      .from(profiles)
-      .where(eq(profiles.id, user.id))
-      .limit(1)
-    role = parseRole(profile?.role)
-  }
-
+export function AppShell({ children, role, email }: AppShellProps) {
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Desktop sidebar */}
@@ -39,6 +23,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           <MobileNav role={role} />
         </div>
         <Topbar userEmail={email} role={role} />
+
         <main className="flex-1 overflow-y-auto bg-background p-6">{children}</main>
       </div>
     </div>
