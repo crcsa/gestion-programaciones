@@ -9,7 +9,7 @@ export const ROLE_DEFAULT_ROUTES: Record<Role, string> = {
   admin: '/',
   banco_sangre: '/',
   comercial: '/campanas',
-  operativo: '/mi-calendario',
+  operativo: '/mi-agenda',
 }
 
 export const CAMPAIGN_SIZES = ['S', 'S+', 'M', 'L'] as const

@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { db } from '@/lib/db'
 import { profiles } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
-import type { Role } from '@/types/roles'
+import { parseRole } from '@/types/roles'
 import { ROLE_DEFAULT_ROUTES } from '@/lib/utils/constants'
 
 const loginSchema = z.object({
@@ -47,7 +47,7 @@ export async function signIn(prevState: LoginState, formData: FormData): Promise
     .where(eq(profiles.id, data.user.id))
     .limit(1)
 
-  const role = (profile?.role ?? 'operativo') as Role
+  const role = parseRole(profile?.role) ?? 'operativo'
   const destination = ROLE_DEFAULT_ROUTES[role]
 
   revalidatePath('/', 'layout')

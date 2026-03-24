@@ -3,44 +3,12 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, LayoutDashboard, Users, Megaphone, CalendarDays, Settings } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { NAV_ITEMS } from '@/lib/navigation/nav-items'
 import type { Role } from '@/types/roles'
-
-const NAV_ITEMS = [
-  {
-    label: 'Dashboard',
-    href: '/',
-    icon: LayoutDashboard,
-    allowedRoles: ['admin', 'banco_sangre', 'comercial', 'operativo'] as Role[],
-  },
-  {
-    label: 'Personal',
-    href: '/personal',
-    icon: Users,
-    allowedRoles: ['admin', 'banco_sangre'] as Role[],
-  },
-  {
-    label: 'Campañas',
-    href: '/campanas',
-    icon: Megaphone,
-    allowedRoles: ['admin', 'banco_sangre', 'comercial'] as Role[],
-  },
-  {
-    label: 'Turnos',
-    href: '/turnos',
-    icon: CalendarDays,
-    allowedRoles: ['admin', 'banco_sangre'] as Role[],
-  },
-  {
-    label: 'Configuración',
-    href: '/configuracion',
-    icon: Settings,
-    allowedRoles: ['admin'] as Role[],
-  },
-]
 
 interface MobileNavProps {
   role: Role | null

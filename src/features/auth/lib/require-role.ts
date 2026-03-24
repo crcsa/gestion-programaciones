@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { db } from '@/lib/db'
 import { profiles } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
-import type { Role } from '@/types/roles'
+import { parseRole, type Role } from '@/types/roles'
 
 export async function requireRole(allowedRoles: Role[]): Promise<{ userId: string; role: Role }> {
   const supabase = await createClient()
@@ -23,9 +23,11 @@ export async function requireRole(allowedRoles: Role[]): Promise<{ userId: strin
     throw new Error('Perfil de usuario no encontrado.')
   }
 
-  if (!allowedRoles.includes(profile.role as Role)) {
+  const role = parseRole(profile.role)
+
+  if (!role || !allowedRoles.includes(role)) {
     throw new Error('No tienes permiso para realizar esta accion.')
   }
 
-  return { userId: user.id, role: profile.role as Role }
+  return { userId: user.id, role }
 }

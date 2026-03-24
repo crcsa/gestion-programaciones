@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm'
 import { Sidebar } from './sidebar'
 import { Topbar } from './topbar'
 import { MobileNav } from './mobile-nav'
-import type { Role } from '@/types/roles'
+import { parseRole, type Role } from '@/types/roles'
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -23,7 +23,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       .from(profiles)
       .where(eq(profiles.id, user.id))
       .limit(1)
-    role = (profile?.role as Role) ?? null
+    role = parseRole(profile?.role)
   }
 
   return (

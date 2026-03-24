@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { Bell } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -41,24 +41,25 @@ const TYPE_ICON: Record<AppNotification['type'], string> = {
 
 export function NotificationBell() {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
-  const [readIds, setReadIds] = useState<Set<string>>(new Set())
+  const [readIds, setReadIds] = useState<Set<string>>(() => getReadIds())
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  useEffect(() => {
-    setReadIds(getReadIds())
-  }, [])
-
-  useEffect(() => {
-    if (open && notifications.length === 0) {
+  const handleOpenChange = useCallback(async (nextOpen: boolean) => {
+    setOpen(nextOpen)
+    if (nextOpen && notifications.length === 0) {
       setLoading(true)
-      getNotifications()
-        .then((data) => setNotifications(data))
-        .catch(() => undefined)
-        .finally(() => setLoading(false))
+      try {
+        const data = await getNotifications()
+        setNotifications(data)
+      } catch {
+        // ignore fetch errors silently
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [open, notifications.length])
+  }, [notifications.length])
 
   const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length
 
@@ -82,7 +83,7 @@ export function NotificationBell() {
   )
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger
         render={
           <Button
