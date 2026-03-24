@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { createClient as createClientType } from '@/lib/supabase/server'
+
+type MockClient = Awaited<ReturnType<typeof createClientType>>
 
 // Mock Supabase and DB
 vi.mock('@/lib/supabase/server', () => ({
@@ -55,7 +58,7 @@ describe('signIn', () => {
           error: new Error('Invalid credentials'),
         }),
       },
-    } as any)
+    } as unknown as MockClient)
 
     const formData = new FormData()
     formData.set('email', 'test@example.com')
@@ -102,7 +105,7 @@ describe('signIn — ruta exitosa', () => {
           error: null,
         }),
       },
-    } as any)
+    } as unknown as MockClient)
 
     mockDb.select = vi.fn(() => makeChain([{ role: 'admin' }]))
 
@@ -123,7 +126,7 @@ describe('signIn — ruta exitosa', () => {
           error: null,
         }),
       },
-    } as any)
+    } as unknown as MockClient)
 
     mockDb.select = vi.fn(() => makeChain([]))
 
@@ -147,7 +150,7 @@ describe('signOut', () => {
       auth: {
         signOut: vi.fn().mockResolvedValue({}),
       },
-    } as any)
+    } as unknown as MockClient)
 
     await signOut()
 
