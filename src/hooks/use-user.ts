@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/browser'
 import type { User, AuthChangeEvent, Session } from '@supabase/supabase-js'
-import type { Role } from '@/types/roles'
+import { parseRole, type Role } from '@/types/roles'
 
 interface UseUserResult {
   user: User | null
@@ -30,7 +30,7 @@ export function useUser(): UseUserResult {
           .eq('id', currentUser.id)
           .single()
 
-        setRole((profile?.role as Role) ?? null)
+        setRole(parseRole(profile?.role))
       }
 
       setIsLoading(false)

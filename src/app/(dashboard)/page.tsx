@@ -3,8 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { db } from '@/lib/db'
 import { profiles } from '@/lib/db/schema'
 import { staffMembers } from '@/lib/db/schema/staff-members'
-import type { Role } from '@/types/roles'
-import { ROLE_LABELS } from '@/types/roles'
+import { parseRole, ROLE_LABELS, type Role } from '@/types/roles'
 import {
   getAdminDashboardData,
   getComercialDashboardData,
@@ -28,7 +27,7 @@ export default async function DashboardPage() {
     .where(eq(profiles.id, user.id))
     .limit(1)
 
-  const role = (profile?.role ?? 'operativo') as Role
+  const role = parseRole(profile?.role) ?? 'operativo'
 
   return (
     <div className="space-y-6">

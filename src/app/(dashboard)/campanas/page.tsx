@@ -4,7 +4,7 @@ import { getCampaignsList } from '@/features/campaigns/actions/campaign-actions'
 import { CampaignListClient } from '@/features/campaigns/components/campaign-list-client'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PAGE_LIMIT } from '@/features/campaigns/lib/constants'
-import type { Role } from '@/types/roles'
+import { parseRole, type Role } from '@/types/roles'
 
 async function getCurrentRole(): Promise<Role | null> {
   const supabase = await createClient()
@@ -17,7 +17,7 @@ async function getCurrentRole(): Promise<Role | null> {
     .eq('id', user.id)
     .single()
 
-  return (profile?.role as Role) ?? null
+  return parseRole(profile?.role)
 }
 
 async function CampanasSection() {
