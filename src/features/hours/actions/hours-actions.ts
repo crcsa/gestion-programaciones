@@ -93,8 +93,8 @@ export async function getWeeklyBalances(weekStart: string): Promise<WeeklyBalanc
       const extraHours = Math.max(0, workedHours - WEEKLY_HOURS_CONTRACT)
       const sundayCount = balance?.sundayCount ?? 0
       const overnightCount = balance?.overnightCount ?? 0
-      const prevWorked = prevMap[staff.id] ?? 0
-      const carryOverHours = prevWorked - WEEKLY_HOURS_CONTRACT
+      const prevWorked = prevMap[staff.id]
+      const carryOverHours = prevWorked !== undefined ? prevWorked - WEEKLY_HOURS_CONTRACT : 0
 
       return {
         staffId: staff.id,
@@ -162,7 +162,7 @@ export async function getStaffWeeklyBalance(
       .limit(1)
 
     const workedHours = balance?.workedHours ?? 0
-    const prevWorked = prevBalance?.workedHours ?? 0
+    const prevWorked = prevBalance?.workedHours
 
     return {
       staffId: staff.id,
@@ -177,7 +177,7 @@ export async function getStaffWeeklyBalance(
       sundayCount: balance?.sundayCount ?? 0,
       overnightCount: balance?.overnightCount ?? 0,
       balanceState: deriveBalanceState(workedHours),
-      carryOverHours: prevWorked - WEEKLY_HOURS_CONTRACT,
+      carryOverHours: prevWorked !== undefined ? prevWorked - WEEKLY_HOURS_CONTRACT : 0,
     }
   } catch (error) {
     if (error instanceof Error && error.message.includes('permiso')) throw error

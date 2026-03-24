@@ -16,7 +16,10 @@ export function RecalculateButton({ weekStart }: { weekStart: string }) {
       const result = await recalculateAllWeeklyBalances(weekStart)
       router.refresh()
       if (result.errors.length > 0) {
-        toast.warning(`Recalculado con errores: ${result.updated} actualizados, ${result.errors.length} fallaron`)
+        toast.warning(`${result.updated} actualizados, ${result.errors.length} fallaron`, {
+          description: result.errors[0],
+          duration: 10000,
+        })
       } else {
         toast.success(`${result.updated} funcionarios recalculados correctamente`)
       }
