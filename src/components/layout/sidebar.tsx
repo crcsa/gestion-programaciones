@@ -12,6 +12,8 @@ import {
   Clock,
   Grid3x3,
   Building2,
+  BarChart3,
+  ShieldCheck,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -30,6 +32,12 @@ const NAV_ITEMS: NavItem[] = [
     href: '/',
     icon: LayoutDashboard,
     allowedRoles: ['admin', 'banco_sangre', 'comercial', 'operativo'],
+  },
+  {
+    label: 'Mi Agenda',
+    href: '/mi-agenda',
+    icon: CalendarDays,
+    allowedRoles: ['operativo', 'banco_sangre', 'admin', 'comercial'],
   },
   {
     label: 'Personal',
@@ -66,6 +74,18 @@ const NAV_ITEMS: NavItem[] = [
     href: '/empresas',
     icon: Building2,
     allowedRoles: ['admin', 'comercial'],
+  },
+  {
+    label: 'Reportes',
+    href: '/reportes',
+    icon: BarChart3,
+    allowedRoles: ['admin', 'banco_sangre', 'comercial'],
+  },
+  {
+    label: 'Auditoría',
+    href: '/auditoria',
+    icon: ShieldCheck,
+    allowedRoles: ['admin'],
   },
   {
     label: 'Configuración',

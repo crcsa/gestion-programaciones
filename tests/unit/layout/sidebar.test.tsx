@@ -18,6 +18,8 @@ vi.mock('lucide-react', () => ({
   Clock: () => <svg data-testid="icon-clock" />,
   Grid3x3: () => <svg data-testid="icon-grid" />,
   Building2: () => <svg data-testid="icon-building" />,
+  BarChart3: () => <svg data-testid="icon-barchart" />,
+  ShieldCheck: () => <svg data-testid="icon-shield" />,
 }))
 
 describe('Sidebar', () => {

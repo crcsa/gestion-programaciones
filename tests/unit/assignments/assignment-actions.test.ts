@@ -36,6 +36,10 @@ vi.mock('@/lib/db/schema/staff-members', () => ({
   },
 }))
 
+vi.mock('@/lib/audit/log-audit', () => ({
+  logAudit: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { db } from '@/lib/db'
 import {
   assignStaff,

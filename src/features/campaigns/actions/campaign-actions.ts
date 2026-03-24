@@ -1,6 +1,6 @@
 'use server'
 
-import { eq, ilike, and, or, sql, gte, lte, desc, asc } from 'drizzle-orm'
+import { eq, ilike, and, or, sql, gte, lte, desc, asc, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { campaigns } from '@/lib/db/schema/campaigns'
 import { companies } from '@/lib/db/schema/companies'
@@ -13,6 +13,7 @@ import {
   cancelCampaignSchema,
   importExcelRowSchema,
 } from '../schemas/campaign-schemas'
+import { logAudit } from '@/lib/audit/log-audit'
 import type { CreateCampaignInput, ImportExcelRow } from '../schemas/campaign-schemas'
 import type { Campaign } from '@/lib/db/schema/campaigns'
 
@@ -106,12 +107,17 @@ function buildListConditions(filters: CampaignListFilters) {
 export async function getCampaignsList(
   filters: CampaignListFilters = {},
 ): Promise<CampaignListResult> {
-  await requireRole(['admin', 'banco_sangre', 'comercial'])
+  const { userId, role } = await requireRole(['admin', 'banco_sangre', 'comercial', 'operativo'])
 
   const { page = 1, limit = 20 } = filters
   const offset = (page - 1) * limit
 
   try {
+    // Operativo: only see campaigns they are assigned to
+    if (role === 'operativo') {
+      return await getOperativoCampaigns(userId, filters, offset, limit)
+    }
+
     const conditions = buildListConditions(filters)
 
     const rows = await db
@@ -146,6 +152,76 @@ export async function getCampaignsList(
     if (error instanceof Error && error.message.includes('permiso')) throw error
     throw new Error('Error al obtener la lista de campañas')
   }
+}
+
+async function getOperativoCampaigns(
+  userId: string,
+  filters: CampaignListFilters,
+  offset: number,
+  limit: number,
+): Promise<CampaignListResult> {
+  // Find the staff member linked to this user
+  const [staffRow] = await db
+    .select({ id: staffMembers.id })
+    .from(staffMembers)
+    .where(eq(staffMembers.profileId, userId))
+    .limit(1)
+
+  if (!staffRow) {
+    return { data: [], total: 0 }
+  }
+
+  // Get campaign IDs this staff member is actively assigned to
+  const assignedRows = await db
+    .select({ campaignId: campaignAssignments.campaignId })
+    .from(campaignAssignments)
+    .where(
+      and(
+        eq(campaignAssignments.staffId, staffRow.id),
+        eq(campaignAssignments.isActive, true),
+      ),
+    )
+
+  const assignedIds = assignedRows.map((a) => a.campaignId)
+
+  if (assignedIds.length === 0) {
+    return { data: [], total: 0 }
+  }
+
+  const baseConditions = buildListConditions(filters)
+  const assignedCondition = inArray(campaigns.id, assignedIds)
+  const conditions = baseConditions
+    ? and(baseConditions, assignedCondition)
+    : assignedCondition
+
+  const rows = await db
+    .select({
+      id: campaigns.id,
+      code: campaigns.code,
+      municipality: campaigns.municipality,
+      campaignDate: campaigns.campaignDate,
+      size: campaigns.size,
+      modality: campaigns.modality,
+      status: campaigns.status,
+      expectedDonations: campaigns.expectedDonations,
+      companyName: companies.name,
+      createdAt: campaigns.createdAt,
+    })
+    .from(campaigns)
+    .leftJoin(companies, eq(campaigns.companyId, companies.id))
+    .where(conditions)
+    .limit(limit)
+    .offset(offset)
+    .orderBy(desc(campaigns.campaignDate))
+
+  const countRows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(campaigns)
+    .where(conditions)
+
+  const total = countRows[0]?.count ?? 0
+
+  return { data: rows, total }
 }
 
 export async function getCampaignById(
@@ -220,9 +296,18 @@ export async function createCampaign(
         expectedDonations: input.expectedDonations ?? null,
         trainingAreaId: input.trainingAreaId ?? null,
         observations: input.observations ?? null,
+        hexabankCode: input.hexabankCode ?? null,
         createdById: userId,
       })
       .returning()
+
+    await logAudit({
+      profileId: userId,
+      action: 'create',
+      tableName: 'campaigns',
+      recordId: created.id,
+      newData: { code: created.code, status: created.status },
+    })
 
     return created
   } catch (error) {
@@ -240,7 +325,7 @@ export async function updateCampaign(
   id: string,
   data: Omit<CreateCampaignInput, 'code'>,
 ): Promise<Campaign> {
-  await requireRole(['admin', 'banco_sangre', 'comercial'])
+  const { userId } = await requireRole(['admin', 'banco_sangre', 'comercial'])
 
   const validated = updateCampaignSchema.safeParse({ id, ...data })
   if (!validated.success) {
@@ -275,6 +360,13 @@ export async function updateCampaign(
     if (!updated) {
       throw new Error('Campaña no encontrada')
     }
+
+    await logAudit({
+      profileId: userId,
+      action: 'update',
+      tableName: 'campaigns',
+      recordId: updated.id,
+    })
 
     return updated
   } catch (error) {
@@ -343,7 +435,7 @@ export async function cancelCampaign(
   id: string,
   reason: string,
 ): Promise<Campaign> {
-  await requireRole(['admin', 'banco_sangre', 'comercial'])
+  const { userId } = await requireRole(['admin', 'banco_sangre', 'comercial'])
 
   const validated = cancelCampaignSchema.safeParse({
     id,
@@ -381,6 +473,14 @@ export async function cancelCampaign(
       })
       .where(eq(campaigns.id, id))
       .returning()
+
+    await logAudit({
+      profileId: userId,
+      action: 'update',
+      tableName: 'campaigns',
+      recordId: updated.id,
+      newData: { status: 'cancelada', cancelReason: reason },
+    })
 
     return updated
   } catch (error) {

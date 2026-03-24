@@ -1,41 +1,39 @@
-import { Suspense } from 'react'
-import { createClient } from '@/lib/supabase/server'
-import { TurnosClient } from '@/features/sede-shifts/components/turnos-client'
-import { Skeleton } from '@/components/ui/skeleton'
-import type { Role } from '@/types/roles'
+import { requireRole } from '@/features/auth/lib/require-role'
+import {
+  getWeeklySedeShifts,
+  getActiveStaffList,
+} from '@/features/sede/actions/sede-shift-actions'
+import { SedeShiftsClient } from '@/features/sede/components/sede-shifts-client'
 
-async function getCurrentRole(): Promise<Role | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  return (profile?.role as Role) ?? null
+interface TurnosPageProps {
+  searchParams: Promise<{ semana?: string }>
 }
 
-async function TurnosSection() {
-  const currentRole = await getCurrentRole()
-
-  return <TurnosClient currentRole={currentRole} />
+function getCurrentWeekMonday(): string {
+  const d = new Date()
+  const day = d.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  d.setDate(d.getDate() + diff)
+  return d.toISOString().slice(0, 10)
 }
 
-export default async function TurnosPage() {
+export default async function TurnosPage({ searchParams }: TurnosPageProps) {
+  const { role } = await requireRole(['admin', 'banco_sangre'])
+
+  const params = await searchParams
+  const weekStart = params.semana ?? getCurrentWeekMonday()
+
+  const [initialData, staffList] = await Promise.all([
+    getWeeklySedeShifts(weekStart),
+    getActiveStaffList(),
+  ])
+
   return (
-    <Suspense
-      fallback={
-        <div className="space-y-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full" />
-          ))}
-        </div>
-      }
-    >
-      <TurnosSection />
-    </Suspense>
+    <SedeShiftsClient
+      initialData={initialData}
+      initialWeekStart={weekStart}
+      staffList={staffList}
+      currentRole={role}
+    />
   )
 }

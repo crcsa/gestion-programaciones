@@ -30,6 +30,10 @@ vi.mock('@/lib/db/schema/companies', () => ({
   companies: { id: 'id', name: 'name' },
 }))
 
+vi.mock('@/lib/audit/log-audit', () => ({
+  logAudit: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { db } from '@/lib/db'
 import { requireRole } from '@/features/auth/lib/require-role'
 import { getAssignedStaffForCommercial } from '@/features/campaigns/actions/campaign-actions'

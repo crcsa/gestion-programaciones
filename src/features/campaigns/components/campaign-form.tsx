@@ -228,6 +228,21 @@ export function CampaignForm({
             </p>
           )}
         </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="hexabankCode">Codigo Hexabank (opcional)</Label>
+          <Input
+            id="hexabankCode"
+            {...register('hexabankCode')}
+            aria-invalid={!!errors.hexabankCode}
+            placeholder="Ej: HXB-001"
+          />
+          {errors.hexabankCode && (
+            <p className="text-sm text-destructive">
+              {errors.hexabankCode.message}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="pt-2">

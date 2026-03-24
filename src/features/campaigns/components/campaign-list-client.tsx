@@ -251,6 +251,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
         open={cancelDialogOpen}
         onOpenChange={setCancelDialogOpen}
         campaignCode={cancelingCampaign?.code ?? ''}
+        campaignId={cancelingCampaign?.id ?? ''}
         onConfirm={handleCancelConfirm}
         isLoading={isCancelLoading}
       />

@@ -44,6 +44,10 @@ vi.mock('@/lib/db/schema/companies', () => ({
   companies: { id: 'id', name: 'name' },
 }))
 
+vi.mock('@/lib/audit/log-audit', () => ({
+  logAudit: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { db } from '@/lib/db'
 import { requireRole } from '@/features/auth/lib/require-role'
 import {
@@ -597,6 +601,35 @@ describe('confirmCampaign — generic error path', () => {
     mockDb.select = vi.fn(() => { throw new Error('DB down') })
 
     await expect(confirmCampaign('00000000-0000-4000-8000-000000000001')).rejects.toThrow('Error al confirmar')
+  })
+
+  it('lanza error cuando la campaña no existe', async () => {
+    mockDb.select = vi.fn(() => makeChain([]))  // empty → !current
+
+    await expect(confirmCampaign('00000000-0000-4000-8000-000000000001')).rejects.toThrow('Campaña no encontrada')
+  })
+
+  it('lanza error cuando la campaña no está en estado tentativa', async () => {
+    mockDb.select = vi.fn(() => makeChain([{ id: '00000000-0000-4000-8000-000000000001', status: 'ejecutada' }]))
+
+    await expect(confirmCampaign('00000000-0000-4000-8000-000000000001')).rejects.toThrow(
+      'Solo se pueden confirmar campañas en estado tentativa',
+    )
+  })
+})
+
+describe('cancelCampaign — campaña no encontrada', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  })
+
+  it('lanza error cuando la campaña no existe', async () => {
+    mockDb.select = vi.fn(() => makeChain([]))  // empty → !current
+
+    await expect(
+      cancelCampaign('00000000-0000-4000-8000-000000000001', 'Motivo de cancelación'),
+    ).rejects.toThrow('Campaña no encontrada')
   })
 })
 

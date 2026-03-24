@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
 import { staffMembers } from '@/lib/db/schema/staff-members'
 import { requireRole } from '@/features/auth/lib/require-role'
+import { logAudit } from '@/lib/audit/log-audit'
 import { assignStaffSchema, setCoordinatorSchema } from '../schemas/assignment-schemas'
 import type { AssignStaffInput, SetCoordinatorInput } from '../schemas/assignment-schemas'
 
@@ -99,7 +100,7 @@ export async function getAvailableStaff(
 }
 
 export async function assignStaff(data: AssignStaffInput): Promise<void> {
-  await requireRole(['admin', 'banco_sangre'])
+  const { userId } = await requireRole(['admin', 'banco_sangre'])
 
   const validated = assignStaffSchema.safeParse(data)
   if (!validated.success) {
@@ -130,6 +131,14 @@ export async function assignStaff(data: AssignStaffInput): Promise<void> {
         staffId,
       })),
     )
+
+    await logAudit({
+      profileId: userId,
+      action: 'create',
+      tableName: 'campaign_assignments',
+      recordId: campaignId,
+      newData: { staffIds: newIds },
+    })
   } catch (error) {
     if (error instanceof Error && error.message.includes('permiso')) throw error
     if (error instanceof Error && error.message.includes('seleccionar')) throw error
@@ -138,7 +147,7 @@ export async function assignStaff(data: AssignStaffInput): Promise<void> {
 }
 
 export async function removeAssignment(assignmentId: string): Promise<void> {
-  await requireRole(['admin', 'banco_sangre'])
+  const { userId } = await requireRole(['admin', 'banco_sangre'])
 
   try {
     const [updated] = await db
@@ -150,6 +159,13 @@ export async function removeAssignment(assignmentId: string): Promise<void> {
     if (!updated) {
       throw new Error('Asignacion no encontrada')
     }
+
+    await logAudit({
+      profileId: userId,
+      action: 'delete',
+      tableName: 'campaign_assignments',
+      recordId: assignmentId,
+    })
   } catch (error) {
     if (
       error instanceof Error &&

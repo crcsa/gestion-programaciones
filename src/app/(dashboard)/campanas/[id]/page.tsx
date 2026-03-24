@@ -110,6 +110,9 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         {campaign.endTime && (
           <DetailRow label="Hora de fin" value={campaign.endTime} />
         )}
+        {campaign.hexabankCode && (
+          <DetailRow label="Codigo Hexabank" value={campaign.hexabankCode} />
+        )}
         {campaign.observations && (
           <div className="sm:col-span-2">
             <DetailRow label="Observaciones" value={campaign.observations} />

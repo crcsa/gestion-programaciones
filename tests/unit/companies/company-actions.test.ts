@@ -29,6 +29,10 @@ vi.mock('@/lib/db/schema/campaigns', () => ({
   },
 }))
 
+vi.mock('@/lib/audit/log-audit', () => ({
+  logAudit: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { db } from '@/lib/db'
 import {
   createCompany,
@@ -217,5 +221,54 @@ describe('getCompaniesList', () => {
     const result = await getCompaniesList()
     expect(result.data).toHaveLength(1)
     expect(result.total).toBe(1)
+  })
+
+  it('filters by isActive when provided', async () => {
+    let selectCount = 0
+    mockDb.select = vi.fn(() => {
+      selectCount++
+      return makeChain(selectCount === 1 ? [mockCompany] : [{ id: 'id-1' }])
+    })
+
+    const result = await getCompaniesList({ isActive: true })
+    expect(result.data).toHaveLength(1)
+  })
+})
+
+describe('updateCompany — generic error', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('throws generic error when db.update rejects', async () => {
+    mockDb.select = vi.fn(() => makeChain([]))
+    mockDb.update = vi.fn(() => { throw new Error('db failure') })
+
+    await expect(
+      updateCompany({ id: mockCompany.id, name: 'Test' }),
+    ).rejects.toThrow('Error al actualizar la empresa')
+  })
+})
+
+describe('deactivateCompany — generic error', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('throws generic error when db.update rejects', async () => {
+    mockDb.select = vi.fn(() => makeChain([]))   // no future campaigns
+    mockDb.update = vi.fn(() => { throw new Error('db failure') })
+
+    await expect(deactivateCompany(mockCompany.id)).rejects.toThrow(
+      'Error al desactivar la empresa',
+    )
+  })
+})
+
+describe('activateCompany — generic error', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('throws generic error when db.update rejects', async () => {
+    mockDb.update = vi.fn(() => { throw new Error('db failure') })
+
+    await expect(activateCompany(mockCompany.id)).rejects.toThrow(
+      'Error al activar la empresa',
+    )
   })
 })

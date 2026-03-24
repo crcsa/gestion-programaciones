@@ -37,6 +37,10 @@ vi.mock('@/lib/db/schema/profiles', () => ({
   profiles: { id: 'id', email: 'email', fullName: 'full_name', role: 'role' },
 }))
 
+vi.mock('@/lib/audit/log-audit', () => ({
+  logAudit: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { db } from '@/lib/db'
 import { requireRole } from '@/features/auth/lib/require-role'
 import {
@@ -610,6 +614,26 @@ describe('updateStaff — con trainingAreaIds', () => {
     await updateStaff(staffId, { firstName: 'Test', lastName: 'User' })
 
     expect(mockDb.delete).not.toHaveBeenCalled()
+  })
+})
+
+describe('createStaff — generic outer error (línea 273)', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('wraps unknown error with Error al crear el funcionario', async () => {
+    // Throwing in cedula-check with a message that matches none of the re-throw keywords
+    mockDb.select = vi.fn(() => { throw new Error('connection refused') })
+
+    await expect(createStaff({
+      firstName: 'Ana',
+      lastName: 'García',
+      cedula: '1112223334',
+      email: 'ana3@example.com',
+      staffProfile: 'bacteriologo' as const,
+      contractType: 'indefinido' as const,
+      weeklyHours: 40,
+      defaultShift: 'diurno_completo' as const,
+    })).rejects.toThrow('Error al crear el funcionario')
   })
 })
 

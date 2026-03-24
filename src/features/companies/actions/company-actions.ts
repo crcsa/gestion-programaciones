@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { companies } from '@/lib/db/schema/companies'
 import { campaigns } from '@/lib/db/schema/campaigns'
 import { requireRole } from '@/features/auth/lib/require-role'
+import { logAudit } from '@/lib/audit/log-audit'
 import { createCompanySchema, updateCompanySchema } from '../schemas/company-schemas'
 import type { CreateCompanyInput, UpdateCompanyInput } from '../schemas/company-schemas'
 import type { Company } from '@/lib/db/schema/companies'
@@ -91,7 +92,7 @@ export async function getCompanyById(id: string): Promise<Company> {
 }
 
 export async function createCompany(data: CreateCompanyInput): Promise<Company> {
-  await requireRole(['admin', 'comercial'])
+  const { userId } = await requireRole(['admin', 'comercial'])
 
   const validated = createCompanySchema.safeParse(data)
   if (!validated.success) {
@@ -116,6 +117,14 @@ export async function createCompany(data: CreateCompanyInput): Promise<Company> 
       .values(validated.data)
       .returning()
 
+    await logAudit({
+      profileId: userId,
+      action: 'create',
+      tableName: 'companies',
+      recordId: created.id,
+      newData: { name: created.name },
+    })
+
     return created
   } catch (error) {
     if (
@@ -129,7 +138,7 @@ export async function createCompany(data: CreateCompanyInput): Promise<Company> 
 }
 
 export async function updateCompany(data: UpdateCompanyInput): Promise<Company> {
-  await requireRole(['admin', 'comercial'])
+  const { userId } = await requireRole(['admin', 'comercial'])
 
   const validated = updateCompanySchema.safeParse(data)
   if (!validated.success) {
@@ -158,6 +167,14 @@ export async function updateCompany(data: UpdateCompanyInput): Promise<Company> 
       .returning()
 
     if (!updated) throw new Error('Empresa no encontrada')
+
+    await logAudit({
+      profileId: userId,
+      action: 'update',
+      tableName: 'companies',
+      recordId: updated.id,
+    })
+
     return updated
   } catch (error) {
     if (
@@ -173,7 +190,7 @@ export async function updateCompany(data: UpdateCompanyInput): Promise<Company> 
 }
 
 export async function deactivateCompany(id: string): Promise<void> {
-  await requireRole(['admin', 'comercial'])
+  const { userId } = await requireRole(['admin', 'comercial'])
 
   try {
     const today = new Date().toISOString().slice(0, 10)
@@ -205,6 +222,13 @@ export async function deactivateCompany(id: string): Promise<void> {
       .returning()
 
     if (!updated) throw new Error('Empresa no encontrada')
+
+    await logAudit({
+      profileId: userId,
+      action: 'delete',
+      tableName: 'companies',
+      recordId: id,
+    })
   } catch (error) {
     if (
       error instanceof Error &&

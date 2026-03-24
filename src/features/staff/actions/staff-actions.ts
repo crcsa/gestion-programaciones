@@ -7,6 +7,7 @@ import { staffMembers, staffTrainingAreas } from '@/lib/db/schema/staff-members'
 import { trainingAreas } from '@/lib/db/schema/training-areas'
 import { profiles } from '@/lib/db/schema/profiles'
 import { requireRole } from '@/features/auth/lib/require-role'
+import { logAudit } from '@/lib/audit/log-audit'
 import { createStaffSchema, updateStaffSchema } from '../schemas/staff-schemas'
 import type { CreateStaffInput, UpdateStaffInput } from '../schemas/staff-schemas'
 import type { StaffMember } from '@/lib/db/schema/staff-members'
@@ -167,7 +168,7 @@ export async function getTrainingAreas(): Promise<TrainingArea[]> {
 }
 
 export async function createStaff(data: CreateStaffInput): Promise<StaffMember> {
-  await requireRole(['admin', 'banco_sangre'])
+  const { userId } = await requireRole(['admin', 'banco_sangre'])
 
   const validated = createStaffSchema.safeParse(data)
   if (!validated.success) {
@@ -245,6 +246,14 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
         )
       }
 
+      await logAudit({
+        profileId: userId,
+        action: 'create',
+        tableName: 'staff_members',
+        recordId: created.id,
+        newData: { cedula: created.cedula, staffProfile: created.staffProfile },
+      })
+
       return created
     } catch (dbError) {
       // Rollback: delete the auth user so the email can be reused
@@ -266,7 +275,7 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
 }
 
 export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>): Promise<StaffMember> {
-  await requireRole(['admin', 'banco_sangre'])
+  const { userId } = await requireRole(['admin', 'banco_sangre'])
 
   const validated = updateStaffSchema.safeParse({ id, ...data })
   if (!validated.success) {
@@ -314,6 +323,13 @@ export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>
       }
     }
 
+    await logAudit({
+      profileId: userId,
+      action: 'update',
+      tableName: 'staff_members',
+      recordId: updated.id,
+    })
+
     return updated
   } catch (error) {
     if (error instanceof Error && (
@@ -328,7 +344,7 @@ export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>
 }
 
 export async function deleteStaff(id: string): Promise<void> {
-  await requireRole(['admin'])
+  const { userId } = await requireRole(['admin'])
 
   try {
     const [staff] = await db
@@ -343,6 +359,13 @@ export async function deleteStaff(id: string): Promise<void> {
 
     await db.delete(staffTrainingAreas).where(eq(staffTrainingAreas.staffId, id))
     await db.delete(staffMembers).where(eq(staffMembers.id, id))
+
+    await logAudit({
+      profileId: userId,
+      action: 'delete',
+      tableName: 'staff_members',
+      recordId: id,
+    })
 
     if (staff.profileId) {
       const supabaseAdmin = getSupabaseAdmin()
@@ -408,4 +431,106 @@ export async function updateTrainingAreas(staffId: string, areaIds: string[]): P
     if (error instanceof Error && error.message.includes('permiso')) throw error
     throw new Error('Error al actualizar las areas de entrenamiento')
   }
+}
+
+// ---- Excel import -----------------------------------------------------------
+
+export interface ImportStaffRow {
+  cedula: string
+  firstName: string
+  lastName: string
+  staffProfile: 'bacteriologo' | 'tecnico' | 'medico' | 'auxiliar' | 'coordinador'
+  contractType?: 'indefinido' | 'fijo' | 'prestacion_servicios' | 'aprendizaje'
+  phone?: string
+  email?: string
+  hireDate?: string
+}
+
+export interface ImportStaffResult {
+  imported: number
+  skipped: number
+  errors: { row: number; cedula: string; reason: string }[]
+}
+
+export async function importStaffFromExcel(
+  rows: ImportStaffRow[],
+): Promise<ImportStaffResult> {
+  await requireRole(['admin', 'banco_sangre'])
+
+  const result: ImportStaffResult = { imported: 0, skipped: 0, errors: [] }
+
+  const validProfiles = ['bacteriologo', 'tecnico', 'medico', 'auxiliar', 'coordinador']
+
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i]
+    const rowNum = i + 2 // Excel row (1 = header)
+
+    if (!raw.cedula || raw.cedula.length < 5) {
+      result.errors.push({
+        row: rowNum,
+        cedula: raw.cedula ?? `fila ${rowNum}`,
+        reason: 'Cedula invalida (minimo 5 caracteres)',
+      })
+      continue
+    }
+    if (!raw.firstName || raw.firstName.length < 2) {
+      result.errors.push({
+        row: rowNum,
+        cedula: raw.cedula,
+        reason: 'Nombres invalido (minimo 2 caracteres)',
+      })
+      continue
+    }
+    if (!raw.lastName || raw.lastName.length < 2) {
+      result.errors.push({
+        row: rowNum,
+        cedula: raw.cedula,
+        reason: 'Apellidos invalido (minimo 2 caracteres)',
+      })
+      continue
+    }
+    if (!validProfiles.includes(raw.staffProfile)) {
+      result.errors.push({
+        row: rowNum,
+        cedula: raw.cedula,
+        reason: `Perfil invalido: ${raw.staffProfile}`,
+      })
+      continue
+    }
+
+    try {
+      const existing = await db
+        .select({ id: staffMembers.id })
+        .from(staffMembers)
+        .where(eq(staffMembers.cedula, raw.cedula))
+        .limit(1)
+
+      if (existing.length > 0) {
+        result.skipped++
+        continue
+      }
+
+      await db.insert(staffMembers).values({
+        firstName: raw.firstName,
+        lastName: raw.lastName,
+        cedula: raw.cedula,
+        staffProfile: raw.staffProfile,
+        contractType: raw.contractType ?? null,
+        phone: raw.phone ?? null,
+        email: raw.email ?? null,
+        hireDate: raw.hireDate ?? null,
+        weeklyHours: 44,
+      })
+
+      result.imported++
+    } catch {
+      result.errors.push({
+        row: rowNum,
+        cedula: raw.cedula,
+        reason: 'Error al guardar en la base de datos',
+      })
+    }
+  }
+
+  return result
 }

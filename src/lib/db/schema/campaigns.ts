@@ -20,6 +20,7 @@ export const campaigns = pgTable('campaigns', {
   municipality: text('municipality').notNull(),
   expectedDonations: integer('expected_donations'),
   trainingAreaId: uuid('training_area_id').references(() => trainingAreas.id, { onDelete: 'set null' }),
+  hexabankCode: text('hexabank_code'),
   cancelReason: text('cancel_reason'),
   observations: text('observations'),
   createdById: uuid('created_by_id').references(() => profiles.id, { onDelete: 'set null' }),

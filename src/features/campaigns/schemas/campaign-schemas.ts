@@ -16,6 +16,7 @@ export const createCampaignSchema = z.object({
   expectedDonations: z.number().int().min(1).optional(),
   trainingAreaId: z.uuid().optional(),
   observations: z.string().optional(),
+  hexabankCode: z.string().max(50).optional(),
 })
 
 export const updateCampaignSchema = createCampaignSchema.partial().extend({

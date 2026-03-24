@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Breadcrumbs } from './breadcrumbs'
+import { NotificationBell } from '@/features/notifications/components/notification-bell'
 import { signOut } from '@/features/auth/actions/auth-actions'
 import type { Role } from '@/types/roles'
 import { ROLE_LABELS } from '@/types/roles'
@@ -48,6 +49,7 @@ export function Topbar({ userEmail, role }: TopbarProps) {
         <Breadcrumbs />
       </div>
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <ModeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger

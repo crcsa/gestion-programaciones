@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { StaffFilters } from './staff-filters'
 import { StaffTable } from './staff-table'
 import { StaffFormModal } from './staff-form-modal'
+import { StaffImportDialog } from './staff-import-dialog'
 import { getStaffList, deleteStaff } from '@/features/staff/actions/staff-actions'
 import { RoleGate } from '@/features/auth/components/role-gate'
 import { Button } from '@/components/ui/button'
@@ -128,9 +129,12 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
         </div>
 
         <RoleGate allowedRoles={['admin', 'banco_sangre']} currentRole={currentRole}>
-          <Button onClick={handleNuevo}>
-            Nuevo
-          </Button>
+          <div className="flex items-center gap-2">
+            <StaffImportDialog onImported={handleSuccess} />
+            <Button onClick={handleNuevo}>
+              Nuevo
+            </Button>
+          </div>
         </RoleGate>
       </div>
 
