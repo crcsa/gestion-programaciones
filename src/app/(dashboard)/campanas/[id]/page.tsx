@@ -61,7 +61,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
   const isCommercial = currentRole === 'admin' || currentRole === 'comercial'
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
