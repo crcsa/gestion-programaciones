@@ -4,6 +4,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { useDebounce } from '@/hooks/use-debounce'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { CompanyTable } from '@/features/companies/components/company-table'
 import { CompanyForm } from '@/features/companies/components/company-form'
 import { getCompaniesList } from '@/features/companies/actions/company-actions'
@@ -58,18 +64,21 @@ export default function EmpresasPage() {
         <Button onClick={() => setShowForm(true)}>+ Nueva empresa</Button>
       </div>
 
-      {showForm && (
-        <div className="rounded-lg border border-border p-4 bg-card">
-          <h2 className="font-semibold mb-4">
-            {editingCompany ? 'Editar empresa' : 'Nueva empresa'}
-          </h2>
+      <Dialog open={showForm} onOpenChange={(open) => { if (!open) handleFormCancel() }}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCompany ? 'Editar empresa' : 'Nueva empresa'}
+            </DialogTitle>
+          </DialogHeader>
           <CompanyForm
+            key={editingCompany?.id ?? 'new'}
             company={editingCompany}
             onSuccess={handleFormSuccess}
             onCancel={handleFormCancel}
           />
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       <div className="flex items-center gap-3">
         <Input
