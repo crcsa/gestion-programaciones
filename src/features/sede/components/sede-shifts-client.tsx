@@ -176,6 +176,7 @@ export function SedeShiftsClient({
             </DialogTitle>
           </DialogHeader>
           <SedeShiftForm
+            key={editingRow?.id ?? 'new'}
             staffList={staffList}
             defaultValues={editDefaults}
             onSubmit={editingRow ? handleUpdate : handleCreate}
