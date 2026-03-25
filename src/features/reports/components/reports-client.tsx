@@ -4,7 +4,15 @@ import { useState, useTransition } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Clock, CalendarDays, Users, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { WeeklyBalanceTable } from '@/features/hours/components/weekly-balance-table'
 import { CampaignsReportTable } from './campaigns-report-table'
 import { PersonalReportTable } from './personal-report-table'
@@ -13,7 +21,7 @@ import { exportToExcel } from '@/lib/excel/export-utils'
 import type { WeeklyBalanceRow } from '@/features/hours/actions/hours-actions'
 import type { CampaignReportRow, PersonalReportRow } from '../actions/report-actions'
 
-// ---- Helpers --------------------------------------------------------------
+// ---- Helpers ---------------------------------------------------------------
 
 function getCurrentMonday(): string {
   const today = new Date()
@@ -48,7 +56,7 @@ function formatWeekLabel(weekStart: string): string {
   const fmt = (d: Date) =>
     d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
   const year = end.getFullYear()
-  return `${fmt(start)} - ${fmt(end)} ${year}`
+  return `${fmt(start)} – ${fmt(end)} ${year}`
 }
 
 function flattenHoursRows(rows: WeeklyBalanceRow[]): Record<string, unknown>[] {
@@ -56,7 +64,7 @@ function flattenHoursRows(rows: WeeklyBalanceRow[]): Record<string, unknown>[] {
     Funcionario: `${r.lastName}, ${r.firstName}`,
     Perfil: r.staffProfile,
     'Horas sede': r.sedeHours,
-    'Horas campana': r.campaignHours,
+    'Horas campaña': r.campaignHours,
     'Total trabajadas': r.workedHours,
     'Horas extras': r.extraHours,
     Domingos: r.sundayCount,
@@ -66,14 +74,14 @@ function flattenHoursRows(rows: WeeklyBalanceRow[]): Record<string, unknown>[] {
   }))
 }
 
-// ---- Props ----------------------------------------------------------------
+// ---- Props -----------------------------------------------------------------
 
 interface ReportsClientProps {
   initialCampaigns: CampaignReportRow[]
   initialHoursRows: WeeklyBalanceRow[]
 }
 
-// ---- Component ------------------------------------------------------------
+// ---- Component -------------------------------------------------------------
 
 export function ReportsClient({ initialCampaigns, initialHoursRows }: ReportsClientProps) {
   // Hours tab state
@@ -95,7 +103,7 @@ export function ReportsClient({ initialCampaigns, initialHoursRows }: ReportsCli
   const [personalRows, setPersonalRows] = useState<PersonalReportRow[]>([])
   const [personalLoading, startPersonalTransition] = useTransition()
 
-  // ---- Handlers -----------------------------------------------------------
+  // ---- Handlers ------------------------------------------------------------
 
   const handleWeekChange = (newWeek: string) => {
     setWeekStart(newWeek)
@@ -130,17 +138,27 @@ export function ReportsClient({ initialCampaigns, initialHoursRows }: ReportsCli
     exportToExcel(flattenHoursRows(hoursRows), 'Horas', `reporte-horas-${weekStart}`)
   }
 
-  // ---- Render -------------------------------------------------------------
+  // ---- Render --------------------------------------------------------------
 
   return (
-    <Tabs defaultValue="horas">
-      <TabsList>
-        <TabsTrigger value="horas">Horas</TabsTrigger>
-        <TabsTrigger value="campanas">Campanas</TabsTrigger>
-        <TabsTrigger value="personal">Personal</TabsTrigger>
+    <Tabs defaultValue="horas" className="flex flex-col gap-6">
+      {/* Tab bar */}
+      <TabsList variant="line" className="w-full justify-start">
+        <TabsTrigger value="horas" className="gap-1.5">
+          <Clock className="h-3.5 w-3.5" />
+          Horas
+        </TabsTrigger>
+        <TabsTrigger value="campanas" className="gap-1.5">
+          <CalendarDays className="h-3.5 w-3.5" />
+          Campañas
+        </TabsTrigger>
+        <TabsTrigger value="personal" className="gap-1.5">
+          <Users className="h-3.5 w-3.5" />
+          Personal
+        </TabsTrigger>
       </TabsList>
 
-      {/* Hours Tab */}
+      {/* ── Horas ── */}
       <TabsContent value="horas" className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -150,10 +168,11 @@ export function ReportsClient({ initialCampaigns, initialHoursRows }: ReportsCli
               className="h-8 w-8"
               onClick={() => handleWeekChange(offsetWeek(weekStart, -1))}
               aria-label="Semana anterior"
+              disabled={hoursLoading}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-medium min-w-[180px] text-center">
+            <span className="text-sm font-medium min-w-[200px] text-center tabular-nums">
               {formatWeekLabel(weekStart)}
             </span>
             <Button
@@ -162,6 +181,7 @@ export function ReportsClient({ initialCampaigns, initialHoursRows }: ReportsCli
               className="h-8 w-8"
               onClick={() => handleWeekChange(offsetWeek(weekStart, 1))}
               aria-label="Semana siguiente"
+              disabled={hoursLoading}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -170,7 +190,7 @@ export function ReportsClient({ initialCampaigns, initialHoursRows }: ReportsCli
             variant="outline"
             size="sm"
             onClick={handleExportHours}
-            disabled={hoursRows.length === 0}
+            disabled={hoursRows.length === 0 || hoursLoading}
           >
             <Download className="mr-2 h-4 w-4" />
             Exportar Excel
@@ -179,87 +199,81 @@ export function ReportsClient({ initialCampaigns, initialHoursRows }: ReportsCli
         <WeeklyBalanceTable rows={hoursRows} isLoading={hoursLoading} />
       </TabsContent>
 
-      {/* Campaigns Tab */}
+      {/* ── Campañas ── */}
       <TabsContent value="campanas" className="space-y-4">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="space-y-1">
-            <label htmlFor="campaign-date-from" className="text-sm font-medium">
-              Desde
-            </label>
-            <Input
-              id="campaign-date-from"
-              type="date"
-              value={campaignDateFrom}
-              onChange={(e) => setCampaignDateFrom(e.target.value)}
-              className="w-40"
-            />
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="campaign-date-from">Desde</Label>
+              <Input
+                id="campaign-date-from"
+                type="date"
+                value={campaignDateFrom}
+                onChange={(e) => setCampaignDateFrom(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="campaign-date-to">Hasta</Label>
+              <Input
+                id="campaign-date-to"
+                type="date"
+                value={campaignDateTo}
+                onChange={(e) => setCampaignDateTo(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="campaign-status">Estado</Label>
+              <Select value={campaignStatus} onValueChange={(v) => setCampaignStatus(v ?? '')}>
+                <SelectTrigger id="campaign-status" className="w-40">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="tentativa">Tentativa</SelectItem>
+                  <SelectItem value="confirmada">Confirmada</SelectItem>
+                  <SelectItem value="cancelada">Cancelada</SelectItem>
+                  <SelectItem value="ejecutada">Ejecutada</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleCampaignSearch} disabled={campaignsLoading}>
+              {campaignsLoading ? 'Cargando...' : 'Buscar'}
+            </Button>
           </div>
-          <div className="space-y-1">
-            <label htmlFor="campaign-date-to" className="text-sm font-medium">
-              Hasta
-            </label>
-            <Input
-              id="campaign-date-to"
-              type="date"
-              value={campaignDateTo}
-              onChange={(e) => setCampaignDateTo(e.target.value)}
-              className="w-40"
-            />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="campaign-status" className="text-sm font-medium">
-              Estado
-            </label>
-            <select
-              id="campaign-status"
-              value={campaignStatus}
-              onChange={(e) => setCampaignStatus(e.target.value)}
-              className="flex h-9 w-40 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="">Todos</option>
-              <option value="tentativa">Tentativa</option>
-              <option value="confirmada">Confirmada</option>
-              <option value="cancelada">Cancelada</option>
-              <option value="ejecutada">Ejecutada</option>
-            </select>
-          </div>
-          <Button onClick={handleCampaignSearch} disabled={campaignsLoading}>
-            {campaignsLoading ? 'Cargando...' : 'Buscar'}
-          </Button>
         </div>
         <CampaignsReportTable rows={campaignRows} />
       </TabsContent>
 
-      {/* Personal Tab */}
+      {/* ── Personal ── */}
       <TabsContent value="personal" className="space-y-4">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="space-y-1">
-            <label htmlFor="personal-date-from" className="text-sm font-medium">
-              Desde
-            </label>
-            <Input
-              id="personal-date-from"
-              type="date"
-              value={personalDateFrom}
-              onChange={(e) => setPersonalDateFrom(e.target.value)}
-              className="w-40"
-            />
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="personal-date-from">Desde</Label>
+              <Input
+                id="personal-date-from"
+                type="date"
+                value={personalDateFrom}
+                onChange={(e) => setPersonalDateFrom(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="personal-date-to">Hasta</Label>
+              <Input
+                id="personal-date-to"
+                type="date"
+                value={personalDateTo}
+                onChange={(e) => setPersonalDateTo(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <Button onClick={handlePersonalGenerate} disabled={personalLoading}>
+              {personalLoading ? 'Cargando...' : 'Generar reporte'}
+            </Button>
           </div>
-          <div className="space-y-1">
-            <label htmlFor="personal-date-to" className="text-sm font-medium">
-              Hasta
-            </label>
-            <Input
-              id="personal-date-to"
-              type="date"
-              value={personalDateTo}
-              onChange={(e) => setPersonalDateTo(e.target.value)}
-              className="w-40"
-            />
-          </div>
-          <Button onClick={handlePersonalGenerate} disabled={personalLoading}>
-            {personalLoading ? 'Cargando...' : 'Generar'}
-          </Button>
         </div>
         <PersonalReportTable rows={personalRows} />
       </TabsContent>
