@@ -22,9 +22,9 @@ import type { StaffListItem } from '@/features/sede/actions/sede-shift-actions'
 // ---- Constants ------------------------------------------------------------
 
 const SHIFT_TYPE_OPTIONS = [
-  { value: 'diurno_completo', label: 'Diurno completo' },
-  { value: 'noche', label: 'Noche' },
-  { value: 'posturno', label: 'Posturno' },
+  { value: 'diurno_completo', label: 'Diurno completo', startTime: '07:00', endTime: '17:00' },
+  { value: 'noche', label: 'Noche', startTime: '19:00', endTime: '07:00' },
+  { value: 'posturno', label: 'Posturno', startTime: '07:00', endTime: '13:00' },
 ] as const
 
 const STAFF_PROFILE_LABELS: Record<string, string> = {
@@ -144,14 +144,21 @@ export function SedeShiftForm({
           <Label htmlFor="shiftType">Tipo de turno</Label>
           <Select
             value={selectedShiftType ?? ''}
-            onValueChange={(v) =>
-              setValue('shiftType', v as CreateSedeShiftInput['shiftType'], {
-                shouldValidate: true,
-              })
-            }
+            onValueChange={(v) => {
+              setValue('shiftType', v as CreateSedeShiftInput['shiftType'], { shouldValidate: true })
+              const opt = SHIFT_TYPE_OPTIONS.find((o) => o.value === v)
+              if (opt) {
+                setValue('startTime', opt.startTime, { shouldValidate: true })
+                setValue('endTime', opt.endTime, { shouldValidate: true })
+              }
+            }}
           >
             <SelectTrigger id="shiftType" aria-invalid={!!errors.shiftType} className="w-full">
-              <SelectValue placeholder="Seleccionar tipo" />
+              <SelectValue placeholder="Seleccionar tipo">
+                {selectedShiftType
+                  ? (SHIFT_TYPE_OPTIONS.find((o) => o.value === selectedShiftType)?.label)
+                  : undefined}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {SHIFT_TYPE_OPTIONS.map((opt) => (
