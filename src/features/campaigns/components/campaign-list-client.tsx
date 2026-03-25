@@ -6,6 +6,7 @@ import { CampaignFilters } from './campaign-filters'
 import { CampaignTable } from './campaign-table'
 import { CampaignForm } from './campaign-form'
 import { CancelCampaignDialog } from './cancel-campaign-dialog'
+import { DeleteCampaignDialog } from './delete-campaign-dialog'
 import { ExcelImportDialog } from './excel-import-dialog'
 import { RoleGate } from '@/features/auth/components/role-gate'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ import {
   updateCampaign,
   confirmCampaign,
   cancelCampaign,
+  deleteCampaign,
 } from '@/features/campaigns/actions/campaign-actions'
 import type {
   CampaignListFilters as ActionFilters,
@@ -57,6 +59,10 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
 
   const [isConfirming, setIsConfirming] = useState(false)
   const [isFormLoading, setIsFormLoading] = useState(false)
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deletingCampaign, setDeletingCampaign] = useState<CampaignListItem | null>(null)
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false)
 
   const fetchData = useCallback(
     async (nextFilters: ActionFilters, nextPage: number) => {
@@ -155,6 +161,27 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
     }
   }, [cancelingCampaign, fetchData, filters, page])
 
+  const handleDeleteClick = useCallback((campaign: CampaignListItem) => {
+    setDeletingCampaign(campaign)
+    setDeleteDialogOpen(true)
+  }, [])
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deletingCampaign) return
+    setIsDeleteLoading(true)
+    try {
+      await deleteCampaign(deletingCampaign.id)
+      toast.success('Campaña eliminada correctamente')
+      setDeleteDialogOpen(false)
+      setDeletingCampaign(null)
+      await fetchData(filters, page)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al eliminar la campaña')
+    } finally {
+      setIsDeleteLoading(false)
+    }
+  }, [deletingCampaign, fetchData, filters, page])
+
   const handleModalOpenChange = useCallback((open: boolean) => {
     setModalOpen(open)
     if (!open) {
@@ -228,6 +255,7 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
           onEdit={handleEdit}
           onConfirm={isConfirming ? undefined : handleConfirm}
           onCancel={handleCancelClick}
+          onDelete={currentRole === 'admin' || currentRole === 'comercial' ? handleDeleteClick : undefined}
         />
       )}
 
@@ -254,6 +282,14 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
         campaignId={cancelingCampaign?.id ?? ''}
         onConfirm={handleCancelConfirm}
         isLoading={isCancelLoading}
+      />
+
+      <DeleteCampaignDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        campaignCode={deletingCampaign?.code ?? ''}
+        onConfirm={handleDeleteConfirm}
+        isLoading={isDeleteLoading}
       />
     </div>
   )

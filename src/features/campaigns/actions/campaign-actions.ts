@@ -523,6 +523,37 @@ export async function cancelCampaign(
   }
 }
 
+export async function deleteCampaign(id: string): Promise<void> {
+  const { userId } = await requireRole(['admin', 'comercial'])
+
+  try {
+    const [current] = await db
+      .select({ id: campaigns.id })
+      .from(campaigns)
+      .where(and(eq(campaigns.id, id), eq(campaigns.isDeleted, false)))
+      .limit(1)
+
+    if (!current) throw new Error('Campaña no encontrada')
+
+    await db
+      .update(campaigns)
+      .set({ isDeleted: true, updatedAt: new Date() })
+      .where(eq(campaigns.id, id))
+
+    await logAudit({
+      profileId: userId,
+      action: 'delete',
+      tableName: 'campaigns',
+      recordId: id,
+    })
+  } catch (error) {
+    if (error instanceof Error && (error.message.includes('Campaña') || error.message.includes('permiso'))) {
+      throw error
+    }
+    throw new Error('Error al eliminar la campaña')
+  }
+}
+
 // ---- Commercial view ------------------------------------------------------
 
 export interface CommercialStaffMember {
