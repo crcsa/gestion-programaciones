@@ -101,7 +101,14 @@ export function SedeShiftForm({
             }
           >
             <SelectTrigger id="staffId" aria-invalid={!!errors.staffId} className="w-full">
-              <SelectValue placeholder="Seleccionar funcionario" />
+              <SelectValue placeholder="Seleccionar funcionario">
+                {selectedStaffId
+                  ? (() => {
+                      const found = staffList.find((s) => s.id === selectedStaffId)
+                      return found ? formatStaffLabel(found) : undefined
+                    })()
+                  : undefined}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {staffList.map((staff) => (
