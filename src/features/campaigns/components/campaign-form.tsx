@@ -19,6 +19,8 @@ import {
   type CreateCampaignInput,
 } from '@/features/campaigns/schemas/campaign-schemas'
 import { CompanySelector } from './company-selector'
+import { ColombiaLocationSelector } from '@/components/colombia-location-selector'
+import { getDepartmentForMunicipality } from '@/lib/data/colombia-locations'
 
 interface CampaignFormProps {
   defaultValues?: Partial<CreateCampaignInput>
@@ -51,7 +53,11 @@ export function CampaignForm({
   const size = watch('size')
   const modality = watch('modality')
   const companyId = watch('companyId')
+  const municipality = watch('municipality')
   const [selectedCompanyName, setSelectedCompanyName] = useState<string | undefined>(defaultCompanyName)
+  const [department, setDepartment] = useState<string>(
+    () => getDepartmentForMunicipality(defaultValues?.municipality ?? '')
+  )
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -82,20 +88,20 @@ export function CampaignForm({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="municipality">Municipio</Label>
-          <Input
-            id="municipality"
-            {...register('municipality')}
-            aria-invalid={!!errors.municipality}
-            placeholder="Ej: Bogotá"
-          />
-          {errors.municipality && (
-            <p className="text-sm text-destructive">
-              {errors.municipality.message}
-            </p>
-          )}
-        </div>
+        <ColombiaLocationSelector
+          idPrefix="campaign-"
+          department={department}
+          municipality={municipality ?? ''}
+          onDepartmentChange={(dep) => {
+            setDepartment(dep)
+            setValue('municipality', '', { shouldValidate: false })
+          }}
+          onMunicipalityChange={(mun) =>
+            setValue('municipality', mun, { shouldValidate: true })
+          }
+          municipalityError={errors.municipality?.message}
+          municipalityRequired
+        />
 
         <div className="space-y-1.5">
           <Label htmlFor="campaignDate">Fecha de campaña</Label>
