@@ -5,8 +5,8 @@ export const createCampaignSchema = z.object({
   companyId: z.uuid().optional(),
   locationId: z.uuid().optional(),
   campaignDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha invalida (YYYY-MM-DD)'),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora invalida (HH:MM)').optional(),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora invalida (HH:MM)').optional(),
+  startTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Hora invalida (HH:MM)').transform(v => v.slice(0, 5)).optional(),
+  endTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Hora invalida (HH:MM)').transform(v => v.slice(0, 5)).optional(),
   size: z.enum(['S', 'S_plus', 'M', 'L'], { error: 'Tamano no valido' }),
   modality: z.enum(
     ['presencial', 'virtual', 'mixta', 'movil', 'institucional'],

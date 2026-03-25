@@ -42,6 +42,8 @@ export function CampaignForm({
   } = useForm<CreateCampaignInput>({
     resolver: zodResolver(createCampaignSchema),
     defaultValues: {
+      startTime: '07:00',
+      endTime: '17:00',
       ...defaultValues,
     },
   })
