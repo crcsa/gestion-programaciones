@@ -16,6 +16,7 @@ import {
   type ValidationResult,
   type StaffValidationContext,
 } from '../lib/validation-engine'
+import { loadValidationRuntimeConfig } from '@/features/configuration/lib/runtime-config'
 import { assignWithValidationSchema } from '../schemas/smart-assignment-schemas'
 import { assignStaff } from './assignment-actions'
 
@@ -96,6 +97,8 @@ export async function getStaffAssignmentStatuses(
     const staffIds = candidateStaff.map((s) => s.id)
 
     if (staffIds.length === 0) return []
+
+    const runtimeConfig = await loadValidationRuntimeConfig()
 
     // Batch fetch: training areas
     const trainingAreaRows = await db
@@ -235,8 +238,8 @@ export async function getStaffAssignmentStatuses(
         previousDayLastEndTime: prevDayLastEnd,
       }
 
-      const { results, canAssign } = runAllValidations(ctx)
-      const trafficColor = getHoursTrafficColor(weeklyWorked)
+      const { results, canAssign } = runAllValidations(ctx, runtimeConfig)
+      const trafficColor = getHoursTrafficColor(weeklyWorked, runtimeConfig)
 
       return {
         staffId: staff.id,

@@ -51,6 +51,47 @@ export interface StaffValidationContext {
   previousDayLastEndTime: string | null  // 'HH:mm' or null
 }
 
+/**
+ * Runtime config for the engine. All fields optional — when omitted, falls back
+ * to compile-time defaults from validation-constants.ts. Server actions should
+ * load this from system_config (via loadValidationRuntimeConfig) and pass it
+ * down so admin edits in /configuracion take effect without redeploy.
+ */
+export interface ValidationConfig {
+  weeklyHours?: number
+  maxExtraHoursWeek?: number
+  maxShiftHours?: number
+  minRestHours?: number
+  maxSundaysMonth?: number
+  maxOvernightsMonth?: number
+  municipalCutoffTime?: string
+  sedeMunicipality?: string
+}
+
+interface ResolvedConfig {
+  weeklyHours: number
+  maxExtraHoursWeek: number
+  maxShiftHours: number
+  minRestHours: number
+  maxSundaysMonth: number
+  maxOvernightsMonth: number
+  municipalCutoffTime: string
+  sedeMunicipality: string
+}
+
+function resolveConfig(cfg?: ValidationConfig): ResolvedConfig {
+  return {
+    weeklyHours: cfg?.weeklyHours ?? WEEKLY_HOURS_CONTRACT,
+    maxExtraHoursWeek: cfg?.maxExtraHoursWeek ?? MAX_EXTRA_HOURS_WEEK,
+    maxShiftHours: cfg?.maxShiftHours ?? MAX_SHIFT_HOURS,
+    minRestHours: cfg?.minRestHours ?? MIN_REST_HOURS,
+    maxSundaysMonth: cfg?.maxSundaysMonth ?? MAX_SUNDAYS_MONTH,
+    maxOvernightsMonth: cfg?.maxOvernightsMonth ?? MAX_OVERNIGHTS_MONTH,
+    municipalCutoffTime: cfg?.municipalCutoffTime ?? MUNICIPAL_CUTOFF_TIME,
+    sedeMunicipality: cfg?.sedeMunicipality ?? SEDE_MUNICIPALITY,
+  }
+}
+
 // ---- Time helpers ---------------------------------------------------------
 
 function parseMinutes(timeStr: string): number {
@@ -104,14 +145,18 @@ export function checkSuperposicion(ctx: StaffValidationContext): ValidationResul
   return { code: 'SUPERPOSICION_HORARIA', severity: 'ok', message: '' }
 }
 
-export function checkTurnoExcesivo(ctx: StaffValidationContext): ValidationResult {
+export function checkTurnoExcesivo(
+  ctx: StaffValidationContext,
+  config?: ValidationConfig,
+): ValidationResult {
+  const cfg = resolveConfig(config)
   const campaignHours = durationHours(ctx.campaignStartTime, ctx.campaignEndTime)
 
-  if (campaignHours > MAX_SHIFT_HOURS) {
+  if (campaignHours > cfg.maxShiftHours) {
     return {
       code: 'TURNO_EXCESIVO',
       severity: 'block',
-      message: `La campaña dura ${campaignHours.toFixed(1)}h, lo que supera el máximo permitido de ${MAX_SHIFT_HOURS}h por turno.`,
+      message: `La campaña dura ${campaignHours.toFixed(1)}h, lo que supera el máximo permitido de ${cfg.maxShiftHours}h por turno.`,
     }
   }
 
@@ -122,11 +167,11 @@ export function checkTurnoExcesivo(ctx: StaffValidationContext): ValidationResul
   )
   const totalHours = existingHours + campaignHours
 
-  if (totalHours > MAX_SHIFT_HOURS) {
+  if (totalHours > cfg.maxShiftHours) {
     return {
       code: 'TURNO_EXCESIVO',
       severity: 'block',
-      message: `El total de horas ese día sería ${totalHours.toFixed(1)}h, superando el máximo de ${MAX_SHIFT_HOURS}h.`,
+      message: `El total de horas ese día sería ${totalHours.toFixed(1)}h, superando el máximo de ${cfg.maxShiftHours}h.`,
     }
   }
 
@@ -147,19 +192,21 @@ export function checkAreaHabilitada(ctx: StaffValidationContext): ValidationResu
   return { code: 'AREA_NO_HABILITADA', severity: 'ok', message: '' }
 }
 
-export function checkExcesoHorasExtras(ctx: StaffValidationContext): ValidationResult {
+export function checkExcesoHorasExtras(
+  ctx: StaffValidationContext,
+  config?: ValidationConfig,
+): ValidationResult {
+  const cfg = resolveConfig(config)
   const campaignHours = durationHours(ctx.campaignStartTime, ctx.campaignEndTime)
-  const projectedExtras = ctx.weeklyExtraHours + Math.max(0, campaignHours - WEEKLY_HOURS_CONTRACT / 5)
 
-  if (ctx.weeklyExtraHours + campaignHours > MAX_EXTRA_HOURS_WEEK) {
+  if (ctx.weeklyExtraHours + campaignHours > cfg.maxExtraHoursWeek) {
     return {
       code: 'EXCESO_HORAS_EXTRAS',
       severity: 'warn',
-      message: `Asignar esta campaña llevaría las horas extras semanales a ${(ctx.weeklyExtraHours + campaignHours).toFixed(1)}h (máx. ${MAX_EXTRA_HOURS_WEEK}h).`,
+      message: `Asignar esta campaña llevaría las horas extras semanales a ${(ctx.weeklyExtraHours + campaignHours).toFixed(1)}h (máx. ${cfg.maxExtraHoursWeek}h).`,
     }
   }
 
-  void projectedExtras  // suppress unused var
   return { code: 'EXCESO_HORAS_EXTRAS', severity: 'ok', message: '' }
 }
 
@@ -178,10 +225,14 @@ export function checkDisponibilidad(ctx: StaffValidationContext): ValidationResu
   return { code: 'NO_DISPONIBLE', severity: 'ok', message: '' }
 }
 
-export function checkDescansoInsuficiente(ctx: StaffValidationContext): ValidationResult {
+export function checkDescansoInsuficiente(
+  ctx: StaffValidationContext,
+  config?: ValidationConfig,
+): ValidationResult {
   if (ctx.previousDayLastEndTime === null) {
     return { code: 'DESCANSO_INSUFICIENTE', severity: 'ok', message: '' }
   }
+  const cfg = resolveConfig(config)
 
   // Hours from previous activity end to today campaign start.
   // If prevEnd <= campStart the shift ended in early hours of today (overnight);
@@ -192,54 +243,66 @@ export function checkDescansoInsuficiente(ctx: StaffValidationContext): Validati
     prevEnd <= campStart ? campStart - prevEnd : campStart + 24 * 60 - prevEnd
   const gapHours = gapMinutes / 60
 
-  if (gapHours < MIN_REST_HOURS) {
+  if (gapHours < cfg.minRestHours) {
     return {
       code: 'DESCANSO_INSUFICIENTE',
       severity: 'warn',
-      message: `Solo hay ${gapHours.toFixed(1)}h de descanso desde la última actividad del día anterior (mínimo ${MIN_REST_HOURS}h).`,
+      message: `Solo hay ${gapHours.toFixed(1)}h de descanso desde la última actividad del día anterior (mínimo ${cfg.minRestHours}h).`,
     }
   }
   return { code: 'DESCANSO_INSUFICIENTE', severity: 'ok', message: '' }
 }
 
-export function checkLimiteDomingos(ctx: StaffValidationContext): ValidationResult {
+export function checkLimiteDomingos(
+  ctx: StaffValidationContext,
+  config?: ValidationConfig,
+): ValidationResult {
+  const cfg = resolveConfig(config)
   if (
     isSunday(ctx.campaignDate) &&
-    ctx.monthlyCounters.sundayCount >= MAX_SUNDAYS_MONTH
+    ctx.monthlyCounters.sundayCount >= cfg.maxSundaysMonth
   ) {
     return {
       code: 'LIMITE_DOMINGOS',
       severity: 'warn',
-      message: `El funcionario ya ha trabajado ${ctx.monthlyCounters.sundayCount} domingos este mes (máx. ${MAX_SUNDAYS_MONTH}).`,
+      message: `El funcionario ya ha trabajado ${ctx.monthlyCounters.sundayCount} domingos este mes (máx. ${cfg.maxSundaysMonth}).`,
     }
   }
   return { code: 'LIMITE_DOMINGOS', severity: 'ok', message: '' }
 }
 
-export function checkLimitePernoctas(ctx: StaffValidationContext): ValidationResult {
+export function checkLimitePernoctas(
+  ctx: StaffValidationContext,
+  config?: ValidationConfig,
+): ValidationResult {
+  const cfg = resolveConfig(config)
   if (
     isOvernightCampaign(ctx.campaignStartTime, ctx.campaignEndTime) &&
-    ctx.monthlyCounters.overnightCount >= MAX_OVERNIGHTS_MONTH
+    ctx.monthlyCounters.overnightCount >= cfg.maxOvernightsMonth
   ) {
     return {
       code: 'LIMITE_PERNOCTAS',
       severity: 'warn',
-      message: `El funcionario ya tiene ${ctx.monthlyCounters.overnightCount} pernocta(s) este mes (máx. ${MAX_OVERNIGHTS_MONTH}).`,
+      message: `El funcionario ya tiene ${ctx.monthlyCounters.overnightCount} pernocta(s) este mes (máx. ${cfg.maxOvernightsMonth}).`,
     }
   }
   return { code: 'LIMITE_PERNOCTAS', severity: 'ok', message: '' }
 }
 
-export function checkRestriccionMunicipio(ctx: StaffValidationContext): ValidationResult {
+export function checkRestriccionMunicipio(
+  ctx: StaffValidationContext,
+  config?: ValidationConfig,
+): ValidationResult {
+  const cfg = resolveConfig(config)
   if (
-    ctx.campaignMunicipality !== SEDE_MUNICIPALITY &&
+    ctx.campaignMunicipality !== cfg.sedeMunicipality &&
     ctx.previousDayLastEndTime !== null &&
-    parseMinutes(ctx.previousDayLastEndTime) > parseMinutes(MUNICIPAL_CUTOFF_TIME)
+    parseMinutes(ctx.previousDayLastEndTime) > parseMinutes(cfg.municipalCutoffTime)
   ) {
     return {
       code: 'RESTRICCION_MUNICIPIO',
       severity: 'warn',
-      message: `La campaña es fuera de ${SEDE_MUNICIPALITY} y el funcionario terminó después de las ${MUNICIPAL_CUTOFF_TIME} el día anterior.`,
+      message: `La campaña es fuera de ${cfg.sedeMunicipality} y el funcionario terminó después de las ${cfg.municipalCutoffTime} el día anterior.`,
     }
   }
   return { code: 'RESTRICCION_MUNICIPIO', severity: 'ok', message: '' }
@@ -247,21 +310,24 @@ export function checkRestriccionMunicipio(ctx: StaffValidationContext): Validati
 
 // ---- Aggregate ------------------------------------------------------------
 
-export function runAllValidations(ctx: StaffValidationContext): {
+export function runAllValidations(
+  ctx: StaffValidationContext,
+  config?: ValidationConfig,
+): {
   results: ValidationResult[]
   overallSeverity: ValidationSeverity
   canAssign: boolean
 } {
   const all = [
     checkSuperposicion(ctx),
-    checkTurnoExcesivo(ctx),
+    checkTurnoExcesivo(ctx, config),
     checkAreaHabilitada(ctx),
-    checkExcesoHorasExtras(ctx),
+    checkExcesoHorasExtras(ctx, config),
     checkDisponibilidad(ctx),
-    checkDescansoInsuficiente(ctx),
-    checkLimiteDomingos(ctx),
-    checkLimitePernoctas(ctx),
-    checkRestriccionMunicipio(ctx),
+    checkDescansoInsuficiente(ctx, config),
+    checkLimiteDomingos(ctx, config),
+    checkLimitePernoctas(ctx, config),
+    checkRestriccionMunicipio(ctx, config),
   ]
 
   const results = all.filter((r) => r.severity !== 'ok')
@@ -275,8 +341,12 @@ export function runAllValidations(ctx: StaffValidationContext): {
   return { results, overallSeverity, canAssign: !hasBlock }
 }
 
-export function getHoursTrafficColor(workedHours: number): 'green' | 'yellow' | 'red' {
-  if (workedHours <= WEEKLY_HOURS_CONTRACT) return 'green'
-  if (workedHours <= WEEKLY_HOURS_CONTRACT + MAX_EXTRA_HOURS_WEEK) return 'yellow'
+export function getHoursTrafficColor(
+  workedHours: number,
+  config?: ValidationConfig,
+): 'green' | 'yellow' | 'red' {
+  const cfg = resolveConfig(config)
+  if (workedHours <= cfg.weeklyHours) return 'green'
+  if (workedHours <= cfg.weeklyHours + cfg.maxExtraHoursWeek) return 'yellow'
   return 'red'
 }
