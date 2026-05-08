@@ -6,6 +6,7 @@ export * from './profiles'
 export * from './training-areas'
 export * from './staff-members'
 export * from './companies'
+export * from './company-contacts'
 export * from './locations'
 
 // Campaign tables

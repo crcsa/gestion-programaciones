@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ColombiaLocationSelector } from '@/components/colombia-location-selector'
 import { createCompany, updateCompany } from '../actions/company-actions'
+import { ContactList } from './contact-list'
 import type { Company } from '@/lib/db/schema/companies'
 
 interface CompanyFormProps {
@@ -171,6 +172,12 @@ export function CompanyForm({ company, onSuccess, onCancel }: CompanyFormProps) 
           {isLoading ? 'Guardando...' : isEditing ? 'Actualizar' : 'Crear empresa'}
         </Button>
       </div>
+
+      {isEditing && company && (
+        <div className="border-t border-border pt-4">
+          <ContactList companyId={company.id} />
+        </div>
+      )}
     </form>
   )
 }

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { CompanyTable } from '@/features/companies/components/company-table'
 import { CompanyForm } from '@/features/companies/components/company-form'
+import { ContactsImportDialog } from '@/features/companies/components/contacts-import-dialog'
 import { getCompaniesList } from '@/features/companies/actions/company-actions'
 import type { Company } from '@/lib/db/schema/companies'
 
@@ -61,7 +62,10 @@ export default function EmpresasPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Empresas</h1>
-        <Button onClick={() => setShowForm(true)}>+ Nueva empresa</Button>
+        <div className="flex gap-2">
+          <ContactsImportDialog onSuccess={fetchCompanies} />
+          <Button onClick={() => setShowForm(true)}>+ Nueva empresa</Button>
+        </div>
       </div>
 
       <Dialog open={showForm} onOpenChange={(open) => { if (!open) handleFormCancel() }}>
