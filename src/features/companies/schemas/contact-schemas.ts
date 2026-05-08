@@ -8,7 +8,7 @@ export const createContactSchema = z.object({
   position: z.string().max(100).optional(),
   email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
   phone: z.string().regex(phoneRegex, 'Número de teléfono inválido').optional().or(z.literal('')),
-  isPrimary: z.boolean().default(false),
+  isPrimary: z.boolean().optional().default(false),
   notes: z.string().max(500).optional(),
 })
 
@@ -25,6 +25,6 @@ export const importContactRowSchema = z.object({
   notes: z.string().optional(),
 })
 
-export type CreateContactInput = z.infer<typeof createContactSchema>
-export type UpdateContactInput = z.infer<typeof updateContactSchema>
+export type CreateContactInput = z.input<typeof createContactSchema>
+export type UpdateContactInput = z.input<typeof updateContactSchema>
 export type ImportContactRow = z.infer<typeof importContactRowSchema>
