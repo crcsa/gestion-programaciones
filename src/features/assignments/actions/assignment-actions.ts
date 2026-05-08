@@ -217,7 +217,7 @@ export async function removeAssignment(assignmentId: string): Promise<void> {
 }
 
 export async function setCoordinator(data: SetCoordinatorInput): Promise<void> {
-  await requireRole(['admin', 'banco_sangre', 'comercial'])
+  const { userId } = await requireRole(['admin', 'banco_sangre'])
 
   const validated = setCoordinatorSchema.safeParse(data)
   if (!validated.success) {
@@ -228,7 +228,10 @@ export async function setCoordinator(data: SetCoordinatorInput): Promise<void> {
 
   try {
     const assignments = await db
-      .select({ staffId: campaignAssignments.staffId })
+      .select({
+        staffId: campaignAssignments.staffId,
+        isCoordinator: campaignAssignments.isCoordinator,
+      })
       .from(campaignAssignments)
       .where(
         and(
@@ -237,31 +240,53 @@ export async function setCoordinator(data: SetCoordinatorInput): Promise<void> {
         ),
       )
 
-    const isAssigned = assignments.some((a) => a.staffId === staffId)
-    if (!isAssigned) {
+    const target = assignments.find((a) => a.staffId === staffId)
+    if (!target) {
       throw new Error('El funcionario no está asignado a esta campaña')
     }
 
-    await db
-      .update(campaignAssignments)
-      .set({ isCoordinator: false })
-      .where(
-        and(
-          eq(campaignAssignments.campaignId, campaignId),
-          eq(campaignAssignments.isActive, true),
-        ),
-      )
+    if (target.isCoordinator) return
 
-    await db
-      .update(campaignAssignments)
-      .set({ isCoordinator: true })
-      .where(
-        and(
-          eq(campaignAssignments.campaignId, campaignId),
-          eq(campaignAssignments.staffId, staffId),
-          eq(campaignAssignments.isActive, true),
-        ),
-      )
+    const previousCoordinator = assignments.find(
+      (a) => a.isCoordinator && a.staffId !== staffId,
+    )
+
+    await db.transaction(async (tx) => {
+      if (previousCoordinator) {
+        await tx
+          .update(campaignAssignments)
+          .set({ isCoordinator: false })
+          .where(
+            and(
+              eq(campaignAssignments.campaignId, campaignId),
+              eq(campaignAssignments.staffId, previousCoordinator.staffId),
+              eq(campaignAssignments.isActive, true),
+            ),
+          )
+      }
+
+      await tx
+        .update(campaignAssignments)
+        .set({ isCoordinator: true })
+        .where(
+          and(
+            eq(campaignAssignments.campaignId, campaignId),
+            eq(campaignAssignments.staffId, staffId),
+            eq(campaignAssignments.isActive, true),
+          ),
+        )
+    })
+
+    await logAudit({
+      profileId: userId,
+      action: 'update',
+      tableName: 'campaign_assignments',
+      recordId: campaignId,
+      oldData: previousCoordinator
+        ? { coordinatorStaffId: previousCoordinator.staffId }
+        : { coordinatorStaffId: null },
+      newData: { coordinatorStaffId: staffId },
+    })
   } catch (error) {
     if (
       error instanceof Error &&
