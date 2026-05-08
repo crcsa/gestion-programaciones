@@ -118,7 +118,7 @@ describe('getCampaignsReport', () => {
         municipality: 'Medellin',
         campaignDate: '2026-03-15',
         size: 'M',
-        modality: 'presencial',
+        modality: 'corporativa',
         status: 'confirmada',
         hexabankCode: 'HX-001',
         assignedCount: 3,
@@ -148,7 +148,7 @@ describe('getCampaignsReport', () => {
       municipality: 'Medellin',
       campaignDate: '2026-03-15',
       size: 'M',
-      modality: 'presencial',
+      modality: 'corporativa',
       status: 'confirmada',
       assignedCount: 3,
       coordinator: 'Juan Perez',
@@ -207,7 +207,7 @@ describe('getCampaignsReport', () => {
     const mockCampaigns = [
       {
         id: 'c2', code: 'CAM-002', companyName: null, municipality: 'Bello',
-        campaignDate: '2026-03-20', size: 'S', modality: 'movil',
+        campaignDate: '2026-03-20', size: 'S', modality: 'unidad_movil',
         status: 'tentativa', hexabankCode: null, assignedCount: 0,
       },
     ]

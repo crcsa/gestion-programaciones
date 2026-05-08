@@ -9,7 +9,7 @@ export const createCampaignSchema = z.object({
   endTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Hora invalida (HH:MM)').transform(v => v.slice(0, 5)).optional(),
   size: z.enum(['S', 'S_plus', 'M', 'L'], { error: 'Tamano no valido' }),
   modality: z.enum(
-    ['presencial', 'virtual', 'mixta', 'movil', 'institucional'],
+    ['corporativa', 'carpa', 'unidad_movil', 'municipal', 'combinada'],
     { error: 'Modalidad no valida' },
   ),
   municipality: z.string().min(2, 'El municipio debe tener al menos 2 caracteres'),
@@ -34,7 +34,7 @@ export const importExcelRowSchema = z.object({
   municipality: z.string().min(1),
   campaignDate: z.string(),
   size: z.enum(['S', 'S_plus', 'M', 'L']),
-  modality: z.enum(['presencial', 'virtual', 'mixta', 'movil', 'institucional']),
+  modality: z.enum(['corporativa', 'carpa', 'unidad_movil', 'municipal', 'combinada']),
   expectedDonations: z.number().int().min(1).optional(),
   observations: z.string().optional(),
 })

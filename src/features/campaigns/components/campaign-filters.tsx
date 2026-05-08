@@ -16,7 +16,7 @@ export interface CampaignListFilters {
   search?: string
   status?: 'tentativa' | 'confirmada' | 'cancelada' | 'ejecutada'
   size?: 'S' | 'S_plus' | 'M' | 'L'
-  modality?: 'presencial' | 'virtual' | 'mixta' | 'movil' | 'institucional'
+  modality?: 'corporativa' | 'carpa' | 'unidad_movil' | 'municipal' | 'combinada'
   dateFrom?: string
   dateTo?: string
 }
@@ -125,11 +125,11 @@ export function CampaignFilters({ onFiltersChange }: CampaignFiltersProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="presencial">Presencial</SelectItem>
-            <SelectItem value="virtual">Virtual</SelectItem>
-            <SelectItem value="mixta">Mixta</SelectItem>
-            <SelectItem value="movil">Móvil</SelectItem>
-            <SelectItem value="institucional">Institucional</SelectItem>
+            <SelectItem value="corporativa">Corporativa</SelectItem>
+            <SelectItem value="carpa">Carpa</SelectItem>
+            <SelectItem value="unidad_movil">Unidad Móvil</SelectItem>
+            <SelectItem value="municipal">Municipal</SelectItem>
+            <SelectItem value="combinada">Combinada</SelectItem>
           </SelectContent>
         </Select>
       </div>

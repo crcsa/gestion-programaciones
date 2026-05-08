@@ -90,7 +90,7 @@ describe('createCampaign', () => {
     code: 'CAM-001',
     campaignDate: '2026-04-15',
     size: 'M' as const,
-    modality: 'presencial' as const,
+    modality: 'corporativa' as const,
     municipality: 'Medellin',
     expectedDonations: 50,
   }
@@ -120,7 +120,7 @@ describe('createCampaign', () => {
       startTime: null,
       endTime: null,
       size: 'M' as const,
-      modality: 'presencial' as const,
+      modality: 'corporativa' as const,
       status: 'tentativa' as const,
       municipality: 'Medellin',
       expectedDonations: 50,
@@ -250,7 +250,7 @@ describe('getCampaignsList', () => {
       municipality: 'Medellin',
       campaignDate: '2026-04-15',
       size: 'M',
-      modality: 'presencial',
+      modality: 'corporativa',
       status: 'tentativa',
       expectedDonations: 50,
       companyName: 'Empresa ABC',
@@ -272,7 +272,7 @@ describe('getCampaignsList', () => {
       municipality: 'Medellin',
       campaignDate: '2026-04-15',
       size: 'M',
-      modality: 'presencial',
+      modality: 'corporativa',
       status: 'confirmada',
       expectedDonations: 50,
       companyName: 'Empresa ABC',
@@ -304,7 +304,7 @@ describe('getCampaignById', () => {
         municipality: 'Medellin',
         campaignDate: '2026-04-15',
         size: 'M' as const,
-        modality: 'presencial' as const,
+        modality: 'corporativa' as const,
         expectedDonations: 50,
         companyId: null,
         locationId: null,
@@ -356,7 +356,7 @@ describe('updateCampaign', () => {
   const validUpdateData = {
     campaignDate: '2026-05-20',
     size: 'L' as const,
-    modality: 'virtual' as const,
+    modality: 'combinada' as const,
     municipality: 'Bogota',
     expectedDonations: 100,
   }
@@ -374,7 +374,7 @@ describe('updateCampaign', () => {
       status: 'tentativa' as const,
       campaignDate: '2026-05-20',
       size: 'L' as const,
-      modality: 'virtual' as const,
+      modality: 'combinada' as const,
       municipality: 'Bogota',
       expectedDonations: 100,
       companyId: null,
@@ -454,7 +454,7 @@ describe('getCampaignsList con filtros adicionales', () => {
     municipality: 'Medellin',
     campaignDate: '2026-04-15',
     size: 'M',
-    modality: 'presencial',
+    modality: 'corporativa',
     status: 'tentativa',
     expectedDonations: 50,
     companyName: null,
@@ -473,13 +473,13 @@ describe('getCampaignsList con filtros adicionales', () => {
   })
 
   it('filtra por modality y retorna resultados', async () => {
-    const rows = [makeRow({ modality: 'virtual' })]
+    const rows = [makeRow({ modality: 'combinada' })]
 
     mockDb.select = vi.fn(() => makeChain(rows))
 
-    const result = await getCampaignsList({ modality: 'virtual' })
+    const result = await getCampaignsList({ modality: 'combinada' })
 
-    expect(result.data[0].modality).toBe('virtual')
+    expect(result.data[0].modality).toBe('combinada')
   })
 
   it('filtra por dateFrom y retorna resultados', async () => {
@@ -652,7 +652,7 @@ describe('getAssignedStaffForCommercial — error path', () => {
 describe('getCampaignsList — filtros weekStart y companyId', () => {
   const makeRow = (overrides: Record<string, unknown> = {}) => ({
     id: 'camp-1', code: 'CAM-001', municipality: 'Medellin',
-    campaignDate: '2026-04-14', size: 'M', modality: 'presencial',
+    campaignDate: '2026-04-14', size: 'M', modality: 'corporativa',
     status: 'tentativa', expectedDonations: 50, companyName: null, createdAt: new Date(),
     ...overrides,
   })
@@ -695,7 +695,7 @@ const validRow = {
   municipality: 'Medellín',
   campaignDate: '2026-05-10',
   size: 'M' as const,
-  modality: 'presencial' as const,
+  modality: 'corporativa' as const,
 }
 
 describe('importCampaignsFromExcel', () => {

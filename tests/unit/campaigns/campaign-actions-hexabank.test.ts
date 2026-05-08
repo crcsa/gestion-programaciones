@@ -112,7 +112,7 @@ describe('Hexabank code integration', () => {
     startTime: null,
     endTime: null,
     size: 'M' as const,
-    modality: 'presencial' as const,
+    modality: 'corporativa' as const,
     status: 'tentativa' as const,
     municipality: 'Medellin',
     expectedDonations: 50,
@@ -156,7 +156,7 @@ describe('Hexabank code integration', () => {
     const result = await updateCampaign(CAMPAIGN_UUID, {
       campaignDate: '2026-04-15',
       size: 'M',
-      modality: 'presencial',
+      modality: 'corporativa',
       municipality: 'Medellin',
       hexabankCode: 'HXB-456',
     })
@@ -177,7 +177,7 @@ describe('Hexabank code integration', () => {
       code: 'CMP-001',
       campaignDate: '2026-04-15',
       size: 'M',
-      modality: 'presencial',
+      modality: 'corporativa',
       municipality: 'Medellin',
       expectedDonations: 50,
       hexabankCode: 'HXB-789',

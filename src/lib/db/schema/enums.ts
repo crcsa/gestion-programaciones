@@ -12,7 +12,7 @@ export const campaignStatusEnum = pgEnum('campaign_status', ['tentativa', 'confi
 
 export const campaignSizeEnum = pgEnum('campaign_size', ['S', 'S_plus', 'M', 'L'])
 
-export const campaignModalityEnum = pgEnum('campaign_modality', ['presencial', 'virtual', 'mixta', 'movil', 'institucional'])
+export const campaignModalityEnum = pgEnum('campaign_modality', ['corporativa', 'carpa', 'unidad_movil', 'municipal', 'combinada'])
 
 export const availabilityStatusEnum = pgEnum('availability_status', ['disponible', 'en_sede', 'en_campana', 'vacaciones', 'incapacidad', 'licencia'])
 

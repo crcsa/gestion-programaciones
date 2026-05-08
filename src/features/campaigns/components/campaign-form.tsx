@@ -210,11 +210,11 @@ export function CampaignForm({
               <SelectValue placeholder="Seleccionar modalidad" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="presencial">Presencial</SelectItem>
-              <SelectItem value="virtual">Virtual</SelectItem>
-              <SelectItem value="mixta">Mixta</SelectItem>
-              <SelectItem value="movil">Móvil</SelectItem>
-              <SelectItem value="institucional">Institucional</SelectItem>
+              <SelectItem value="corporativa">Corporativa</SelectItem>
+              <SelectItem value="carpa">Carpa</SelectItem>
+              <SelectItem value="unidad_movil">Unidad Móvil</SelectItem>
+              <SelectItem value="municipal">Municipal</SelectItem>
+              <SelectItem value="combinada">Combinada</SelectItem>
             </SelectContent>
           </Select>
           {errors.modality && (

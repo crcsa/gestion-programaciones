@@ -23,7 +23,7 @@ export interface CampaignListFilters {
   search?: string
   status?: 'tentativa' | 'confirmada' | 'cancelada' | 'ejecutada'
   size?: 'S' | 'S_plus' | 'M' | 'L'
-  modality?: 'presencial' | 'virtual' | 'mixta' | 'movil' | 'institucional'
+  modality?: 'corporativa' | 'carpa' | 'unidad_movil' | 'municipal' | 'combinada'
   dateFrom?: string
   dateTo?: string
   companyId?: string
@@ -38,7 +38,7 @@ export interface CampaignListItem {
   municipality: string
   campaignDate: string
   size: 'S' | 'S_plus' | 'M' | 'L'
-  modality: 'presencial' | 'virtual' | 'mixta' | 'movil' | 'institucional'
+  modality: 'corporativa' | 'carpa' | 'unidad_movil' | 'municipal' | 'combinada'
   status: 'tentativa' | 'confirmada' | 'cancelada' | 'ejecutada'
   expectedDonations: number | null
   companyName: string | null
