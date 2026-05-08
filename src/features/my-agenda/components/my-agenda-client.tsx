@@ -28,6 +28,7 @@ import { WEEKLY_HOURS_CONTRACT } from '@/features/assignments/lib/validation-con
 import { setMyAvailability } from '../actions/my-agenda-actions'
 import type { MyAgendaData } from '../actions/my-agenda-actions'
 import type { Role } from '@/types/roles'
+import { WeeklyCalendarView } from './weekly-calendar-view'
 
 // ---- Helpers --------------------------------------------------------------
 
@@ -404,10 +405,17 @@ export function MyAgendaClient({ data, currentRole }: MyAgendaClientProps) {
         </div>
       )}
 
-      {/* Sede shifts */}
+      {/* Integrated weekly calendar (sede + campañas) */}
+      <WeeklyCalendarView
+        shifts={data.sedeShiftsThisWeek}
+        campaigns={data.upcomingCampaigns}
+        coordinatorIds={data.coordinatorCampaignIds}
+      />
+
+      {/* Sede shifts (detail) */}
       <SedeShiftsSection shifts={data.sedeShiftsThisWeek} />
 
-      {/* Upcoming campaigns */}
+      {/* Upcoming campaigns (detail, 30 days) */}
       <CampaignsSection
         campaigns={data.upcomingCampaigns}
         coordinatorIds={data.coordinatorCampaignIds}
