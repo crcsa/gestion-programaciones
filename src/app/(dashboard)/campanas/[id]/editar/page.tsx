@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
+import { PermissionError } from '@/lib/errors/app-errors'
 import { getCampaignById } from '@/features/campaigns/actions/campaign-actions'
 import { CampaignEditClient } from '@/features/campaigns/components/campaign-edit-client'
 import type { CreateCampaignInput } from '@/features/campaigns/schemas/campaign-schemas'
@@ -9,9 +10,18 @@ interface EditCampaignPageProps {
 }
 
 export default async function EditCampaignPage({ params }: EditCampaignPageProps) {
-  await requireRole(['admin', 'banco_sangre', 'comercial'])
-
   const { id } = await params
+
+  try {
+    await requireAccess({
+      roles: ['admin', 'admin_area', 'comercial'],
+      areas: ['comercial'],
+      allowCrossArea: true,
+    })
+  } catch (err) {
+    if (err instanceof PermissionError) redirect(`/campanas/${id}`)
+    throw err
+  }
 
   let campaign
   try {

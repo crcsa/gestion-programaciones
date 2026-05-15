@@ -14,7 +14,7 @@ import { getMonthlyCapacity } from '@/features/availability/actions/capacity-act
 import type {
   CapacityProfile,
   DayCapacity,
-} from '@/features/availability/actions/capacity-actions'
+} from '@/features/availability/lib/capacity-query'
 
 const MONTH_LABELS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -27,6 +27,7 @@ const PROFILES: { value: CapacityProfile | 'todos'; label: string }[] = [
   { value: 'tecnico', label: 'Técnicos' },
   { value: 'medico', label: 'Médicos' },
   { value: 'auxiliar', label: 'Auxiliares' },
+  { value: 'comercial', label: 'Comerciales' },
 ]
 
 const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']

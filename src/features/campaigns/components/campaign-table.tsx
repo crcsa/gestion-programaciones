@@ -23,7 +23,7 @@ interface CampaignTableProps {
   total: number
   page: number
   onPageChange: (page: number) => void
-  onEdit: (campaign: CampaignListItem) => void
+  onEdit?: (campaign: CampaignListItem) => void
   onConfirm?: (campaign: CampaignListItem) => void
   onCancel?: (campaign: CampaignListItem) => void
   onDelete?: (campaign: CampaignListItem) => void
@@ -138,7 +138,7 @@ export function CampaignTable({
                   <TooltipContent>Ver detalle</TooltipContent>
                 </Tooltip>
 
-                {isTentativa && (
+                {isTentativa && onEdit && (
                   <IconButton
                     label="Editar"
                     onClick={() => onEdit(campaign)}

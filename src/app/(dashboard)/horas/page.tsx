@@ -1,31 +1,33 @@
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { getWeeklyBalances } from '@/features/hours/actions/hours-actions'
 import { WeeklyBalanceTable } from '@/features/hours/components/weekly-balance-table'
 import { WeekSelector } from '@/features/availability/components/week-selector'
 import { RecalculateButton } from '@/features/hours/components/recalculate-button'
+import { loadValidationRuntimeConfig } from '@/features/configuration/lib/runtime-config'
+import { getCurrentMondayIso } from '@/lib/date/week'
 
 interface HorasPageProps {
   searchParams: Promise<{ semana?: string }>
 }
 
-function getCurrentMondayISO(): string {
-  const d = new Date()
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  d.setDate(d.getDate() + diff)
-  return d.toISOString().slice(0, 10)
-}
-
 export default async function HorasPage({ searchParams }: HorasPageProps) {
-  await requireRole(['admin', 'banco_sangre'])
+  // Comercial puede leer cross-área (read-only) además de admin global y admin_area.
+  await requireAccess({ roles: ['admin', 'admin_area', 'comercial'] })
 
   const { semana } = await searchParams
-  const weekStart = semana ?? getCurrentMondayISO()
+  const weekStart = semana ?? getCurrentMondayIso()
 
-  const rows = await getWeeklyBalances(weekStart)
+  const [rows, cfg] = await Promise.all([
+    getWeeklyBalances(weekStart),
+    loadValidationRuntimeConfig(),
+  ])
 
-  const cumplieron = rows.filter((r) => r.balanceState === 'cumplió').length
-  const debenHoras = rows.filter((r) => r.balanceState === 'debe_horas').length
+  // "Cumplieron contrato" = trabajaron las horas contratadas o más
+  // (incluye horas_extras como subconjunto informativo).
+  const cumplieron = rows.filter(
+    (r) => r.balanceState === 'cumplió' || r.balanceState === 'horas_extras',
+  ).length
+  const disponibles = rows.filter((r) => r.balanceState === 'debe_horas').length
   const conExtras  = rows.filter((r) => r.balanceState === 'horas_extras').length
 
   return (
@@ -39,35 +41,59 @@ export default async function HorasPage({ searchParams }: HorasPageProps) {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Cumplieron contrato" value={cumplieron} color="green" />
-        <StatCard label="Con horas extras"    value={conExtras}  color="yellow" />
-        <StatCard label="Deben horas"         value={debenHoras} color="red" />
+        <StatCard
+          label="Cumplieron contrato"
+          hint={`Trabajaron ≥ ${cfg.weeklyHours}h`}
+          value={cumplieron}
+          color="green"
+        />
+        <StatCard
+          label="Con horas extras"
+          hint={`Superaron las ${cfg.weeklyHours}h pactadas`}
+          value={conExtras}
+          color="yellow"
+        />
+        <StatCard
+          label="Disponibles"
+          hint="Con capacidad para más trabajo"
+          value={disponibles}
+          color="blue"
+        />
       </div>
 
-      <WeeklyBalanceTable rows={rows} isLoading={false} />
+      <WeeklyBalanceTable
+        rows={rows}
+        isLoading={false}
+        contractHours={cfg.weeklyHours}
+        extraHoursLimit={cfg.maxExtraHoursWeek}
+      />
     </div>
   )
 }
 
 function StatCard({
   label,
+  hint,
   value,
   color,
 }: {
   label: string
+  hint?: string
   value: number
-  color: 'green' | 'yellow' | 'red'
+  color: 'green' | 'yellow' | 'red' | 'blue'
 }) {
   const colorClasses = {
     green:  'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400',
     yellow: 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
     red:    'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400',
+    blue:   'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400',
   }
 
   return (
     <div className={`rounded-lg border px-4 py-3 ${colorClasses[color]}`}>
       <p className="text-2xl font-bold">{value}</p>
-      <p className="text-sm mt-0.5 opacity-80">{label}</p>
+      <p className="text-sm mt-0.5 opacity-90">{label}</p>
+      {hint && <p className="text-xs mt-0.5 opacity-70">{hint}</p>}
     </div>
   )
 }

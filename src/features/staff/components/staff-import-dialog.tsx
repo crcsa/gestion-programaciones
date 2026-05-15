@@ -24,8 +24,8 @@ const PROFILE_MAP: Record<string, ImportStaffRow['staffProfile']> = {
   medico: 'medico',
   'medico(a)': 'medico',
   auxiliar: 'auxiliar',
-  coordinador: 'coordinador',
-  'coordinador(a)': 'coordinador',
+  comercial: 'comercial',
+  'comercial(a)': 'comercial',
 }
 
 const CONTRACT_MAP: Record<string, ImportStaffRow['contractType']> = {
@@ -145,7 +145,7 @@ export function StaffImportDialog({ onImported }: StaffImportDialogProps) {
       setResult(r)
       setStep('result')
       if (r.imported > 0) {
-        toast.success(`${r.imported} funcionario(s) importado(s) correctamente`)
+        toast.success(`${r.imported} colaborador(s) importado(s) correctamente`)
         onImported?.()
       }
     } catch (err) {
@@ -265,7 +265,7 @@ export function StaffImportDialog({ onImported }: StaffImportDialogProps) {
                 <Button onClick={handleImport} disabled={isImporting}>
                   {isImporting
                     ? 'Importando...'
-                    : `Importar ${parsedRows.length} funcionario(s)`}
+                    : `Importar ${parsedRows.length} colaborador(s)`}
                 </Button>
               </div>
             </div>

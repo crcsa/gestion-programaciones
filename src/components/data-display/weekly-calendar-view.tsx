@@ -3,16 +3,41 @@
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import type { MyAgendaData } from '../actions/my-agenda-actions'
+
+interface WeekShift {
+  shiftDate: string
+  shiftType: string
+  startTime: string | null
+  endTime: string | null
+  isOvernight: boolean
+}
+
+interface WeekCampaign {
+  campaignId: string
+  campaignDate: string
+  code: string
+  municipality: string
+  startTime: string | null
+  endTime: string | null
+  isCoordinator?: boolean
+}
+
+interface WeekAvailability {
+  availabilityDate: string
+  status: string
+  notes: string | null
+}
 
 interface WeeklyCalendarViewProps {
-  shifts: MyAgendaData['sedeShiftsThisWeek']
-  campaigns: MyAgendaData['upcomingCampaigns']
+  shifts: WeekShift[]
+  campaigns: WeekCampaign[]
   coordinatorIds: string[]
+  /** Overrides de disponibilidad del staff (vacaciones, incapacidad, licencia). */
+  availability?: WeekAvailability[]
 }
 
 interface CalendarItem {
-  kind: 'shift' | 'campaign'
+  kind: 'shift' | 'campaign' | 'availability'
   title: string
   subtitle: string
   startTime: string | null
@@ -23,6 +48,13 @@ interface CalendarItem {
 }
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+
+/** Solo las ausencias se muestran como item; 'disponible' es el estado por defecto. */
+const AVAILABILITY_LABELS: Record<string, string> = {
+  vacaciones: 'Vacaciones',
+  incapacidad: 'Incapacidad',
+  licencia: 'Licencia',
+}
 
 function getMondayOfWeek(d: Date): Date {
   const copy = new Date(d)
@@ -51,6 +83,7 @@ export function WeeklyCalendarView({
   shifts,
   campaigns,
   coordinatorIds,
+  availability = [],
 }: WeeklyCalendarViewProps) {
   const monday = getMondayOfWeek(new Date())
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -61,6 +94,20 @@ export function WeeklyCalendarView({
 
   const itemsByDate = new Map<string, CalendarItem[]>()
   for (const day of days) itemsByDate.set(toIsoDate(day), [])
+
+  for (const override of availability) {
+    const label = AVAILABILITY_LABELS[override.status]
+    if (!label) continue
+    const list = itemsByDate.get(override.availabilityDate)
+    if (!list) continue
+    list.push({
+      kind: 'availability',
+      title: label,
+      subtitle: override.notes ?? '',
+      startTime: null,
+      endTime: null,
+    })
+  }
 
   for (const shift of shifts) {
     const list = itemsByDate.get(shift.shiftDate)
@@ -98,7 +145,7 @@ export function WeeklyCalendarView({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Calendario de la semana</CardTitle>
+        <CardTitle>Disponibilidad de la semana</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-7">
@@ -133,7 +180,9 @@ export function WeeklyCalendarView({
                       const colorClass =
                         it.kind === 'shift'
                           ? 'border-blue-500/40 bg-blue-500/10 text-blue-900 dark:text-blue-200'
-                          : 'border-red-500/40 bg-red-500/10 text-red-900 dark:text-red-200'
+                          : it.kind === 'campaign'
+                            ? 'border-red-500/40 bg-red-500/10 text-red-900 dark:text-red-200'
+                            : 'border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200'
 
                       const body = (
                         <div className={`rounded border px-1.5 py-1 ${colorClass}`}>
@@ -145,7 +194,9 @@ export function WeeklyCalendarView({
                               </Badge>
                             )}
                           </div>
-                          <p className="text-[11px] opacity-80 truncate">{it.subtitle}</p>
+                          {it.subtitle && (
+                            <p className="text-[11px] opacity-80 truncate">{it.subtitle}</p>
+                          )}
                           {it.startTime && it.endTime && (
                             <p className="text-[11px] font-medium">
                               {it.startTime}–{it.endTime}
@@ -185,6 +236,10 @@ export function WeeklyCalendarView({
           <span className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded border border-red-500/40 bg-red-500/10" />
             Campaña
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded border border-amber-500/40 bg-amber-500/10" />
+            Ausencia
           </span>
         </div>
       </CardContent>

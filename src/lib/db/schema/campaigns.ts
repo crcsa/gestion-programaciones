@@ -1,4 +1,14 @@
-import { pgTable, uuid, text, date, integer, timestamp, boolean } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  uuid,
+  text,
+  date,
+  integer,
+  timestamp,
+  boolean,
+  uniqueIndex,
+  index,
+} from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { campaignStatusEnum, campaignSizeEnum, campaignModalityEnum } from './enums'
 import { companies } from './companies'
@@ -12,7 +22,8 @@ export const campaigns = pgTable('campaigns', {
   companyId: uuid('company_id').references(() => companies.id, { onDelete: 'set null' }),
   locationId: uuid('location_id').references(() => locations.id, { onDelete: 'set null' }),
   campaignDate: date('campaign_date').notNull(),
-  startTime: text('start_time'), // e.g. "08:00"
+  endDate: date('end_date'), // null = mono-día (endDate implícito = campaignDate)
+  startTime: text('start_time'), // e.g. "08:00" — válido para campañas mono-día
   endTime: text('end_time'),
   size: campaignSizeEnum('size').notNull(),
   modality: campaignModalityEnum('modality').notNull(),
@@ -31,10 +42,35 @@ export const campaigns = pgTable('campaigns', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
-export const campaignsRelations = relations(campaigns, ({ one }) => ({
+export const campaignDays = pgTable(
+  'campaign_days',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    campaignId: uuid('campaign_id').notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+    dayDate: date('day_date').notNull(),
+    startTime: text('start_time').notNull(),
+    endTime: text('end_time').notNull(),
+    isOvernight: boolean('is_overnight').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('campaign_days_campaign_day_unique').on(t.campaignId, t.dayDate),
+    index('campaign_days_day_date_idx').on(t.dayDate),
+  ],
+)
+
+export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
   company: one(companies, { fields: [campaigns.companyId], references: [companies.id] }),
   location: one(locations, { fields: [campaigns.locationId], references: [locations.id] }),
+  days: many(campaignDays),
+}))
+
+export const campaignDaysRelations = relations(campaignDays, ({ one }) => ({
+  campaign: one(campaigns, { fields: [campaignDays.campaignId], references: [campaigns.id] }),
 }))
 
 export type Campaign = typeof campaigns.$inferSelect
 export type NewCampaign = typeof campaigns.$inferInsert
+export type CampaignDay = typeof campaignDays.$inferSelect
+export type NewCampaignDay = typeof campaignDays.$inferInsert

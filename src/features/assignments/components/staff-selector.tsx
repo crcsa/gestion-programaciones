@@ -18,7 +18,6 @@ const PROFILE_FILTER_OPTIONS = [
   { value: 'tecnico', label: 'Técnico' },
   { value: 'medico', label: 'Médico' },
   { value: 'auxiliar', label: 'Auxiliar' },
-  { value: 'coordinador', label: 'Coordinador' },
 ] as const
 
 export function StaffSelector({

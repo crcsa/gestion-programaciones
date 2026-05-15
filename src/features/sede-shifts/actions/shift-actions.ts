@@ -1,11 +1,12 @@
 'use server'
 
 import { eq, and, gte, lte } from 'drizzle-orm'
+import { AppError, ValidationError } from '@/lib/errors/app-errors'
 import { addDays, format } from 'date-fns'
 import { db } from '@/lib/db'
 import { sedeShifts } from '@/lib/db/schema/sede-shifts'
 import { staffMembers } from '@/lib/db/schema/staff-members'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { upsertShiftSchema } from '../schemas/shift-schemas'
 import type { UpsertShiftInput } from '../schemas/shift-schemas'
 import type { SedeShift } from '@/lib/db/schema/sede-shifts'
@@ -43,7 +44,7 @@ function groupShiftsByStaff(shifts: SedeShift[]): Record<string, SedeShift[]> {
 // ---- Actions --------------------------------------------------------------
 
 export async function getWeeklyShifts(weekStart: string): Promise<WeeklyShiftsResult> {
-  await requireRole(['admin', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'admin_area'] })
 
   const weekEnd = getWeekEnd(weekStart)
 
@@ -67,17 +68,17 @@ export async function getWeeklyShifts(weekStart: string): Promise<WeeklyShiftsRe
 
     return { staff, shifts: groupShiftsByStaff(shifts) }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener los turnos semanales')
   }
 }
 
 export async function upsertShift(data: UpsertShiftInput): Promise<SedeShift> {
-  const { userId } = await requireRole(['admin', 'banco_sangre'])
+  const { userId } = await requireAccess({ roles: ['admin', 'admin_area'] })
 
   const validated = upsertShiftSchema.safeParse(data)
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   const input = validated.data
@@ -133,31 +134,26 @@ export async function upsertShift(data: UpsertShiftInput): Promise<SedeShift> {
 
     return created
   } catch (error) {
-    if (error instanceof Error && (
-      error.message.includes('permiso') ||
-      error.message.includes('Maximo')
-    )) {
-      throw error
-    }
+    if (error instanceof AppError) throw error
     throw new Error('Error al guardar el turno')
   }
 }
 
 export async function deleteShift(id: string): Promise<void> {
-  await requireRole(['admin', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'admin_area'] })
 
   try {
     await db
       .delete(sedeShifts)
       .where(eq(sedeShifts.id, id))
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al eliminar el turno')
   }
 }
 
 export async function getStaffOccupancy(date: string): Promise<StaffOccupancy[]> {
-  await requireRole(['admin', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'admin_area'] })
 
   try {
     const staff = await db
@@ -180,7 +176,7 @@ export async function getStaffOccupancy(date: string): Promise<StaffOccupancy[]>
       status: staffWithShift.has(s.id) ? 'sede' as const : 'libre' as const,
     }))
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener la ocupacion del personal')
   }
 }

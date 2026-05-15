@@ -14,6 +14,22 @@ vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
 }))
 
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'a@x.com',
+    fullName: 'A',
+    scope: { kind: 'global' as const },
+  }),
+}))
+
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+}))
+
 vi.mock('@/lib/db/schema/campaigns', () => ({
   campaigns: {
     id: 'id',
@@ -37,7 +53,16 @@ vi.mock('@/lib/db/schema/campaigns', () => ({
     trainingAreaId: 'training_area_id',
     observations: 'observations',
     hexabankCode: 'hexabank_code',
+    endDate: 'end_date',
     createdById: 'created_by_id',
+  },
+  campaignDays: {
+    id: 'id',
+    campaignId: 'campaign_id',
+    dayDate: 'day_date',
+    startTime: 'start_time',
+    endTime: 'end_time',
+    isOvernight: 'is_overnight',
   },
 }))
 

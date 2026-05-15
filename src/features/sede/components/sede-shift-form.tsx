@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Input } from '@/components/ui/input'
@@ -17,7 +18,10 @@ import {
   createSedeShiftSchema,
   type CreateSedeShiftInput,
 } from '@/features/sede/schemas/sede-shift-schemas'
-import type { StaffListItem } from '@/features/sede/actions/sede-shift-actions'
+import type {
+  SedeShiftRow,
+  StaffListItem,
+} from '@/features/sede/actions/sede-shift-actions'
 
 // ---- Constants ------------------------------------------------------------
 
@@ -32,7 +36,6 @@ const STAFF_PROFILE_LABELS: Record<string, string> = {
   tecnico: 'Tecnico',
   medico: 'Medico',
   auxiliar: 'Auxiliar',
-  coordinador: 'Coordinador',
 }
 
 const DAYS_IN_WEEK = 6
@@ -54,6 +57,8 @@ function formatStaffLabel(staff: StaffListItem): string {
 
 interface SedeShiftFormProps {
   staffList: StaffListItem[]
+  weekShifts?: SedeShiftRow[]
+  editingShiftId?: string
   defaultValues?: Partial<CreateSedeShiftInput>
   onSubmit: (data: CreateSedeShiftInput) => Promise<void>
   isLoading?: boolean
@@ -64,6 +69,8 @@ interface SedeShiftFormProps {
 
 export function SedeShiftForm({
   staffList,
+  weekShifts,
+  editingShiftId,
   defaultValues,
   onSubmit,
   isLoading = false,
@@ -81,19 +88,34 @@ export function SedeShiftForm({
     resolver: zodResolver(createSedeShiftSchema),
     defaultValues: {
       isOvernight: false,
+      extraHours: 0,
       ...defaultValues,
     },
   })
 
   const selectedStaffId = watch('staffId')
   const selectedShiftType = watch('shiftType')
+  const selectedShiftDate = watch('shiftDate')
+  const isOvernight = watch('isOvernight')
+
+  const availableStaff = useMemo(() => {
+    if (!selectedShiftDate || !weekShifts || weekShifts.length === 0) return staffList
+    const assignedIds = new Set(
+      weekShifts
+        .filter((s) => s.shiftDate === selectedShiftDate && s.id !== editingShiftId)
+        .map((s) => s.staffId),
+    )
+    return staffList.filter((s) => !assignedIds.has(s.id))
+  }, [staffList, weekShifts, selectedShiftDate, editingShiftId])
+
+  const hiddenCount = staffList.length - availableStaff.length
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* Staff selector */}
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="staffId">Funcionario</Label>
+          <Label htmlFor="staffId">Colaborador</Label>
           <Select
             value={selectedStaffId ?? ''}
             onValueChange={(v) =>
@@ -101,7 +123,7 @@ export function SedeShiftForm({
             }
           >
             <SelectTrigger id="staffId" aria-invalid={!!errors.staffId} className="w-full">
-              <SelectValue placeholder="Seleccionar funcionario">
+              <SelectValue placeholder="Seleccionar colaborador">
                 {selectedStaffId
                   ? (() => {
                       const found = staffList.find((s) => s.id === selectedStaffId)
@@ -111,13 +133,27 @@ export function SedeShiftForm({
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {staffList.map((staff) => (
-                <SelectItem key={staff.id} value={staff.id}>
-                  {formatStaffLabel(staff)}
-                </SelectItem>
-              ))}
+              {availableStaff.length === 0 ? (
+                <div className="px-3 py-4 text-sm text-muted-foreground">
+                  {selectedShiftDate
+                    ? 'Todos los colaboradores activos ya tienen turno este día.'
+                    : 'Selecciona una fecha primero.'}
+                </div>
+              ) : (
+                availableStaff.map((staff) => (
+                  <SelectItem key={staff.id} value={staff.id}>
+                    {formatStaffLabel(staff)}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
+          {selectedShiftDate && hiddenCount > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {hiddenCount} colaborador{hiddenCount === 1 ? '' : 'es'} oculto{hiddenCount === 1 ? '' : 's'}:
+              ya tienen turno este día.
+            </p>
+          )}
           {errors.staffId && (
             <p className="text-sm text-destructive">{errors.staffId.message}</p>
           )}
@@ -206,11 +242,39 @@ export function SedeShiftForm({
           <input
             id="isOvernight"
             type="checkbox"
-            {...register('isOvernight')}
+            {...register('isOvernight', {
+              onChange: (e) => {
+                if (!e.target.checked) {
+                  setValue('extraHours', 0, { shouldValidate: true })
+                }
+              },
+            })}
             className="h-4 w-4 rounded border-input"
           />
           <Label htmlFor="isOvernight">Pernocta (turno cruza medianoche)</Label>
         </div>
+
+        {/* Extra hours — only when overnight */}
+        {isOvernight && (
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="extraHours">Horas extras (0–6h)</Label>
+            <Input
+              id="extraHours"
+              type="number"
+              min={0}
+              max={6}
+              step={1}
+              {...register('extraHours', { valueAsNumber: true })}
+              aria-invalid={!!errors.extraHours}
+            />
+            <p className="text-xs text-muted-foreground">
+              Suman al cómputo semanal de extras incluso si la semana no excede 40h.
+            </p>
+            {errors.extraHours && (
+              <p className="text-sm text-destructive">{errors.extraHours.message}</p>
+            )}
+          </div>
+        )}
 
         {/* Notes */}
         <div className="space-y-1.5 sm:col-span-2">

@@ -22,7 +22,6 @@ const PROFILE_LABELS: Record<string, string> = {
   tecnico: 'Tecnico',
   medico: 'Medico',
   auxiliar: 'Auxiliar',
-  coordinador: 'Coordinador',
 }
 
 function handleExport(rows: PersonalReportRow[]) {

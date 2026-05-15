@@ -14,6 +14,18 @@ vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-1', role: 'comercial' }),
 }))
 
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
+}))
+
 vi.mock('@/lib/db/schema/company-contacts', () => ({
   companyContacts: {
     id: 'id',

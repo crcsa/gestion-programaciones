@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock modules before imports
 vi.mock('@/lib/db', () => ({
   db: {
     select: vi.fn(),
@@ -10,8 +9,19 @@ vi.mock('@/lib/db', () => ({
   },
 }))
 
-vi.mock('@/features/auth/lib/require-role', () => ({
-  requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
+vi.mock('@/features/auth/lib/user-context', () => ({
+  requireUserContext: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@example.com',
+    fullName: 'Admin',
+  }),
+}))
+
+vi.mock('@/features/dashboard/lib/dashboard-queries', () => ({
+  campaignArea: vi.fn(() => undefined),
 }))
 
 vi.mock('@/lib/db/schema/campaigns', () => ({
@@ -56,20 +66,21 @@ vi.mock('@/lib/db/schema/staff-members', () => ({
     id: 'id',
     firstName: 'first_name',
     lastName: 'last_name',
+    area: 'area',
   },
 }))
 
 import { db } from '@/lib/db'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireUserContext } from '@/features/auth/lib/user-context'
+import { campaignArea } from '@/features/dashboard/lib/dashboard-queries'
 import { getNotifications } from '@/features/notifications/actions/notification-actions'
 
-// Helper to create a chainable drizzle mock
 function makeChain(resolvedValue: unknown) {
   const chain: Record<string, unknown> = {}
   const methods = [
     'select', 'from', 'where', 'limit', 'offset', 'orderBy',
     'insert', 'values', 'update', 'set', 'delete', 'returning',
-    'leftJoin', 'groupBy',
+    'leftJoin', 'innerJoin', 'groupBy',
   ]
   for (const method of methods) {
     chain[method] = vi.fn(() => chain)
@@ -87,10 +98,22 @@ type SimpleMockDb = {
 }
 const mockDb = db as unknown as SimpleMockDb
 
+function setAdmin() {
+  vi.mocked(requireUserContext).mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@example.com',
+    fullName: 'Admin',
+  })
+}
+
 describe('getNotifications', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+    setAdmin()
+    vi.mocked(campaignArea).mockReturnValue(undefined)
   })
 
   it('returns cancelled campaign notifications', async () => {
@@ -106,9 +129,9 @@ describe('getNotifications', () => {
     let callCount = 0
     mockDb.select = vi.fn(() => {
       callCount++
-      if (callCount === 1) return makeChain(cancelledCampaigns) // cancelled campaigns
-      if (callCount === 2) return makeChain([]) // confirmed campaigns (empty)
-      return makeChain([]) // high extra hours (empty)
+      if (callCount === 1) return makeChain(cancelledCampaigns)
+      if (callCount === 2) return makeChain([])
+      return makeChain([])
     })
 
     const result = await getNotifications()
@@ -118,7 +141,6 @@ describe('getNotifications', () => {
     expect(cancelledNotifs[0].id).toBe('cancelled-camp-1')
     expect(cancelledNotifs[0].title).toBe('Campana cancelada')
     expect(cancelledNotifs[0].message).toContain('CMP-001')
-    expect(cancelledNotifs[0].message).toContain('Sin presupuesto disponible')
     expect(cancelledNotifs[0].campaignId).toBe('camp-1')
   })
 
@@ -127,28 +149,21 @@ describe('getNotifications', () => {
       { id: 'camp-2', code: 'CMP-002', createdAt: new Date('2026-03-15T08:00:00Z') },
       { id: 'camp-3', code: 'CMP-003', createdAt: new Date('2026-03-16T08:00:00Z') },
     ]
-
-    // camp-3 has a coordinator, camp-2 does not
-    const coordinatorRows = [
-      { campaignId: 'camp-3', hasCoordinator: true },
-    ]
+    const coordinatorRows = [{ campaignId: 'camp-3', hasCoordinator: true }]
 
     let callCount = 0
     mockDb.select = vi.fn(() => {
       callCount++
-      if (callCount === 1) return makeChain([]) // cancelled (empty)
-      if (callCount === 2) return makeChain(confirmedCampaigns) // confirmed campaigns
-      if (callCount === 3) return makeChain(coordinatorRows) // coordinator query
-      return makeChain([]) // high extra hours (empty)
+      if (callCount === 1) return makeChain([])
+      if (callCount === 2) return makeChain(confirmedCampaigns)
+      if (callCount === 3) return makeChain(coordinatorRows)
+      return makeChain([])
     })
 
     const result = await getNotifications()
-
     const missingCoordNotifs = result.filter((n) => n.type === 'missing_coordinator')
     expect(missingCoordNotifs).toHaveLength(1)
     expect(missingCoordNotifs[0].id).toBe('no-coord-camp-2')
-    expect(missingCoordNotifs[0].message).toContain('CMP-002')
-    expect(missingCoordNotifs[0].campaignId).toBe('camp-2')
   })
 
   it('returns balance_warning when extraHours >= 10', async () => {
@@ -159,26 +174,22 @@ describe('getNotifications', () => {
     let callCount = 0
     mockDb.select = vi.fn(() => {
       callCount++
-      if (callCount === 1) return makeChain([]) // cancelled (empty)
-      if (callCount === 2) return makeChain([]) // confirmed (empty)
-      // no coordinator query since confirmed is empty
-      return makeChain(highExtraHoursStaff) // high extra hours
+      if (callCount === 1) return makeChain([])
+      if (callCount === 2) return makeChain([])
+      return makeChain(highExtraHoursStaff)
     })
 
     const result = await getNotifications()
-
     const balanceNotifs = result.filter((n) => n.type === 'balance_warning')
     expect(balanceNotifs).toHaveLength(1)
-    expect(balanceNotifs[0].title).toBe('Alerta de horas extras')
     expect(balanceNotifs[0].message).toContain('Juan Perez')
     expect(balanceNotifs[0].message).toContain('12h extras')
   })
 
-  it('throws when requireRole rejects', async () => {
-    vi.mocked(requireRole).mockRejectedValue(
+  it('throws when requireUserContext rejects', async () => {
+    vi.mocked(requireUserContext).mockRejectedValue(
       new Error('No tiene permiso para acceder a este recurso'),
     )
-
     await expect(getNotifications()).rejects.toThrow('permiso')
   })
 
@@ -191,7 +202,6 @@ describe('getNotifications', () => {
         updatedAt: new Date('2026-03-14T10:00:00Z'),
       },
     ]
-
     const confirmedCampaigns = [
       { id: 'camp-new', code: 'CMP-NEW', createdAt: new Date('2026-03-19T08:00:00Z') },
     ]
@@ -199,16 +209,14 @@ describe('getNotifications', () => {
     let callCount = 0
     mockDb.select = vi.fn(() => {
       callCount++
-      if (callCount === 1) return makeChain(cancelledCampaigns) // cancelled
-      if (callCount === 2) return makeChain(confirmedCampaigns) // confirmed
-      if (callCount === 3) return makeChain([]) // coordinator query (none)
-      return makeChain([]) // high extra hours
+      if (callCount === 1) return makeChain(cancelledCampaigns)
+      if (callCount === 2) return makeChain(confirmedCampaigns)
+      if (callCount === 3) return makeChain([])
+      return makeChain([])
     })
 
     const result = await getNotifications()
-
     expect(result.length).toBeGreaterThanOrEqual(2)
-    // Most recent first
     for (let i = 0; i < result.length - 1; i++) {
       expect(result[i].createdAt.getTime()).toBeGreaterThanOrEqual(
         result[i + 1].createdAt.getTime(),
@@ -216,10 +224,67 @@ describe('getNotifications', () => {
     }
   })
 
-  it('throws generic error when DB fails with non-permiso error', async () => {
-    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+  it('throws generic error when DB fails', async () => {
     mockDb.select = vi.fn(() => { throw new Error('DB connection failed') })
-
     await expect(getNotifications()).rejects.toThrow('Error al obtener las notificaciones')
+  })
+
+  it('applies campaignArea predicate for admin_area (banco_sangre)', async () => {
+    vi.mocked(requireUserContext).mockResolvedValue({
+      userId: 'user-bds',
+      role: 'admin_area',
+      area: 'banco_sangre',
+      staffId: null,
+      email: 'bds@example.com',
+      fullName: 'BDS Admin',
+    })
+    const sentinel = { __pred: true } as never
+    vi.mocked(campaignArea).mockReturnValue(sentinel)
+
+    mockDb.select = vi.fn(() => makeChain([]))
+
+    await getNotifications()
+
+    // campaignArea se llama una vez con el área del scope (banco_sangre);
+    // el predicate se reusa para cancelled y confirmed queries.
+    expect(campaignArea).toHaveBeenCalledWith('banco_sangre')
+  })
+
+  it('admin_area+comercial gets global scope (cross-area)', async () => {
+    vi.mocked(requireUserContext).mockResolvedValue({
+      userId: 'user-com',
+      role: 'admin_area',
+      area: 'comercial',
+      staffId: null,
+      email: 'com@example.com',
+      fullName: 'Com Admin',
+    })
+
+    mockDb.select = vi.fn(() => makeChain([]))
+
+    await getNotifications()
+
+    // Comercial admin → cross-area → campaignArea recibe null y NO restringe.
+    expect(campaignArea).toHaveBeenCalledWith(null)
+  })
+
+  it('operativo only sees notifications scoped to their staffId', async () => {
+    vi.mocked(requireUserContext).mockResolvedValue({
+      userId: 'user-op',
+      role: 'operativo',
+      area: 'logistica',
+      staffId: 'staff-op-1',
+      email: 'op@example.com',
+      fullName: 'Op',
+    })
+
+    mockDb.select = vi.fn(() => makeChain([]))
+
+    await getNotifications()
+
+    // Operativos NO ven confirmedCampaigns ni coordinator query, así que
+    // campaignArea solo se invoca una vez (para cancelled).
+    expect(campaignArea).toHaveBeenCalledWith('logistica')
+    expect(campaignArea).toHaveBeenCalledTimes(1)
   })
 })

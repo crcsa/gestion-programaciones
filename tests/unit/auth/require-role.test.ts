@@ -12,7 +12,7 @@ vi.mock('@/lib/db', () => ({
     select: vi.fn().mockReturnValue({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
-          limit: vi.fn().mockResolvedValue([{ role: 'admin' }]),
+          limit: vi.fn().mockResolvedValue([{ role: 'admin', area: null, email: 'a@x.com', fullName: 'A', isActive: true }]),
         }),
       }),
     }),

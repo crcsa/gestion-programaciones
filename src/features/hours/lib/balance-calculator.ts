@@ -2,87 +2,70 @@
  * Pure DB calculation — no 'use server', no auth checks.
  * Imported by server actions that have already authenticated.
  */
-import { eq, and } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { sedeShifts } from '@/lib/db/schema/sede-shifts'
-import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
-import { campaigns } from '@/lib/db/schema/campaigns'
 import { weeklyBalance } from '@/lib/db/schema/weekly-balance'
-import { WEEKLY_HOURS_CONTRACT } from '@/features/assignments/lib/validation-constants'
-
-function addDays(dateStr: string, days: number): string {
-  const d = new Date(`${dateStr}T00:00:00`)
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
-
-function calcCampaignMins(startTime: string, endTime: string): number {
-  const [sh, sm] = startTime.split(':').map(Number)
-  const [eh, em] = endTime.split(':').map(Number)
-  let mins = eh * 60 + em - (sh * 60 + sm)
-  if (mins < 0) mins += 24 * 60
-  return mins
-}
+import { loadValidationRuntimeConfigAt } from '@/features/configuration/lib/runtime-config'
+import { getStaffCampaignDayPoints } from './aggregate-staff-data'
+import { getSundayOfWeek } from '@/lib/date/week'
 
 export async function computeAndSaveWeeklyBalance(
   staffId: string,
   weekStart: string,
 ): Promise<void> {
-  const weekEnd = addDays(weekStart, 6)
+  const weekEnd = getSundayOfWeek(weekStart)
+  // Use the rules that were active at the END of the week being calculated.
+  // Past weeks keep their period's rules; the current week uses current rules.
+  const cfg = await loadValidationRuntimeConfigAt(weekEnd)
 
-  const [allShifts, campaignRows] = await Promise.all([
+  const [allShifts, campaignPoints] = await Promise.all([
     db
       .select({
         totalHours: sedeShifts.totalHours,
         shiftDate: sedeShifts.shiftDate,
         isOvernight: sedeShifts.isOvernight,
+        extraHours: sedeShifts.extraHours,
       })
       .from(sedeShifts)
       .where(eq(sedeShifts.staffId, staffId)),
-    db
-      .select({
-        campaignDate: campaigns.campaignDate,
-        startTime: campaigns.startTime,
-        endTime: campaigns.endTime,
-      })
-      .from(campaignAssignments)
-      .leftJoin(campaigns, eq(campaignAssignments.campaignId, campaigns.id))
-      .where(
-        and(
-          eq(campaignAssignments.staffId, staffId),
-          eq(campaignAssignments.isActive, true),
-        ),
-      ),
+    getStaffCampaignDayPoints(staffId),
   ])
 
   const weekShifts = allShifts.filter(
     (s) => s.shiftDate >= weekStart && s.shiftDate <= weekEnd,
   )
-  const weekCampaigns = campaignRows.filter(
-    (c) => c.campaignDate !== null && c.campaignDate >= weekStart && c.campaignDate <= weekEnd,
+  const weekPoints = campaignPoints.filter(
+    (p) => p.dayDate >= weekStart && p.dayDate <= weekEnd,
   )
 
   const sedeHours = weekShifts.reduce((sum, s) => sum + s.totalHours, 0)
-  const campaignHoursFloat = weekCampaigns.reduce((sum, c) => {
-    // No times → assume standard 8h campaign day
-    if (!c.startTime || !c.endTime) return sum + 8
-    return sum + calcCampaignMins(c.startTime, c.endTime) / 60
-  }, 0)
+  const campaignHoursFloat = weekPoints.reduce((sum, p) => sum + p.hours, 0)
   const campaignHours = Math.round(campaignHoursFloat)
 
   const workedHours = sedeHours + campaignHours
-  const extraHours = Math.max(0, workedHours - WEEKLY_HOURS_CONTRACT)
-  const sundayCount = weekShifts.filter(
+  const sedeExtras = weekShifts.reduce((sum, s) => sum + (s.extraHours ?? 0), 0)
+  const baseExtras = Math.max(0, workedHours - cfg.weeklyHours)
+  const extraHours = baseExtras + sedeExtras
+
+  const sundayShifts = weekShifts.filter(
     (s) => new Date(`${s.shiftDate}T00:00:00`).getDay() === 0,
   ).length
-  const overnightCount = weekShifts.filter((s) => s.isOvernight).length
+  const sundayCampaigns = weekPoints.filter(
+    (p) => new Date(`${p.dayDate}T00:00:00`).getDay() === 0,
+  ).length
+  const sundayCount = sundayShifts + sundayCampaigns
+
+  const overnightShifts = weekShifts.filter((s) => s.isOvernight).length
+  const overnightCampaigns = weekPoints.filter((p) => p.isOvernight).length
+  const overnightCount = overnightShifts + overnightCampaigns
 
   await db
     .insert(weeklyBalance)
     .values({
       staffId,
       weekStart,
-      scheduledHours: WEEKLY_HOURS_CONTRACT,
+      scheduledHours: cfg.weeklyHours,
       workedHours,
       sedeHours,
       campaignHours,

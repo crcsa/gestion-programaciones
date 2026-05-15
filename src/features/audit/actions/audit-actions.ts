@@ -1,10 +1,11 @@
 'use server'
 
 import { eq, and, desc, gte, lte, sql } from 'drizzle-orm'
+import { AppError } from '@/lib/errors/app-errors'
 import { db } from '@/lib/db'
 import { auditLog } from '@/lib/db/schema/audit-log'
 import { profiles } from '@/lib/db/schema/profiles'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 
 export interface AuditLogRow {
   id: string
@@ -31,7 +32,7 @@ export interface AuditLogFilters {
 export async function getAuditLog(
   filters: AuditLogFilters = {},
 ): Promise<{ data: AuditLogRow[]; total: number }> {
-  await requireRole(['admin'])
+  await requireAccess({ roles: ['admin'] })
 
   const { page = 1, limit = 50, tableName, action, dateFrom, dateTo } = filters
   const offset = (page - 1) * limit
@@ -91,7 +92,7 @@ export async function getAuditLog(
       total: countRows[0]?.count ?? 0,
     }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener el log de auditoria')
   }
 }

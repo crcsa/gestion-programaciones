@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PermissionError } from '@/lib/errors/app-errors'
 
 // Mock modules before imports
 vi.mock('@/lib/db', () => ({
@@ -12,6 +13,22 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
+}))
+
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'a@x.com',
+    fullName: 'A',
+    scope: { kind: 'global' as const },
+  }),
+}))
+
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }))
 
 vi.mock('@/lib/db/schema/campaigns', () => ({
@@ -34,9 +51,18 @@ vi.mock('@/lib/db/schema/campaigns', () => ({
     locationId: 'location_id',
     startTime: 'start_time',
     endTime: 'end_time',
+    endDate: 'end_date',
     trainingAreaId: 'training_area_id',
     observations: 'observations',
     createdById: 'created_by_id',
+  },
+  campaignDays: {
+    id: 'id',
+    campaignId: 'campaign_id',
+    dayDate: 'day_date',
+    startTime: 'start_time',
+    endTime: 'end_time',
+    isOvernight: 'is_overnight',
   },
 }))
 
@@ -50,6 +76,7 @@ vi.mock('@/lib/audit/log-audit', () => ({
 
 import { db } from '@/lib/db'
 import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import {
   createCampaign,
   confirmCampaign,
@@ -59,6 +86,20 @@ import {
   updateCampaign,
   importCampaignsFromExcel,
 } from '@/features/campaigns/actions/campaign-actions'
+
+// Default admin context — re-aplicado antes de cada test para evitar fugas
+// entre tests que sobrescriben el mock con `mockRejectedValue`.
+beforeEach(() => {
+  vi.mocked(requireAccess).mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'a@x.com',
+    fullName: 'A',
+    scope: { kind: 'global' as const },
+  })
+})
 
 // Helper to create a chainable drizzle mock
 function makeChain(resolvedValue: unknown) {
@@ -186,10 +227,17 @@ describe('confirmCampaign', () => {
   })
 
   it('solo permite a admin y comercial', async () => {
-    vi.mocked(requireRole).mockRejectedValue(
-      new Error('No tienes permiso para realizar esta accion.'),
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
+    await expect(confirmCampaign('camp-1')).rejects.toThrow('permiso')
+  })
+
+  it('admin_area+logistica es rechazado (no puede confirmar campañas)', async () => {
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para esta area.'),
+    )
     await expect(confirmCampaign('camp-1')).rejects.toThrow('permiso')
   })
 })
@@ -341,8 +389,8 @@ describe('getCampaignById', () => {
   })
 
   it('propagates error when requireRole rejects', async () => {
-    vi.mocked(requireRole).mockRejectedValue(
-      new Error('No tienes permiso para realizar esta accion.'),
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getCampaignById('camp-1')).rejects.toThrow('permiso')
@@ -429,9 +477,9 @@ describe('updateCampaign', () => {
     )
   })
 
-  it('propagates error when requireRole rejects', async () => {
-    vi.mocked(requireRole).mockRejectedValue(
-      new Error('No tienes permiso para realizar esta accion.'),
+  it('propagates error when requireAccess rejects', async () => {
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
@@ -531,8 +579,8 @@ describe('getCampaignsList con filtros adicionales', () => {
   })
 
   it('propagates error when requireRole rejects', async () => {
-    vi.mocked(requireRole).mockRejectedValue(
-      new Error('No tienes permiso para realizar esta accion.'),
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getCampaignsList()).rejects.toThrow('permiso')
@@ -776,7 +824,9 @@ describe('importCampaignsFromExcel', () => {
     const result = await importCampaignsFromExcel([validRow])
 
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0].reason).toBe('Error al guardar en la base de datos')
+    expect(result.errors[0].reason).toBe(
+      'Error al guardar en la base de datos (revisa los logs del servidor).',
+    )
   })
 
   it('procesa múltiples filas: importadas + omitidas + errores', async () => {
@@ -805,8 +855,8 @@ describe('importCampaignsFromExcel', () => {
     expect(result.errors).toHaveLength(1)
   })
 
-  it('lanza error cuando requireRole rechaza', async () => {
-    vi.mocked(requireRole).mockRejectedValue(new Error('Sin permiso'))
+  it('lanza error cuando requireAccess rechaza', async () => {
+    vi.mocked(requireAccess).mockRejectedValueOnce(new Error('Sin permiso'))
 
     await expect(importCampaignsFromExcel([validRow])).rejects.toThrow('Sin permiso')
   })

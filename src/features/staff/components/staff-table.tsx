@@ -12,8 +12,8 @@ import { Eye, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { StaffStatusBadge } from './staff-status-badge'
-import { STAFF_PROFILE_LABELS, PAGE_LIMIT } from '@/features/staff/lib/constants'
-import type { StaffListRow } from '@/features/staff/actions/staff-actions'
+import { getStaffProfileLabel, PAGE_LIMIT } from '@/features/staff/lib/constants'
+import type { StaffListRow } from '@/features/staff/actions/staff-types'
 
 interface StaffTableProps {
   data: StaffListRow[]
@@ -44,7 +44,7 @@ export function StaffTable({ data, total, page, onPageChange, onEdit, onDelete, 
       }),
       columnHelper.accessor('staffProfile', {
         header: 'Perfil',
-        cell: (info) => STAFF_PROFILE_LABELS[info.getValue()] ?? info.getValue(),
+        cell: (info) => getStaffProfileLabel(info.getValue()) ?? info.getValue(),
       }),
       columnHelper.accessor('trainingAreaNames', {
         header: 'Área',

@@ -24,11 +24,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { WEEKLY_HOURS_CONTRACT } from '@/features/assignments/lib/validation-constants'
 import { setMyAvailability } from '../actions/my-agenda-actions'
 import type { MyAgendaData } from '../actions/my-agenda-actions'
 import type { Role } from '@/types/roles'
-import { WeeklyCalendarView } from './weekly-calendar-view'
+import { WeeklyCalendarView } from '@/components/data-display/weekly-calendar-view'
 
 // ---- Helpers --------------------------------------------------------------
 
@@ -123,7 +122,14 @@ function BalanceBadge({ state }: { state: string }) {
   if (state === 'horas_extras') {
     return <Badge variant="secondary">Horas extras</Badge>
   }
-  return <Badge variant="destructive">Debe horas</Badge>
+  return (
+    <Badge
+      variant="outline"
+      className="border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-400 dark:border-blue-500/50"
+    >
+      Disponible
+    </Badge>
+  )
 }
 
 // ---- Sede Shifts Section --------------------------------------------------
@@ -170,7 +176,16 @@ function SedeShiftsSection({ shifts }: { shifts: MyAgendaData['sedeShiftsThisWee
                 </TableCell>
                 <TableCell>{shift.startTime}</TableCell>
                 <TableCell>{shift.endTime}</TableCell>
-                <TableCell className="text-right font-medium">{shift.totalHours}h</TableCell>
+                <TableCell
+                  className="text-right font-medium"
+                  title={
+                    shift.shiftType === 'diurno_completo'
+                      ? 'Horas efectivas (descuenta 1h de almuerzo en Diurno completo)'
+                      : 'Horas efectivas del turno'
+                  }
+                >
+                  {shift.totalHours}h
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -349,7 +364,7 @@ function AvailabilityForm() {
 
 // ---- Main Component -------------------------------------------------------
 
-export function MyAgendaClient({ data, currentRole }: MyAgendaClientProps) {
+export function MyAgendaClient({ data, currentRole: _currentRole }: MyAgendaClientProps) {
   const workedHours = data.weeklyBalance?.workedHours ?? 0
   const extraHours = data.weeklyBalance?.extraHours ?? 0
   const balanceState = data.weeklyBalance?.balanceState ?? 'debe_horas'
@@ -376,8 +391,8 @@ export function MyAgendaClient({ data, currentRole }: MyAgendaClientProps) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Horas trabajadas esta semana"
-          value={`${workedHours}h / ${WEEKLY_HOURS_CONTRACT}h`}
-          subtitle={balanceState !== 'debe_horas' ? undefined : `Faltan ${WEEKLY_HOURS_CONTRACT - workedHours}h`}
+          value={`${workedHours}h / ${data.contractWeeklyHours}h`}
+          subtitle={balanceState !== 'debe_horas' ? undefined : `Faltan ${data.contractWeeklyHours - workedHours}h`}
           color={hoursColor}
         />
         <StatCard
@@ -387,13 +402,13 @@ export function MyAgendaClient({ data, currentRole }: MyAgendaClientProps) {
         />
         <StatCard
           label="Domingos este mes"
-          value={`${data.monthlyCounters.sundayCount}/2`}
-          color={data.monthlyCounters.sundayCount >= 2 ? 'red' : 'green'}
+          value={`${data.monthlyCounters.sundayCount}/${data.maxSundaysMonth}`}
+          color={data.monthlyCounters.sundayCount >= data.maxSundaysMonth ? 'red' : 'green'}
         />
         <StatCard
           label="Pernoctas este mes"
-          value={`${data.monthlyCounters.overnightCount}/1`}
-          color={data.monthlyCounters.overnightCount >= 1 ? 'red' : 'green'}
+          value={`${data.monthlyCounters.overnightCount}/${data.maxOvernightsMonth}`}
+          color={data.monthlyCounters.overnightCount >= data.maxOvernightsMonth ? 'red' : 'green'}
         />
       </div>
 

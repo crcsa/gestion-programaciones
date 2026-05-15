@@ -12,10 +12,27 @@ vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-1', role: 'admin' }),
 }))
 
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-1',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
+}))
+
 vi.mock('@/lib/db/schema/campaigns', () => ({
   campaigns: {
-    id: 'id', campaignDate: 'campaign_date', startTime: 'start_time',
-    endTime: 'end_time', municipality: 'municipality', trainingAreaId: 'training_area_id',
+    id: 'id', campaignDate: 'campaign_date', endDate: 'end_date',
+    startTime: 'start_time', endTime: 'end_time',
+    municipality: 'municipality', trainingAreaId: 'training_area_id',
+  },
+  campaignDays: {
+    id: 'id', campaignId: 'campaign_id', dayDate: 'day_date',
+    startTime: 'start_time', endTime: 'end_time', isOvernight: 'is_overnight',
   },
 }))
 
@@ -97,7 +114,7 @@ describe('assignStaffWithValidation', () => {
   it('validates input schema — rejects invalid staffId', async () => {
     await expect(
       assignStaffWithValidation({ campaignId, staffId: 'bad-id' }),
-    ).rejects.toThrow('funcionario')
+    ).rejects.toThrow('colaborador')
   })
 
   it('assigns directly when validation passes (clean ctx)', async () => {
@@ -105,15 +122,17 @@ describe('assignStaffWithValidation', () => {
     mockDb.select = vi.fn(() => {
       selectCount++
       if (selectCount === 1) return makeChain([mockCampaign])        // campaign
-      if (selectCount === 2) return makeChain([])                    // already assigned
-      if (selectCount === 3) return makeChain(mockStaff)             // all staff
-      if (selectCount === 4) return makeChain([])                    // training areas
-      if (selectCount === 5) return makeChain([])                    // availability
-      if (selectCount === 6) return makeChain([])                    // same day shifts
-      if (selectCount === 7) return makeChain([])                    // same day campaigns
-      if (selectCount === 8) return makeChain([])                    // prev day shifts
-      if (selectCount === 9) return makeChain([])                    // weekly balance
-      if (selectCount === 10) return makeChain([])                   // monthly counters
+      if (selectCount === 2) return makeChain([])                    // campaignDays
+      if (selectCount === 3) return makeChain([])                    // already assigned
+      if (selectCount === 4) return makeChain(mockStaff)             // all staff
+      if (selectCount === 5) return makeChain([])                    // training areas
+      if (selectCount === 6) return makeChain([])                    // availability
+      if (selectCount === 7) return makeChain([])                    // same day shifts
+      if (selectCount === 8) return makeChain([])                    // overlappingCampaignDays
+      if (selectCount === 9) return makeChain([])                    // legacyOverlapping
+      if (selectCount === 10) return makeChain([])                   // prev day shifts
+      if (selectCount === 11) return makeChain([])                   // weekly balance
+      if (selectCount === 12) return makeChain([])                   // monthly counters
       return makeChain([])
     })
 
@@ -127,11 +146,12 @@ describe('assignStaffWithValidation', () => {
     mockDb.select = vi.fn(() => {
       selectCount++
       if (selectCount === 1) return makeChain([mockCampaign])
-      if (selectCount === 2) return makeChain([])          // not already assigned
-      if (selectCount === 3) return makeChain(mockStaff)
-      if (selectCount === 4) return makeChain([])
+      if (selectCount === 2) return makeChain([])             // campaignDays
+      if (selectCount === 3) return makeChain([])             // not already assigned
+      if (selectCount === 4) return makeChain(mockStaff)
+      if (selectCount === 5) return makeChain([])             // training areas
       // availability: vacaciones → warn
-      if (selectCount === 5) return makeChain([{ staffId, status: 'vacaciones' }])
+      if (selectCount === 6) return makeChain([{ staffId, availabilityDate: '2026-03-16', status: 'vacaciones' }])
       return makeChain([])
     })
 
@@ -153,9 +173,10 @@ describe('assignStaffWithValidation', () => {
     mockDb.select = vi.fn(() => {
       selectCount++
       if (selectCount === 1) return makeChain([campaignWithArea])
-      if (selectCount === 2) return makeChain([])      // not assigned
-      if (selectCount === 3) return makeChain(mockStaff)
-      if (selectCount === 4) return makeChain([])      // staff has no training areas
+      if (selectCount === 2) return makeChain([])      // campaignDays
+      if (selectCount === 3) return makeChain([])      // not assigned
+      if (selectCount === 4) return makeChain(mockStaff)
+      if (selectCount === 5) return makeChain([])      // staff has no training areas
       return makeChain([])
     })
 
@@ -170,15 +191,9 @@ describe('assignStaffWithValidation', () => {
     mockDb.select = vi.fn(() => {
       selectCount++
       if (selectCount === 1) return makeChain([mockCampaign])        // campaign
-      if (selectCount === 2) return makeChain([{ staffId }])         // already assigned: includes target
-      if (selectCount === 3) return makeChain([{ id: otherStaffId, firstName: 'Other', lastName: 'Staff', staffProfile: 'tecnico' }])
-      if (selectCount === 4) return makeChain([])  // training areas
-      if (selectCount === 5) return makeChain([])  // availability
-      if (selectCount === 6) return makeChain([])  // same day shifts
-      if (selectCount === 7) return makeChain([])  // same day campaigns
-      if (selectCount === 8) return makeChain([])  // prev day shifts
-      if (selectCount === 9) return makeChain([])  // weekly balance
-      if (selectCount === 10) return makeChain([]) // monthly counters
+      if (selectCount === 2) return makeChain([])                    // campaignDays
+      if (selectCount === 3) return makeChain([{ staffId }])         // already assigned: includes target
+      if (selectCount === 4) return makeChain([{ id: otherStaffId, firstName: 'Other', lastName: 'Staff', staffProfile: 'tecnico' }])
       return makeChain([])
     })
 
@@ -192,15 +207,17 @@ describe('assignStaffWithValidation', () => {
     mockDb.select = vi.fn(() => {
       selectCount++
       if (selectCount === 1) return makeChain([mockCampaign])        // campaign
-      if (selectCount === 2) return makeChain([])                    // already assigned
-      if (selectCount === 3) return makeChain(mockStaff)             // all staff
-      if (selectCount === 4) return makeChain([])                    // training areas
-      if (selectCount === 5) return makeChain([])                    // availability
-      if (selectCount === 6) return makeChain([])                    // same day shifts (non-overlapping)
-      if (selectCount === 7) return makeChain([{ staffId, startTime: '16:00', endTime: '18:00' }])  // same day campaigns after
-      if (selectCount === 8) return makeChain([{ staffId, endTime: '22:00' }])  // prev day shifts → descanso warn
-      if (selectCount === 9) return makeChain([{ staffId, extraHours: 5 }])     // weekly balance
-      if (selectCount === 10) return makeChain([{ staffId, sundayCount: 1, overnightCount: 0 }])  // monthly counters
+      if (selectCount === 2) return makeChain([])                    // campaignDays
+      if (selectCount === 3) return makeChain([])                    // already assigned
+      if (selectCount === 4) return makeChain(mockStaff)             // all staff
+      if (selectCount === 5) return makeChain([])                    // training areas
+      if (selectCount === 6) return makeChain([])                    // availability
+      if (selectCount === 7) return makeChain([])                    // same day shifts (non-overlapping)
+      if (selectCount === 8) return makeChain([])                    // overlappingCampaignDays
+      if (selectCount === 9) return makeChain([])                    // legacyOverlapping
+      if (selectCount === 10) return makeChain([{ staffId, endTime: '22:00' }])  // prev day shifts → descanso warn
+      if (selectCount === 11) return makeChain([{ staffId, extraHours: 5 }])     // weekly balance
+      if (selectCount === 12) return makeChain([{ staffId, sundayCount: 1, overnightCount: 0 }])  // monthly counters
       return makeChain([])
     })
 

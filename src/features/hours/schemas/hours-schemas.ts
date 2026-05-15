@@ -26,3 +26,38 @@ export const registerTimelineEventSchema = z.object({
 })
 
 export type RegisterTimelineEventInput = z.infer<typeof registerTimelineEventSchema>
+
+const timelineEventTypeSchema = z.enum([
+  'salida_sede',
+  'llegada_punto',
+  'inicio_donaciones',
+  'salida_almuerzo',
+  'regreso_almuerzo',
+  'fin_donaciones',
+  'recogida',
+  'llegada_sede',
+  'fin',
+])
+
+export const scheduleTimelineEventsBatchSchema = z.object({
+  campaignId: z.uuid({ error: 'ID de campaña no válido' }),
+  events: z
+    .array(
+      z.object({
+        eventType: timelineEventTypeSchema,
+        scheduledTime: z.string().datetime({ message: 'Formato de fecha y hora inválido' }),
+      }),
+    )
+    .min(1, 'Debe enviar al menos un evento')
+    .max(9, 'Máximo 9 eventos por lote'),
+})
+
+export type ScheduleTimelineEventsBatchInput = z.infer<typeof scheduleTimelineEventsBatchSchema>
+
+export const registerActualTimeSchema = z.object({
+  campaignId: z.uuid({ error: 'ID de campaña no válido' }),
+  eventType: timelineEventTypeSchema,
+  actualTime: z.string().datetime({ message: 'Formato de fecha y hora inválido' }),
+})
+
+export type RegisterActualTimeInput = z.infer<typeof registerActualTimeSchema>

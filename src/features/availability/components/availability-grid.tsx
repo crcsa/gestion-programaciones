@@ -1,7 +1,7 @@
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { AvailabilityCell } from './availability-cell'
-import type { AvailabilityGridRow } from '../actions/availability-actions'
+import type { AvailabilityGridRow } from '../actions/availability-types'
 
 interface AvailabilityGridProps {
   rows: AvailabilityGridRow[]
@@ -24,7 +24,7 @@ export function AvailabilityGrid({ rows, weekStart }: AvailabilityGridProps) {
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
-        No hay funcionarios para mostrar.
+        No hay colaboradores para mostrar.
       </div>
     )
   }
@@ -35,7 +35,7 @@ export function AvailabilityGrid({ rows, weekStart }: AvailabilityGridProps) {
         <thead>
           <tr className="border-b border-border bg-muted/50">
             <th className="sticky left-0 z-10 bg-muted/50 px-4 py-2 text-left font-medium text-muted-foreground min-w-[180px]">
-              Funcionario
+              Colaborador
             </th>
             {weekDates.map((date, i) => (
               <th key={date} className="px-2 py-2 text-center font-medium text-muted-foreground min-w-[80px]">

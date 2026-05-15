@@ -1,6 +1,16 @@
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { ComercialDashboardData, UpcomingCampaign } from '../actions/dashboard-actions'
+import {
+  getCampaignsTrendByMonth,
+  getCampaignsByModality,
+  getCampaignsByStatusDistribution,
+} from '../lib/dashboard-queries'
+import { CampaignsTrendChart } from './charts/campaigns-trend-chart'
+import { ModalityPieChart } from './charts/modality-pie-chart'
+import { StatusDistributionChart } from './charts/status-distribution-chart'
 
 const SIZE_LABELS: Record<string, string> = {
   S: 'S',
@@ -46,27 +56,92 @@ function CampaignList({
   )
 }
 
-export function ComercialDashboard({ data }: Props) {
+export async function ComercialDashboard({ data }: Props) {
+  const [trend, modality, statusDist] = await Promise.all([
+    getCampaignsTrendByMonth(6),
+    getCampaignsByModality(3),
+    getCampaignsByStatusDistribution(),
+  ])
+
+  const tentativaCount = data.pendingTentativeCampaigns.length
+  const confirmedCount = data.upcomingConfirmedCampaigns.length
+  const ratio = tentativaCount + confirmedCount > 0
+    ? Math.round((confirmedCount / (tentativaCount + confirmedCount)) * 100)
+    : 0
+
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Campañas tentativas pendientes
-            {data.pendingTentativeCampaigns.length > 0 && (
-              <Badge variant="outline" className="ml-2">
-                {data.pendingTentativeCampaigns.length}
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <CampaignList
-            campaigns={data.pendingTentativeCampaigns}
-            emptyMessage="No hay campañas tentativas pendientes."
-          />
-        </CardContent>
-      </Card>
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Tentativas pendientes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{tentativaCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Próximas confirmadas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{confirmedCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Ratio de confirmación
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{ratio}%</p>
+            <p className="text-xs text-muted-foreground">Confirmadas / total programadas</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Capacidad
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button
+              render={<Link href="/disponibilidad" />}
+              variant="outline"
+              size="sm"
+              className="w-full"
+            >
+              Ver matriz mensual
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <CampaignsTrendChart data={trend} />
+        <ModalityPieChart data={modality} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StatusDistributionChart data={statusDist} />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Tentativas pendientes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CampaignList
+              campaigns={data.pendingTentativeCampaigns}
+              emptyMessage="No hay campañas tentativas pendientes."
+            />
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>

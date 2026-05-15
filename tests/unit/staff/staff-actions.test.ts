@@ -10,8 +10,24 @@ vi.mock('@/lib/db', () => ({
   },
 }))
 
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+}))
+
 vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
+}))
+
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
 }))
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -43,6 +59,7 @@ vi.mock('@/lib/audit/log-audit', () => ({
 
 import { db } from '@/lib/db'
 import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import {
   createStaff,
   updateTrainingAreas,
@@ -95,11 +112,13 @@ describe('createStaff', () => {
     const selectChain = makeChain(existingStaff)
     mockDb.select = vi.fn(() => selectChain)
     await expect(createStaff(validInput)).rejects.toThrow(
-      'Ya existe un funcionario con esa cedula'
+      'Ya existe un colaborador con esa cedula'
     )
   })
 
-  it('crea staff exitosamente cuando cedula no existe', async () => {
+  it('crea staff exitosamente cuando cedula no existe (sin credenciales)', async () => {
+    // createStaff ya NO crea auth user ni profile: el colaborador queda
+    // "Sin acceso" hasta que se le creen credenciales desde /usuarios.
     const createdStaff = {
       id: 'new-id',
       firstName: 'Ana',
@@ -110,7 +129,8 @@ describe('createStaff', () => {
       contractType: 'indefinido' as const,
       weeklyHours: 40,
       defaultShift: 'diurno_completo' as const,
-      profileId: 'auth-user-456',
+      profileId: null,
+      area: 'banco_sangre' as const,
       isActive: true,
       hireDate: null,
       notes: null,
@@ -119,20 +139,101 @@ describe('createStaff', () => {
       updatedAt: new Date(),
     }
 
-    // select (cedula check) → empty
-    mockDb.select = vi.fn(() => makeChain([]))
-    // insert: first call = profiles (no returning, void), second call = staffMembers (.returning())
+    mockDb.select = vi.fn(() => makeChain([])) // cedula libre
     let insertCallCount = 0
     mockDb.insert = vi.fn(() => {
       insertCallCount++
-      // Both calls return a chain; only staffMembers insert uses .returning()
-      // The chain's 'then' resolves to [createdStaff] for both, which works for destructuring
       return makeChain([createdStaff])
     })
     const result = await createStaff(validInput)
     expect(result.cedula).toBe('1234567890')
     expect(result.id).toBe('new-id')
-    expect(insertCallCount).toBe(2)
+    expect(result.profileId).toBeNull()
+    // Solo un insert: staffMembers. No profiles ni auth user.
+    expect(insertCallCount).toBe(1)
+  })
+
+  // ---- Matriz area × staff_profile (Fase 1 de separación estricta) --------
+  // Admin global puede elegir el área del input. Validamos que el cruce
+  // resultante respete ALLOWED_PROFILES_BY_AREA.
+
+  describe('matriz area × profile (admin global)', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    const invalidCombos: Array<{
+      area: 'banco_sangre' | 'comercial' | 'logistica'
+      staffProfile:
+        | 'bacteriologo'
+        | 'tecnico'
+        | 'medico'
+        | 'auxiliar'
+        | 'comercial'
+        | 'conductor'
+    }> = [
+      { area: 'banco_sangre', staffProfile: 'comercial' },
+      { area: 'banco_sangre', staffProfile: 'conductor' },
+      { area: 'comercial', staffProfile: 'bacteriologo' },
+      { area: 'comercial', staffProfile: 'conductor' },
+      { area: 'logistica', staffProfile: 'tecnico' },
+      { area: 'logistica', staffProfile: 'comercial' },
+    ]
+
+    for (const combo of invalidCombos) {
+      it(`rechaza ${combo.area} + ${combo.staffProfile}`, async () => {
+        // El schema falla antes de tocar DB; basta con verificar que rechaza.
+        await expect(
+          createStaff({
+            ...validInput,
+            area: combo.area,
+            staffProfile: combo.staffProfile,
+          }),
+        ).rejects.toThrow()
+      })
+    }
+
+    it('acepta banco_sangre + tecnico', async () => {
+      mockDb.select = vi.fn(() => makeChain([]))
+      mockDb.insert = vi.fn(() =>
+        makeChain([{ id: 'new', cedula: '1111111111', staffProfile: 'tecnico' }]),
+      )
+      const result = await createStaff({
+        ...validInput,
+        cedula: '1111111111',
+        area: 'banco_sangre',
+        staffProfile: 'tecnico',
+      })
+      expect(result.id).toBe('new')
+    })
+
+    it('acepta comercial + comercial', async () => {
+      mockDb.select = vi.fn(() => makeChain([]))
+      mockDb.insert = vi.fn(() =>
+        makeChain([{ id: 'new', cedula: '2222222222', staffProfile: 'comercial' }]),
+      )
+      const result = await createStaff({
+        ...validInput,
+        cedula: '2222222222',
+        area: 'comercial',
+        staffProfile: 'comercial',
+      })
+      expect(result.id).toBe('new')
+    })
+
+    it('acepta logistica + conductor', async () => {
+      mockDb.select = vi.fn(() => makeChain([]))
+      mockDb.insert = vi.fn(() =>
+        makeChain([{ id: 'new', cedula: '3333333333', staffProfile: 'conductor' }]),
+      )
+      const result = await createStaff({
+        ...validInput,
+        cedula: '3333333333',
+        area: 'logistica',
+        staffProfile: 'conductor',
+      })
+      expect(result.id).toBe('new')
+    })
   })
 })
 
@@ -258,11 +359,7 @@ describe('toggleStaffStatus', () => {
     const existingStaff = [{ id: staffId, isActive: true }]
     const updatedStaff = [{ id: staffId, isActive: false }]
 
-    let selectCallCount = 0
-    mockDb.select = vi.fn(() => {
-      selectCallCount++
-      return makeChain(existingStaff)
-    })
+    mockDb.select = vi.fn(() => makeChain(existingStaff))
     const updateChain = makeChain(updatedStaff)
     mockDb.update = vi.fn(() => updateChain)
     const result = await toggleStaffStatus(staffId)
@@ -274,7 +371,7 @@ describe('toggleStaffStatus', () => {
   it('lanza error si el staff no existe', async () => {
     mockDb.select = vi.fn(() => makeChain([]))
     await expect(toggleStaffStatus('no-existe')).rejects.toThrow(
-      'Funcionario no encontrado'
+      'Colaborador no encontrado'
     )
   })
 })
@@ -287,7 +384,7 @@ describe('getStaffById', () => {
     mockRequireRole.mockResolvedValue({ userId: 'user-123', role: 'admin' })
   })
 
-  it('retorna el funcionario con sus areas de entrenamiento cuando existe', async () => {
+  it('retorna el colaborador con sus areas de entrenamiento cuando existe', async () => {
     const staffId = 'staff-found'
     const staffRow = {
       id: staffId,
@@ -315,16 +412,16 @@ describe('getStaffById', () => {
     expect(selectCallCount).toBe(2)
   })
 
-  it('lanza error cuando el funcionario no existe', async () => {
+  it('lanza error cuando el colaborador no existe', async () => {
     mockDb.select = vi.fn(() => makeChain([]))
 
     await expect(getStaffById('id-inexistente')).rejects.toThrow(
-      'Funcionario no encontrado'
+      'Colaborador no encontrado'
     )
   })
 
-  it('lanza error de permiso cuando requireRole rechaza', async () => {
-    mockRequireRole.mockRejectedValue(new Error('Sin permiso para acceder'))
+  it('lanza error de permiso cuando requireAccess rechaza', async () => {
+    vi.mocked(requireAccess).mockRejectedValueOnce(new Error('Sin permiso para acceder'))
 
     await expect(getStaffById('any-id')).rejects.toThrow('Sin permiso para acceder')
   })
@@ -349,12 +446,20 @@ describe('updateStaff', () => {
     mockRequireRole.mockResolvedValue({ userId: 'user-123', role: 'admin' })
   })
 
-  it('actualiza el funcionario exitosamente cuando los datos son validos', async () => {
+  it('actualiza el colaborador exitosamente cuando los datos son validos', async () => {
     const updatedRow = { id: staffId, ...validUpdateData, isActive: true }
-
-    // select for cedula duplicate check → empty (no conflict)
-    mockDb.select = vi.fn(() => makeChain([]))
-    // update → returns updated row
+    // El update ahora hace un select previo del area+profile actual para
+    // validar la combinación final cuando staffProfile o area cambian.
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) {
+        // profile×area pre-check: staff existente.
+        return makeChain([{ area: 'banco_sangre', staffProfile: 'bacteriologo' }])
+      }
+      // cedula duplicate check → empty.
+      return makeChain([])
+    })
     mockDb.update = vi.fn(() => makeChain([updatedRow]))
 
     const result = await updateStaff(staffId, validUpdateData)
@@ -364,29 +469,41 @@ describe('updateStaff', () => {
     expect(mockDb.update).toHaveBeenCalledTimes(1)
   })
 
-  it('lanza error cuando la cedula ya existe en otro funcionario', async () => {
-    // select for cedula duplicate check → conflict found
-    mockDb.select = vi.fn(() => makeChain([{ id: 'other-staff-id' }]))
+  it('lanza error cuando la cedula ya existe en otro colaborador', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) {
+        return makeChain([{ area: 'banco_sangre', staffProfile: 'bacteriologo' }])
+      }
+      return makeChain([{ id: 'other-staff-id' }])
+    })
 
     await expect(updateStaff(staffId, validUpdateData)).rejects.toThrow(
-      'Ya existe otro funcionario con esa cedula'
+      'Ya existe otro colaborador con esa cedula'
     )
     expect(mockDb.update).not.toHaveBeenCalled()
   })
 
-  it('lanza error cuando el funcionario no existe (update no retorna filas)', async () => {
-    // select for cedula duplicate check → empty
-    mockDb.select = vi.fn(() => makeChain([]))
-    // update returning → empty array (not found)
+  it('lanza error cuando el colaborador no existe (update no retorna filas)', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) {
+        return makeChain([{ area: 'banco_sangre', staffProfile: 'bacteriologo' }])
+      }
+      return makeChain([])
+    })
     mockDb.update = vi.fn(() => makeChain([]))
 
     await expect(updateStaff(staffId, validUpdateData)).rejects.toThrow(
-      'Funcionario no encontrado'
+      'Colaborador no encontrado'
     )
   })
 
-  it('lanza error de permiso cuando requireRole rechaza', async () => {
-    mockRequireRole.mockRejectedValue(new Error('Sin permiso para acceder'))
+  it('lanza error de permiso cuando requireAccess rechaza', async () => {
+    const { requireAccess } = await import('@/features/auth/lib/require-access')
+    vi.mocked(requireAccess).mockRejectedValueOnce(new Error('Sin permiso para acceder'))
 
     await expect(updateStaff(staffId, validUpdateData)).rejects.toThrow('Sin permiso para acceder')
   })
@@ -429,8 +546,9 @@ describe('updateTrainingAreas - cobertura adicional', () => {
     expect(mockDb.insert).toHaveBeenCalledTimes(1)
   })
 
-  it('lanza error de permiso cuando requireRole rechaza', async () => {
-    mockRequireRole.mockRejectedValue(new Error('Sin permiso para acceder'))
+  it('lanza error de permiso cuando requireAccess rechaza', async () => {
+    const { requireAccess } = await import('@/features/auth/lib/require-access')
+    vi.mocked(requireAccess).mockRejectedValueOnce(new Error('Sin permiso para acceder'))
 
     await expect(updateTrainingAreas('staff-id', ['area-1'])).rejects.toThrow('Sin permiso para acceder')
   })
@@ -454,7 +572,7 @@ describe('updateStaff — ramas de error', () => {
 
     await expect(
       updateStaff(validId, { firstName: 'Test', lastName: 'User' }),
-    ).rejects.toThrow('Error al actualizar el funcionario')
+    ).rejects.toThrow('Error al actualizar el colaborador')
   })
 })
 
@@ -471,7 +589,7 @@ describe('toggleStaffStatus — ramas de error', () => {
 
     await expect(
       toggleStaffStatus('staff-1'),
-    ).rejects.toThrow('Error al cambiar el estado del funcionario')
+    ).rejects.toThrow('Error al cambiar el estado del colaborador')
   })
 })
 
@@ -493,29 +611,8 @@ describe('createStaff — validation and auth error paths', () => {
     ).rejects.toThrow()
   })
 
-  it('throws when supabase auth fails', async () => {
-    const { getSupabaseAdmin } = await import('@/lib/supabase/admin')
-    vi.mocked(getSupabaseAdmin).mockReturnValueOnce({
-      auth: {
-        admin: {
-          createUser: vi.fn().mockResolvedValue({ data: { user: null }, error: new Error('Auth service down') }),
-        },
-      },
-    } as unknown as ReturnType<typeof getSupabaseAdmin>)
-
-    mockDb.select = vi.fn(() => makeChain([]))  // cedula check passes
-
-    await expect(createStaff({
-      firstName: 'Ana',
-      lastName: 'García',
-      cedula: '9990001111',
-      email: 'ana@example.com',
-      staffProfile: 'bacteriologo' as const,
-      contractType: 'indefinido' as const,
-      weeklyHours: 40,
-      defaultShift: 'diurno_completo' as const,
-    })).rejects.toThrow('autenticaci')
-  })
+  // createStaff ya no toca Supabase Auth: el colaborador queda "Sin acceso"
+  // y las credenciales se crean por separado desde /usuarios.
 
   it('wraps generic DB error with friendly message', async () => {
     mockDb.select = vi.fn(() => makeChain([]))  // cedula check
@@ -530,7 +627,7 @@ describe('createStaff — validation and auth error paths', () => {
       contractType: 'indefinido' as const,
       weeklyHours: 40,
       defaultShift: 'diurno_completo' as const,
-    })).rejects.toThrow('base de datos')
+    })).rejects.toThrow('Error al crear el colaborador')
   })
 })
 
@@ -620,7 +717,7 @@ describe('updateStaff — con trainingAreaIds', () => {
 describe('createStaff — generic outer error (línea 273)', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('wraps unknown error with Error al crear el funcionario', async () => {
+  it('wraps unknown error with Error al crear el colaborador', async () => {
     // Throwing in cedula-check with a message that matches none of the re-throw keywords
     mockDb.select = vi.fn(() => { throw new Error('connection refused') })
 
@@ -633,7 +730,7 @@ describe('createStaff — generic outer error (línea 273)', () => {
       contractType: 'indefinido' as const,
       weeklyHours: 40,
       defaultShift: 'diurno_completo' as const,
-    })).rejects.toThrow('Error al crear el funcionario')
+    })).rejects.toThrow('Error al crear el colaborador')
   })
 })
 
@@ -647,7 +744,7 @@ describe('deleteStaff', () => {
     vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
   })
 
-  it('elimina funcionario con profileId (llama supabase deleteUser)', async () => {
+  it('elimina colaborador con profileId (llama supabase deleteUser)', async () => {
     const staffRow = { id: staffId, profileId: 'auth-user-abc' }
     mockDb.select = vi.fn(() => makeChain([staffRow]))
     mockDb.delete = vi.fn(() => makeChain([]))
@@ -656,7 +753,7 @@ describe('deleteStaff', () => {
     expect(mockDb.delete).toHaveBeenCalledTimes(2) // training areas + staff
   })
 
-  it('elimina funcionario sin profileId (no llama supabase)', async () => {
+  it('elimina colaborador sin profileId (no llama supabase)', async () => {
     const staffRow = { id: staffId, profileId: null }
     mockDb.select = vi.fn(() => makeChain([staffRow]))
     mockDb.delete = vi.fn(() => makeChain([]))
@@ -665,20 +762,20 @@ describe('deleteStaff', () => {
     expect(mockDb.delete).toHaveBeenCalledTimes(2)
   })
 
-  it('lanza error cuando el funcionario no existe', async () => {
+  it('lanza error cuando el colaborador no existe', async () => {
     mockDb.select = vi.fn(() => makeChain([]))
 
-    await expect(deleteStaff(staffId)).rejects.toThrow('Funcionario no encontrado')
+    await expect(deleteStaff(staffId)).rejects.toThrow('Colaborador no encontrado')
   })
 
   it('envuelve errores de DB genéricos con mensaje descriptivo', async () => {
     mockDb.select = vi.fn(() => { throw new Error('DB down') })
 
-    await expect(deleteStaff(staffId)).rejects.toThrow('Error al eliminar el funcionario')
+    await expect(deleteStaff(staffId)).rejects.toThrow('Error al eliminar el colaborador')
   })
 
   it('lanza error de permiso cuando requireRole rechaza', async () => {
-    vi.mocked(requireRole).mockRejectedValue(new Error('Sin permiso'))
+    vi.mocked(requireAccess).mockRejectedValueOnce(new Error('Sin permiso'))
 
     await expect(deleteStaff(staffId)).rejects.toThrow('Sin permiso')
   })
@@ -708,39 +805,9 @@ describe('getStaffList — empty result skips DB area query', () => {
   })
 })
 
-describe('createStaff — email already taken branch', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(requireRole).mockResolvedValue({ userId: 'user-1', role: 'admin' })
-  })
-
-  it('throws Ya existe una cuenta when auth returns already been registered error', async () => {
-    const { getSupabaseAdmin } = await import('@/lib/supabase/admin')
-    vi.mocked(getSupabaseAdmin).mockReturnValueOnce({
-      auth: {
-        admin: {
-          createUser: vi.fn().mockResolvedValue({
-            data: { user: null },
-            error: { message: 'User already been registered' },
-          }),
-        },
-      },
-    } as unknown as ReturnType<typeof getSupabaseAdmin>)
-
-    mockDb.select = vi.fn(() => makeChain([]))  // cedula check passes
-
-    await expect(createStaff({
-      firstName: 'María',
-      lastName: 'Pérez',
-      cedula: '5556667778',
-      email: 'maria@example.com',
-      staffProfile: 'bacteriologo' as const,
-      contractType: 'indefinido' as const,
-      weeklyHours: 40,
-      defaultShift: 'diurno_completo' as const,
-    })).rejects.toThrow('Ya existe una cuenta de acceso con ese correo')
-  })
-})
+// La rama "email ya registrado en Supabase Auth" desapareció de createStaff:
+// el flujo ya no crea auth user. Las colisiones de correo se detectan ahora
+// solo cuando el admin crea credenciales desde /usuarios (createUser).
 
 describe('createStaff — with trainingAreaIds inserts area rows', () => {
   beforeEach(() => {
@@ -753,7 +820,8 @@ describe('createStaff — with trainingAreaIds inserts area rows', () => {
       id: 'new-id-2', firstName: 'Pedro', lastName: 'Ruiz', cedula: '7778889990',
       email: 'pedro@example.com', staffProfile: 'tecnico' as const,
       contractType: 'indefinido' as const, weeklyHours: 40,
-      defaultShift: 'diurno_completo' as const, profileId: 'auth-id-2',
+      defaultShift: 'diurno_completo' as const, profileId: null,
+      area: 'banco_sangre' as const,
       isActive: true, hireDate: null, notes: null, phone: null,
       createdAt: new Date(), updatedAt: new Date(),
     }
@@ -770,7 +838,7 @@ describe('createStaff — with trainingAreaIds inserts area rows', () => {
       trainingAreaIds: [areaId],
     })
 
-    // 3 inserts: profiles + staffMembers + staffTrainingAreas
-    expect(insertCount).toBe(3)
+    // 2 inserts: staffMembers + staffTrainingAreas (sin profiles, sin auth).
+    expect(insertCount).toBe(2)
   })
 })

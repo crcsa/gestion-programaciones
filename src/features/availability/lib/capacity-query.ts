@@ -1,12 +1,14 @@
 import { eq, and, gte, lte, inArray } from 'drizzle-orm'
+import { ValidationError } from '@/lib/errors/app-errors'
 import { db } from '@/lib/db'
 import { staffMembers } from '@/lib/db/schema/staff-members'
 import { staffAvailability } from '@/lib/db/schema/staff-availability'
 import { sedeShifts } from '@/lib/db/schema/sede-shifts'
 import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
 import { campaigns } from '@/lib/db/schema/campaigns'
+import type { Area } from '@/types/areas'
 
-export type CapacityProfile = 'bacteriologo' | 'tecnico' | 'medico' | 'auxiliar'
+export type CapacityProfile = 'bacteriologo' | 'tecnico' | 'medico' | 'auxiliar' | 'comercial' | 'conductor'
 
 export interface DayCapacity {
   date: string
@@ -21,6 +23,7 @@ export interface MonthlyCapacityParams {
   year: number
   month: number // 1-12
   profile?: CapacityProfile
+  area?: Area | null
 }
 
 const UNAVAILABLE_STATUSES = ['vacaciones', 'incapacidad', 'licencia', 'no_disponible']
@@ -37,10 +40,10 @@ function buildMonthDates(year: number, month: number): string[] {
 export async function getMonthlyCapacity(
   params: MonthlyCapacityParams,
 ): Promise<DayCapacity[]> {
-  const { year, month, profile } = params
+  const { year, month, profile, area } = params
 
   if (month < 1 || month > 12) {
-    throw new Error('Mes inválido')
+    throw new ValidationError('Mes inválido')
   }
 
   const dates = buildMonthDates(year, month)
@@ -50,6 +53,9 @@ export async function getMonthlyCapacity(
   const staffConditions = [eq(staffMembers.isActive, true)]
   if (profile) {
     staffConditions.push(eq(staffMembers.staffProfile, profile))
+  }
+  if (area) {
+    staffConditions.push(eq(staffMembers.area, area))
   }
 
   const staff = await db

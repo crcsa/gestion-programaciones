@@ -7,7 +7,7 @@ export const PUBLIC_ROUTES = ['/login']
 
 export const ROLE_DEFAULT_ROUTES: Record<Role, string> = {
   admin: '/',
-  banco_sangre: '/',
+  admin_area: '/',
   comercial: '/campanas',
   operativo: '/mi-agenda',
 }

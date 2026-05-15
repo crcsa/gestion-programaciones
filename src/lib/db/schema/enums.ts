@@ -1,8 +1,15 @@
 import { pgEnum } from 'drizzle-orm/pg-core'
 
-export const roleEnum = pgEnum('role', ['admin', 'banco_sangre', 'comercial', 'operativo'])
+export const roleEnum = pgEnum('role', ['admin', 'admin_area', 'comercial', 'operativo'])
 
-export const staffProfileEnum = pgEnum('staff_profile', ['bacteriologo', 'tecnico', 'medico', 'auxiliar', 'coordinador'])
+export const areaEnum = pgEnum('area', ['banco_sangre', 'comercial', 'logistica'])
+
+// El valor 'coordinador' está deprecado desde la migración 0025: ya no es un
+// perfil — es solo un flag de asignación de campaña (`campaign_assignments.is_coordinator`).
+// Se mantiene en el enum por compatibilidad histórica (Postgres no admite drop
+// fácil de enum values); el trigger `sm_validate_profile_area_trigger` (0024
+// actualizado en 0025) impide nuevas inserciones con `coordinador`.
+export const staffProfileEnum = pgEnum('staff_profile', ['bacteriologo', 'tecnico', 'medico', 'auxiliar', 'coordinador', 'comercial', 'conductor', 'administrador'])
 
 export const contractTypeEnum = pgEnum('contract_type', ['indefinido', 'fijo', 'prestacion_servicios', 'aprendizaje'])
 

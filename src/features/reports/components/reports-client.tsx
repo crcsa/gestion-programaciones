@@ -61,7 +61,7 @@ function formatWeekLabel(weekStart: string): string {
 
 function flattenHoursRows(rows: WeeklyBalanceRow[]): Record<string, unknown>[] {
   return rows.map((r) => ({
-    Funcionario: `${r.lastName}, ${r.firstName}`,
+    Colaborador: `${r.lastName}, ${r.firstName}`,
     Perfil: r.staffProfile,
     'Horas sede': r.sedeHours,
     'Horas campaña': r.campaignHours,
@@ -79,11 +79,18 @@ function flattenHoursRows(rows: WeeklyBalanceRow[]): Record<string, unknown>[] {
 interface ReportsClientProps {
   initialCampaigns: CampaignReportRow[]
   initialHoursRows: WeeklyBalanceRow[]
+  contractHours: number
+  extraHoursLimit: number
 }
 
 // ---- Component -------------------------------------------------------------
 
-export function ReportsClient({ initialCampaigns, initialHoursRows }: ReportsClientProps) {
+export function ReportsClient({
+  initialCampaigns,
+  initialHoursRows,
+  contractHours,
+  extraHoursLimit,
+}: ReportsClientProps) {
   // Hours tab state
   const [weekStart, setWeekStart] = useState(getCurrentMonday)
   const [hoursRows, setHoursRows] = useState<WeeklyBalanceRow[]>(initialHoursRows)
@@ -196,7 +203,12 @@ export function ReportsClient({ initialCampaigns, initialHoursRows }: ReportsCli
             Exportar Excel
           </Button>
         </div>
-        <WeeklyBalanceTable rows={hoursRows} isLoading={hoursLoading} />
+        <WeeklyBalanceTable
+          rows={hoursRows}
+          isLoading={hoursLoading}
+          contractHours={contractHours}
+          extraHoursLimit={extraHoursLimit}
+        />
       </TabsContent>
 
       {/* ── Campañas ── */}

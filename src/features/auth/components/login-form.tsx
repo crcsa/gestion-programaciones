@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { signIn, type LoginState } from '@/features/auth/actions/auth-actions'
+import { signIn } from '@/features/auth/actions/auth-actions'
+import type { LoginState } from '@/features/auth/actions/auth-types'
 
 const initialState: LoginState = {}
 

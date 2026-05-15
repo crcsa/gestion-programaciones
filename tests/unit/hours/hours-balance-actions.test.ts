@@ -12,6 +12,18 @@ vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-coordinator', role: 'admin' }),
 }))
 
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
+}))
+
 vi.mock('@/lib/db/schema/campaign-timeline', () => ({
   campaignTimeline: {
     id: 'id', campaignId: 'campaign_id', eventType: 'event_type',
@@ -21,7 +33,21 @@ vi.mock('@/lib/db/schema/campaign-timeline', () => ({
 
 vi.mock('@/lib/db/schema/campaigns', () => ({
   campaigns: {
-    id: 'id', campaignDate: 'campaign_date', status: 'status', updatedAt: 'updated_at',
+    id: 'id',
+    campaignDate: 'campaign_date',
+    endDate: 'end_date',
+    status: 'status',
+    startTime: 'start_time',
+    endTime: 'end_time',
+    updatedAt: 'updated_at',
+  },
+  campaignDays: {
+    id: 'id',
+    campaignId: 'campaign_id',
+    dayDate: 'day_date',
+    startTime: 'start_time',
+    endTime: 'end_time',
+    isOvernight: 'is_overnight',
   },
 }))
 
@@ -38,8 +64,11 @@ vi.mock('@/lib/db/schema/hours-log', () => ({
   },
 }))
 
-vi.mock('@/features/hours/actions/hours-actions', () => ({
-  recalculateWeeklyBalance: vi.fn().mockResolvedValue(undefined),
+vi.mock('@/features/hours/lib/aggregate-staff-data', () => ({
+  recalcStaffAggregates: vi.fn().mockResolvedValue(undefined),
+  recalcAggregatesForCampaign: vi.fn().mockResolvedValue({ success: 0, failed: 0 }),
+  recalcAggregatesForDate: vi.fn().mockResolvedValue({ success: 0, failed: 0 }),
+  recalcStaffAggregatesBatch: vi.fn().mockResolvedValue(undefined),
 }))
 
 import { db } from '@/lib/db'
@@ -60,8 +89,16 @@ function makeChain(resolvedValue: unknown) {
   return chain
 }
 
-type MockDb = { select: ReturnType<typeof vi.fn>; insert: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
+type MockDb = {
+  select: ReturnType<typeof vi.fn>
+  insert: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
+  transaction: ReturnType<typeof vi.fn>
+}
 const mockDb = db as unknown as MockDb
+// transaction ejecuta el callback con el mismo mockDb como tx (B14 hace
+// `db.transaction(async (tx) => {...})` para finalizeCampaignHours).
+mockDb.transaction = vi.fn(async (cb: (tx: MockDb) => Promise<unknown>) => cb(mockDb))
 
 const campaignId = '550e8400-e29b-41d4-a716-446655440000'
 
@@ -79,12 +116,8 @@ describe('registerTimelineEvent', () => {
   })
 
   it('creates new timeline event when none exists', async () => {
-    // coordinator check, then existing event check (empty)
-    let selectCount = 0
-    mockDb.select = vi.fn(() => {
-      selectCount++
-      return makeChain([])
-    })
+    // existing event check retorna vacío → entra al branch de insert.
+    mockDb.select = vi.fn(() => makeChain([]))
     const insertChain = makeChain([])
     mockDb.insert = vi.fn(() => insertChain)
 
@@ -100,13 +133,9 @@ describe('registerTimelineEvent', () => {
   })
 
   it('updates existing event if already registered', async () => {
-    let selectCount = 0
-    mockDb.select = vi.fn(() => {
-      selectCount++
-      if (selectCount === 1) return makeChain([])             // coordinator check
-      if (selectCount === 2) return makeChain([{ id: 'event-1' }])  // existing event
-      return makeChain([])
-    })
+    // Tras la fix B3 el dead code de coordinador se eliminó: la primera (y única)
+    // select del action es directamente el lookup del evento existente.
+    mockDb.select = vi.fn(() => makeChain([{ id: 'event-1' }]))
     mockDb.update = vi.fn(() => makeChain([]))
 
     await registerTimelineEvent({

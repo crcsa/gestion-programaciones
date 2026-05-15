@@ -1,10 +1,12 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { ValidationError } from '@/lib/errors/app-errors'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { systemConfig } from '@/lib/db/schema/system-config'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { systemConfigHistory } from '@/lib/db/schema/system-config-history'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { logAudit } from '@/lib/audit/log-audit'
 import { CONFIG_PARAMETERS } from '../lib/config-keys'
 import { invalidateRuntimeConfigCache } from '../lib/runtime-config'
@@ -28,7 +30,7 @@ export interface ConfigItem {
 }
 
 export async function getConfigItems(): Promise<ConfigItem[]> {
-  await requireRole(['admin'])
+  await requireAccess({ roles: ['admin'] })
 
   const rows = await db
     .select({
@@ -59,11 +61,11 @@ export async function getConfigItems(): Promise<ConfigItem[]> {
 }
 
 export async function updateConfig(input: UpdateConfigInput): Promise<{ updated: number }> {
-  const { userId } = await requireRole(['admin'])
+  const { userId } = await requireAccess({ roles: ['admin'] })
 
   const parsed = updateConfigSchema.safeParse(input)
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0].message)
+    throw new ValidationError(parsed.error.issues[0].message)
   }
 
   const validated = parsed.data.entries.map((e) => ({
@@ -79,12 +81,18 @@ export async function updateConfig(input: UpdateConfigInput): Promise<{ updated:
   let updated = 0
   for (const entry of validated) {
     const prev = existingByKey.get(entry.key)
+    const effectiveFrom = new Date()
     if (prev) {
       if (prev.value === entry.value) continue
       await db
         .update(systemConfig)
-        .set({ value: entry.value, updatedAt: new Date() })
+        .set({ value: entry.value, updatedAt: effectiveFrom })
         .where(eq(systemConfig.id, prev.id))
+      await db.insert(systemConfigHistory).values({
+        key: entry.key,
+        value: entry.value,
+        effectiveFrom,
+      })
       await logAudit({
         profileId: userId,
         action: 'update',
@@ -98,6 +106,11 @@ export async function updateConfig(input: UpdateConfigInput): Promise<{ updated:
         .insert(systemConfig)
         .values({ key: entry.key, value: entry.value })
         .returning({ id: systemConfig.id })
+      await db.insert(systemConfigHistory).values({
+        key: entry.key,
+        value: entry.value,
+        effectiveFrom,
+      })
       if (created) {
         await logAudit({
           profileId: userId,

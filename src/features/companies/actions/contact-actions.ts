@@ -1,10 +1,11 @@
 'use server'
 
 import { eq, and, ne, asc, ilike } from 'drizzle-orm'
+import { AppError, NotFoundError, ValidationError } from '@/lib/errors/app-errors'
 import { db } from '@/lib/db'
 import { companyContacts } from '@/lib/db/schema/company-contacts'
 import { companies } from '@/lib/db/schema/companies'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { logAudit } from '@/lib/audit/log-audit'
 import {
   createContactSchema,
@@ -29,7 +30,7 @@ function emptyToUndefined(value?: string): string | undefined {
 }
 
 export async function listContacts(companyId: string): Promise<CompanyContact[]> {
-  await requireRole(['admin', 'comercial', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'comercial', 'admin_area'] })
 
   try {
     return await db
@@ -38,7 +39,7 @@ export async function listContacts(companyId: string): Promise<CompanyContact[]>
       .where(eq(companyContacts.companyId, companyId))
       .orderBy(asc(companyContacts.fullName))
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener los contactos')
   }
 }
@@ -46,11 +47,11 @@ export async function listContacts(companyId: string): Promise<CompanyContact[]>
 export async function createContact(
   data: CreateContactInput,
 ): Promise<CompanyContact> {
-  const { userId } = await requireRole(['admin', 'comercial'])
+  const { userId } = await requireAccess({ roles: ['admin', 'comercial'] })
 
   const validated = createContactSchema.safeParse(data)
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   const payload = {
@@ -99,7 +100,7 @@ export async function createContact(
 
     return created
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al crear el contacto')
   }
 }
@@ -107,11 +108,11 @@ export async function createContact(
 export async function updateContact(
   data: UpdateContactInput,
 ): Promise<CompanyContact> {
-  const { userId } = await requireRole(['admin', 'comercial'])
+  const { userId } = await requireAccess({ roles: ['admin', 'comercial'] })
 
   const validated = updateContactSchema.safeParse(data)
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   const { id, companyId, ...rest } = validated.data
@@ -146,7 +147,7 @@ export async function updateContact(
       return row
     })
 
-    if (!updated) throw new Error('Contacto no encontrado')
+    if (!updated) throw new NotFoundError('Contacto no encontrado')
 
     await logAudit({
       profileId: userId,
@@ -157,18 +158,13 @@ export async function updateContact(
 
     return updated
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('permiso') || error.message === 'Contacto no encontrado')
-    ) {
-      throw error
-    }
+    if (error instanceof AppError) throw error
     throw new Error('Error al actualizar el contacto')
   }
 }
 
 export async function deleteContact(id: string): Promise<void> {
-  const { userId } = await requireRole(['admin', 'comercial'])
+  const { userId } = await requireAccess({ roles: ['admin', 'comercial'] })
 
   try {
     const [deleted] = await db
@@ -176,7 +172,7 @@ export async function deleteContact(id: string): Promise<void> {
       .where(eq(companyContacts.id, id))
       .returning()
 
-    if (!deleted) throw new Error('Contacto no encontrado')
+    if (!deleted) throw new NotFoundError('Contacto no encontrado')
 
     await logAudit({
       profileId: userId,
@@ -185,12 +181,7 @@ export async function deleteContact(id: string): Promise<void> {
       recordId: id,
     })
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('permiso') || error.message === 'Contacto no encontrado')
-    ) {
-      throw error
-    }
+    if (error instanceof AppError) throw error
     throw new Error('Error al eliminar el contacto')
   }
 }
@@ -198,7 +189,7 @@ export async function deleteContact(id: string): Promise<void> {
 export async function importContacts(
   rows: ImportContactRow[],
 ): Promise<ImportContactsResult> {
-  const { userId } = await requireRole(['admin', 'comercial'])
+  const { userId } = await requireAccess({ roles: ['admin', 'comercial'] })
 
   const result: ImportContactsResult = {
     imported: 0,

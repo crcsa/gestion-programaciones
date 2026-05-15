@@ -101,7 +101,14 @@ export function ShiftCell({
   return (
     <div className="flex min-h-[80px] flex-col gap-1 p-1">
       <ShiftTypeBadge shiftType={shift.shiftType} />
-      <span className="text-xs text-muted-foreground">
+      <span
+        className="text-xs text-muted-foreground"
+        title={
+          shift.shiftType === 'diurno_completo'
+            ? 'Horas efectivas (descuenta 1h de almuerzo en Diurno completo)'
+            : 'Horas efectivas del turno'
+        }
+      >
         {shift.startTime} - {shift.endTime} ({shift.totalHours}h)
       </span>
       {shift.notes && (

@@ -8,7 +8,6 @@ import { CampaignForm } from './campaign-form'
 import { CancelCampaignDialog } from './cancel-campaign-dialog'
 import { DeleteCampaignDialog } from './delete-campaign-dialog'
 import { ExcelImportDialog } from './excel-import-dialog'
-import { RoleGate } from '@/features/auth/components/role-gate'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -34,13 +33,25 @@ import type {
 } from '@/features/campaigns/actions/campaign-actions'
 import type { CreateCampaignInput } from '@/features/campaigns/schemas/campaign-schemas'
 import type { Role } from '@/types/roles'
+import type { Area } from '@/types/areas'
 
 interface CampaignListClientProps {
   initialData: CampaignListResult
   currentRole: Role | null
+  currentArea?: Area | null
 }
 
-export function CampaignListClient({ initialData, currentRole }: CampaignListClientProps) {
+export function CampaignListClient({
+  initialData,
+  currentRole,
+  currentArea = null,
+}: CampaignListClientProps) {
+  // Solo super-admin y comercial (role='comercial' o admin_area+comercial)
+  // pueden crear/editar/confirmar/cancelar/eliminar/importar campañas.
+  const canManageCampaigns =
+    currentRole === 'admin' ||
+    currentRole === 'comercial' ||
+    (currentRole === 'admin_area' && currentArea === 'comercial')
   const [data, setData] = useState<CampaignListItem[]>(initialData.data)
   const [total, setTotal] = useState(initialData.total)
   const [page, setPage] = useState(1)
@@ -112,8 +123,18 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
         companyId: full.companyId ?? undefined,
         locationId: full.locationId ?? undefined,
         campaignDate: full.campaignDate,
+        endDate: full.endDate ?? undefined,
         startTime: full.startTime ?? undefined,
         endTime: full.endTime ?? undefined,
+        dailySchedules:
+          full.days && full.days.length > 0
+            ? full.days.map((d) => ({
+                dayDate: d.dayDate,
+                startTime: d.startTime,
+                endTime: d.endTime,
+                isOvernight: d.isOvernight,
+              }))
+            : undefined,
         size: full.size,
         modality: full.modality,
         municipality: full.municipality,
@@ -224,14 +245,14 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
           </p>
         </div>
 
-        <RoleGate allowedRoles={['admin', 'banco_sangre', 'comercial']} currentRole={currentRole}>
+        {canManageCampaigns && (
           <div className="flex items-center gap-2">
             <ExcelImportDialog onSuccess={() => fetchData(filters, page)} />
             <Button onClick={handleNuevo}>
               Nueva campaña
             </Button>
           </div>
-        </RoleGate>
+        )}
       </div>
 
       <CampaignFilters onFiltersChange={handleFiltersChange} />
@@ -252,10 +273,10 @@ export function CampaignListClient({ initialData, currentRole }: CampaignListCli
           total={total}
           page={page}
           onPageChange={handlePageChange}
-          onEdit={handleEdit}
-          onConfirm={isConfirming ? undefined : handleConfirm}
-          onCancel={handleCancelClick}
-          onDelete={currentRole === 'admin' || currentRole === 'comercial' ? handleDeleteClick : undefined}
+          onEdit={canManageCampaigns ? handleEdit : undefined}
+          onConfirm={canManageCampaigns && !isConfirming ? handleConfirm : undefined}
+          onCancel={canManageCampaigns ? handleCancelClick : undefined}
+          onDelete={canManageCampaigns ? handleDeleteClick : undefined}
         />
       )}
 

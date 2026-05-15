@@ -9,7 +9,7 @@ const PROFILE_OPTIONS = [
   { value: 'tecnico', label: 'Técnico' },
   { value: 'medico', label: 'Médico' },
   { value: 'auxiliar', label: 'Auxiliar' },
-  { value: 'coordinador', label: 'Coordinador' },
+  { value: 'comercial', label: 'Comercial' },
 ]
 
 interface AvailabilityFiltersProps {

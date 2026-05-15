@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { StaffTable } from '@/features/staff/components/staff-table'
-import type { StaffListRow } from '@/features/staff/actions/staff-actions'
+import type { StaffListRow } from '@/features/staff/actions/staff-types'
 
 // Mock next/link to a simple anchor
 vi.mock('next/link', () => ({
@@ -20,6 +20,7 @@ const mockStaff: StaffListRow[] = [
     phone: null,
     email: 'carlos@example.com',
     staffProfile: 'bacteriologo',
+    area: 'banco_sangre',
     contractType: 'indefinido',
     weeklyHours: 44,
     defaultShift: 'diurno_completo',
@@ -40,6 +41,7 @@ const mockStaff: StaffListRow[] = [
     phone: null,
     email: 'maria@example.com',
     staffProfile: 'tecnico',
+    area: 'banco_sangre',
     contractType: 'fijo',
     weeklyHours: 40,
     defaultShift: 'noche',

@@ -1,6 +1,6 @@
 import { pgTable, uuid, text, integer, boolean, timestamp, date, primaryKey } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
-import { staffProfileEnum, contractTypeEnum, shiftTypeEnum } from './enums'
+import { staffProfileEnum, contractTypeEnum, shiftTypeEnum, areaEnum } from './enums'
 import { profiles } from './profiles'
 import { trainingAreas } from './training-areas'
 
@@ -13,6 +13,9 @@ export const staffMembers = pgTable('staff_members', {
   phone: text('phone'),
   email: text('email'),
   staffProfile: staffProfileEnum('staff_profile').notNull(),
+  // NOT NULL sin DEFAULT: cada INSERT debe elegir el área conscientemente.
+  // Ver migración 0021_drop_staff_area_default.sql.
+  area: areaEnum('area').notNull(),
   contractType: contractTypeEnum('contract_type'),
   weeklyHours: integer('weekly_hours').notNull().default(44),
   defaultShift: shiftTypeEnum('default_shift'),

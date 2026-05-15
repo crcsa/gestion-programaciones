@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { StaffFilters } from './staff-filters'
 import { StaffTable } from './staff-table'
@@ -17,17 +17,29 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { PAGE_LIMIT } from '@/features/staff/lib/constants'
-import type { StaffListFilters, StaffListResult, StaffListRow } from '@/features/staff/actions/staff-actions'
+import type { StaffListFilters, StaffListResult, StaffListRow } from '@/features/staff/actions/staff-types'
 import type { TrainingArea } from '@/lib/db/schema/training-areas'
 import type { Role } from '@/types/roles'
+import type { Area } from '@/types/areas'
 
 interface StaffListClientProps {
   initialData: StaffListResult
   areas: TrainingArea[]
   currentRole: Role | null
+  /** Área del caller. NULL para admin global (puede elegir cualquier área). */
+  currentArea: Area | null
+  defaultWeeklyHours: number
 }
 
-export function StaffListClient({ initialData, areas, currentRole }: StaffListClientProps) {
+export function StaffListClient({
+  initialData,
+  areas,
+  currentRole,
+  currentArea,
+  defaultWeeklyHours,
+}: StaffListClientProps) {
+  // Admin global puede elegir el área en el form; admin de área queda anclado.
+  const canSelectArea = currentRole === 'admin'
   const [data, setData] = useState<StaffListRow[]>(initialData.data)
   const [total, setTotal] = useState(initialData.total)
   const [page, setPage] = useState(1)
@@ -59,8 +71,15 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
     []
   )
 
+  // Salta el primer render porque ya tenemos initialData; cualquier cambio
+  // posterior (incluso limpiar todos los filtros) debe refetch para no quedarse
+  // mostrando resultados filtrados rancios.
+  const hasMountedRef = useRef(false)
   useEffect(() => {
-    if (page === 1 && Object.keys(filters).length === 0) return
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true
+      return
+    }
     fetchData(filters, page)
   }, [filters, page, fetchData])
 
@@ -107,7 +126,7 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
       setDeletingStaff(null)
       fetchData(filters, page)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al eliminar el funcionario')
+      toast.error(err instanceof Error ? err.message : 'Error al eliminar el colaborador')
     } finally {
       setIsDeleting(false)
     }
@@ -124,11 +143,11 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Personal</h1>
           <p className="text-muted-foreground text-sm">
-            Gestión de funcionarios del banco de sangre
+            Gestión de colaboradores del banco de sangre
           </p>
         </div>
 
-        <RoleGate allowedRoles={['admin', 'banco_sangre']} currentRole={currentRole}>
+        <RoleGate allowedRoles={['admin', 'admin_area']} currentRole={currentRole}>
           <div className="flex items-center gap-2">
             <StaffImportDialog onImported={handleSuccess} />
             <Button onClick={handleNuevo}>
@@ -165,7 +184,7 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
       <Dialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogChange}>
         <DialogContent className="!max-w-sm">
           <DialogHeader>
-            <DialogTitle>Eliminar funcionario</DialogTitle>
+            <DialogTitle>Eliminar colaborador</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             ¿Está seguro que desea eliminar a{' '}
@@ -205,11 +224,20 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
             cedula: editingStaff.cedula,
             phone: editingStaff.phone ?? undefined,
             email: editingStaff.email ?? undefined,
-            staffProfile: editingStaff.staffProfile,
+            staffProfile:
+              editingStaff.staffProfile === 'coordinador'
+                ? undefined
+                : (editingStaff.staffProfile as Exclude<
+                    typeof editingStaff.staffProfile,
+                    'coordinador'
+                  >),
             weeklyHours: editingStaff.weeklyHours,
             trainingAreaIds: editingStaff.trainingAreaIds,
           }}
           areas={areas}
+          defaultWeeklyHours={defaultWeeklyHours}
+          canSelectArea={canSelectArea}
+          callerArea={currentArea}
           onSuccess={handleSuccess}
         />
       ) : (
@@ -218,6 +246,9 @@ export function StaffListClient({ initialData, areas, currentRole }: StaffListCl
           open={modalOpen}
           onOpenChange={handleModalOpenChange}
           areas={areas}
+          defaultWeeklyHours={defaultWeeklyHours}
+          canSelectArea={canSelectArea}
+          callerArea={currentArea}
           onSuccess={handleSuccess}
         />
       )}

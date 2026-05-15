@@ -1,14 +1,14 @@
 'use server'
 
 import { eq, and, count, gte, lte } from 'drizzle-orm'
+import { AppError } from '@/lib/errors/app-errors'
 import { format, startOfWeek, addDays } from 'date-fns'
 import { db } from '@/lib/db'
 import { campaigns } from '@/lib/db/schema/campaigns'
 import { companies } from '@/lib/db/schema/companies'
 import { staffMembers } from '@/lib/db/schema/staff-members'
 import { sedeShifts } from '@/lib/db/schema/sede-shifts'
-import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 
 // ---- Types ----------------------------------------------------------------
 
@@ -34,27 +34,6 @@ export interface ComercialDashboardData {
   upcomingConfirmedCampaigns: UpcomingCampaign[]
 }
 
-export interface OperativoDashboardData {
-  myWeeklyShifts: {
-    id: string
-    shiftDate: string
-    shiftType: string
-    startTime: string
-    endTime: string
-    totalHours: number
-  }[]
-  myCampaignAssignments: {
-    id: string
-    campaignId: string
-    campaignDate: string
-    municipality: string
-    code: string
-    isCoordinator: boolean
-  }[]
-  weeklyHoursSum: number
-  staffMemberId: string
-}
-
 // ---- Helpers ----------------------------------------------------------------
 
 function getWeekRange(today: Date): { weekStart: string; weekEnd: string } {
@@ -68,7 +47,7 @@ function getWeekRange(today: Date): { weekStart: string; weekEnd: string } {
 // ---- Actions ----------------------------------------------------------------
 
 export async function getAdminDashboardData(): Promise<AdminDashboardData> {
-  await requireRole(['admin', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'admin_area'] })
 
   const today = new Date()
   const todayStr = format(today, 'yyyy-MM-dd')
@@ -128,13 +107,15 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       sedeToday: sedeTodayResult[0]?.value ?? 0,
     }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al obtener estadísticas del dashboard')
+    if (error instanceof AppError) throw error
+    console.error('[getAdminDashboardData] underlying error:', error)
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`Error al obtener estadísticas del dashboard: ${detail}`)
   }
 }
 
 export async function getComercialDashboardData(): Promise<ComercialDashboardData> {
-  await requireRole(['admin', 'banco_sangre', 'comercial'])
+  await requireAccess({ roles: ['admin', 'admin_area', 'comercial'] })
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
 
@@ -189,75 +170,8 @@ export async function getComercialDashboardData(): Promise<ComercialDashboardDat
       upcomingConfirmedCampaigns: confirmadaResult,
     }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener campañas del dashboard')
   }
 }
 
-export async function getOperativoDashboardData(
-  staffMemberId: string,
-): Promise<OperativoDashboardData> {
-  await requireRole(['admin', 'banco_sangre', 'operativo'])
-
-  const today = new Date()
-  const { weekStart, weekEnd } = getWeekRange(today)
-
-  try {
-    const [myShifts, myAssignments] = await Promise.all([
-      db
-        .select({
-          id: sedeShifts.id,
-          shiftDate: sedeShifts.shiftDate,
-          shiftType: sedeShifts.shiftType,
-          startTime: sedeShifts.startTime,
-          endTime: sedeShifts.endTime,
-          totalHours: sedeShifts.totalHours,
-        })
-        .from(sedeShifts)
-        .where(
-          and(
-            eq(sedeShifts.staffId, staffMemberId),
-            gte(sedeShifts.shiftDate, weekStart),
-            lte(sedeShifts.shiftDate, weekEnd),
-          ),
-        )
-        .orderBy(sedeShifts.shiftDate),
-
-      db
-        .select({
-          id: campaignAssignments.id,
-          campaignId: campaignAssignments.campaignId,
-          isCoordinator: campaignAssignments.isCoordinator,
-          campaignDate: campaigns.campaignDate,
-          municipality: campaigns.municipality,
-          code: campaigns.code,
-        })
-        .from(campaignAssignments)
-        .innerJoin(
-          campaigns,
-          eq(campaignAssignments.campaignId, campaigns.id),
-        )
-        .where(
-          and(
-            eq(campaignAssignments.staffId, staffMemberId),
-            eq(campaignAssignments.isActive, true),
-            gte(campaigns.campaignDate, weekStart),
-            lte(campaigns.campaignDate, weekEnd),
-          ),
-        )
-        .orderBy(campaigns.campaignDate),
-    ])
-
-    const weeklyHoursSum = myShifts.reduce((acc, s) => acc + s.totalHours, 0)
-
-    return {
-      myWeeklyShifts: myShifts,
-      myCampaignAssignments: myAssignments,
-      weeklyHoursSum,
-      staffMemberId,
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al obtener datos del operativo')
-  }
-}

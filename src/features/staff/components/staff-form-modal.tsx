@@ -9,23 +9,28 @@ import {
 import { StaffFormClient } from './staff-form-client'
 import type { CreateStaffInput } from '@/features/staff/schemas/staff-schemas'
 import type { TrainingArea } from '@/lib/db/schema/training-areas'
+import type { Area } from '@/types/areas'
 
-interface CreateModalProps {
-  mode: 'create'
+interface CommonModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   areas: TrainingArea[]
+  defaultWeeklyHours: number
+  /** True si el caller es admin global (puede elegir área en el form). */
+  canSelectArea?: boolean
+  /** Área del caller (para fijarla cuando no puede elegir). */
+  callerArea?: Area | null
   onSuccess: () => void
 }
 
-interface EditModalProps {
+interface CreateModalProps extends CommonModalProps {
+  mode: 'create'
+}
+
+interface EditModalProps extends CommonModalProps {
   mode: 'edit'
-  open: boolean
-  onOpenChange: (open: boolean) => void
   staffId: string
   defaultValues: Partial<CreateStaffInput>
-  areas: TrainingArea[]
-  onSuccess: () => void
 }
 
 type StaffFormModalProps = CreateModalProps | EditModalProps
@@ -43,7 +48,7 @@ export function StaffFormModal(props: StaffFormModalProps) {
       <DialogContent className="!max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {props.mode === 'create' ? 'Nuevo Funcionario' : 'Editar Funcionario'}
+            {props.mode === 'create' ? 'Nuevo Colaborador' : 'Editar Colaborador'}
           </DialogTitle>
         </DialogHeader>
 
@@ -53,12 +58,18 @@ export function StaffFormModal(props: StaffFormModalProps) {
             staffId={props.staffId}
             defaultValues={props.defaultValues}
             areas={props.areas}
+            defaultWeeklyHours={props.defaultWeeklyHours}
+            canSelectArea={props.canSelectArea}
+            callerArea={props.callerArea}
             onSuccess={handleSuccess}
           />
         ) : (
           <StaffFormClient
             mode="create"
             areas={props.areas}
+            defaultWeeklyHours={props.defaultWeeklyHours}
+            canSelectArea={props.canSelectArea}
+            callerArea={props.callerArea}
             onSuccess={handleSuccess}
           />
         )}

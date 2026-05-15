@@ -30,7 +30,6 @@ const PROFILE_LABELS: Record<string, string> = {
   tecnico: 'Técnico',
   medico: 'Médico',
   auxiliar: 'Auxiliar',
-  coordinador: 'Coordinador',
 }
 
 interface CancelCampaignDialogProps {

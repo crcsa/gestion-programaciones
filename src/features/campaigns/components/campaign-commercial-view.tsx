@@ -11,7 +11,6 @@ const PROFILE_LABELS: Record<string, string> = {
   tecnico:      'Técnico',
   medico:       'Médico',
   auxiliar:     'Auxiliar',
-  coordinador:  'Coordinador',
 }
 
 export async function CampaignCommercialView({ campaignId, size }: CampaignCommercialViewProps) {

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const upsertShiftSchema = z.object({
-  staffId: z.uuid({ error: 'ID de funcionario no valido' }),
+  staffId: z.uuid({ error: 'ID de colaborador no valido' }),
   shiftDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha invalida'),
   shiftType: z.enum(['diurno_completo', 'noche', 'posturno'], {
     error: 'Tipo de turno no valido',

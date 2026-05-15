@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PermissionError } from '@/lib/errors/app-errors'
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -11,6 +12,18 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
+}))
+
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'a@x.com',
+    fullName: 'A',
+    scope: { kind: 'global' as const },
+  }),
 }))
 
 vi.mock('@/lib/db/schema/staff-members', () => ({
@@ -170,12 +183,18 @@ describe('importStaffFromExcel', () => {
     const result = await importStaffFromExcel([validRow])
 
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0].reason).toBe('Error al guardar en la base de datos')
+    // Mensajes de error de DB se enmascaran para no filtrar nombres de
+    // schema/constraint al cliente (B17). El mensaje original se loggea
+    // server-side.
+    expect(result.errors[0].reason).toBe(
+      'Error al guardar en la base de datos (revisa los logs del servidor).',
+    )
   })
 
-  it('throws when requireRole rejects', async () => {
-    vi.mocked(requireRole).mockRejectedValue(
-      new Error('No tienes permiso para realizar esta accion.'),
+  it('throws when requireAccess rejects', async () => {
+    const { requireAccess } = await import('@/features/auth/lib/require-access')
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(importStaffFromExcel([validRow])).rejects.toThrow('permiso')

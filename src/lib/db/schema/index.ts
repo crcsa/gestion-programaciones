@@ -13,6 +13,10 @@ export * from './locations'
 export * from './campaigns'
 export * from './campaign-assignments'
 export * from './campaign-timeline'
+export * from './campaign-vehicles'
+
+// Logistics tables
+export * from './vehicles'
 
 // Shift & scheduling tables
 export * from './sede-shifts'

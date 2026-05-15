@@ -12,9 +12,12 @@ interface WeekSelectorProps {
 }
 
 function offsetWeek(weekStart: string, offsetWeeks: number): string {
-  const d = new Date(`${weekStart}T00:00:00`)
-  d.setDate(d.getDate() + offsetWeeks * 7)
-  return d.toISOString().slice(0, 10)
+  // Timezone-safe: descomponemos el ISO date-only y usamos UTC para evitar
+  // shifts cuando el browser local está al oeste de UTC (Colombia UTC-5)
+  // y la hora actual pasa el límite de día al serializar.
+  const [y, m, d] = weekStart.split('-').map(Number)
+  const epoch = Date.UTC(y, m - 1, d) + offsetWeeks * 7 * 24 * 60 * 60 * 1000
+  return new Date(epoch).toISOString().slice(0, 10)
 }
 
 export function WeekSelector({ weekStart, paramName = 'semana' }: WeekSelectorProps) {
@@ -27,10 +30,13 @@ export function WeekSelector({ weekStart, paramName = 'semana' }: WeekSelectorPr
     router.push(`?${params.toString()}`)
   }
 
-  const weekEnd = offsetWeek(weekStart, 1)
-  const startDate = new Date(`${weekStart}T00:00:00`)
-  const endDate = new Date(`${weekEnd}T00:00:00`)
-  endDate.setDate(endDate.getDate() - 1)
+  // Construimos las fechas a partir de componentes UTC sobre el ISO date-only
+  // del weekStart. `new Date(\`${date}T00:00:00\`)` se parsearía como LOCAL,
+  // y al combinarse con timezone offset produce el label desfasado en zonas
+  // negativas como Colombia (UTC-5).
+  const [sy, sm, sd] = weekStart.split('-').map(Number)
+  const startDate = new Date(sy, sm - 1, sd)
+  const endDate = new Date(sy, sm - 1, sd + 6)
 
   const label = `${format(startDate, 'd MMM', { locale: es })} – ${format(endDate, 'd MMM yyyy', { locale: es })}`
 

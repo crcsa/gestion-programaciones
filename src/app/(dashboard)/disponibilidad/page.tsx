@@ -1,34 +1,38 @@
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { getWeeklyAvailabilityGrid } from '@/features/availability/actions/availability-actions'
 import { AvailabilityGrid } from '@/features/availability/components/availability-grid'
 import { AvailabilityFilters } from '@/features/availability/components/availability-filters'
 import { WeekSelector } from '@/features/availability/components/week-selector'
 import { CapacityCalendar } from '@/features/availability/components/capacity-calendar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Users, CalendarRange } from 'lucide-react'
+import { getCurrentMondayIso } from '@/lib/date/week'
 
 interface DisponibilidadPageProps {
   searchParams: Promise<{ semana?: string; perfil?: string }>
 }
 
-function getCurrentMondayISO(): string {
-  const d = new Date()
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  d.setDate(d.getDate() + diff)
-  return d.toISOString().slice(0, 10)
-}
-
 export default async function DisponibilidadPage({ searchParams }: DisponibilidadPageProps) {
-  const { role } = await requireRole(['admin', 'banco_sangre', 'comercial'])
+  const { role } = await requireAccess({ roles: ['admin', 'admin_area', 'comercial'] })
 
-  const canSeeWeeklyGrid = role === 'admin' || role === 'banco_sangre'
+  // Admin global, admin_area de cualquier área y comercial (legacy o
+  // admin_area + área=comercial) ven el grid semanal. Comercial ve cross-área
+  // en read-only — el filtro de scope se aplica en la server action.
+  const canSeeWeeklyGrid =
+    role === 'admin' || role === 'admin_area' || role === 'comercial'
   const { semana, perfil } = await searchParams
-  const weekStart = semana ?? getCurrentMondayISO()
+  const weekStart = semana ?? getCurrentMondayIso()
 
   const rows = canSeeWeeklyGrid
     ? await getWeeklyAvailabilityGrid({
         weekStart,
-        staffProfile: perfil as 'bacteriologo' | 'tecnico' | 'medico' | 'auxiliar' | 'coordinador' | undefined,
+        staffProfile: perfil as
+          | 'bacteriologo'
+          | 'tecnico'
+          | 'medico'
+          | 'auxiliar'
+          | 'comercial'
+          | undefined,
       })
     : []
 
@@ -48,11 +52,19 @@ export default async function DisponibilidadPage({ searchParams }: Disponibilida
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Disponibilidad</h1>
 
-      <Tabs defaultValue="weekly">
-        <TabsList>
-          <TabsTrigger value="weekly">Semanal por persona</TabsTrigger>
-          <TabsTrigger value="capacity">Capacidad mensual</TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="weekly" className="flex-col">
+        <div className="-mx-1 overflow-x-auto px-1">
+          <TabsList className="h-9 w-fit p-1">
+            <TabsTrigger value="weekly" className="h-7 flex-none gap-1.5 px-3">
+              <Users className="size-3.5" aria-hidden />
+              Semanal por persona
+            </TabsTrigger>
+            <TabsTrigger value="capacity" className="h-7 flex-none gap-1.5 px-3">
+              <CalendarRange className="size-3.5" aria-hidden />
+              Capacidad mensual
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="weekly" className="space-y-4 pt-4">
           <div className="flex items-center gap-3 flex-wrap">

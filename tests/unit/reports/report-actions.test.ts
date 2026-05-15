@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PermissionError } from '@/lib/errors/app-errors'
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -11,6 +12,18 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
+}))
+
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
 }))
 
 vi.mock('@/lib/db/schema/campaigns', () => ({
@@ -74,7 +87,6 @@ vi.mock('@/features/hours/actions/hours-actions', () => ({
 }))
 
 import { db } from '@/lib/db'
-import { requireRole } from '@/features/auth/lib/require-role'
 import { getWeeklyBalances } from '@/features/hours/actions/hours-actions'
 import {
   getCampaignsReport,
@@ -180,9 +192,11 @@ describe('getCampaignsReport', () => {
     expect(result).toEqual([])
   })
 
-  it('throws permiso error when requireRole rejects', async () => {
-    vi.mocked(requireRole).mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+  it('throws permiso error when requireAccess rejects', async () => {
+    // getCampaignsReport migrado a requireAccess (acepta `area` con scope).
+    const { requireAccess } = await import('@/features/auth/lib/require-access')
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getCampaignsReport({})).rejects.toThrow('permiso')
@@ -286,9 +300,10 @@ describe('getPersonalReport', () => {
     expect(result).toEqual([])
   })
 
-  it('throws permiso error when requireRole rejects', async () => {
-    vi.mocked(requireRole).mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+  it('throws permiso error when requireAccess rejects', async () => {
+    const { requireAccess } = await import('@/features/auth/lib/require-access')
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(
@@ -387,13 +402,14 @@ describe('getHoursReport', () => {
 
     const result = await getHoursReport('2026-03-16')
 
-    expect(getWeeklyBalances).toHaveBeenCalledWith('2026-03-16')
+    expect(getWeeklyBalances).toHaveBeenCalledWith('2026-03-16', undefined)
     expect(result).toEqual(mockRows)
   })
 
-  it('throws permiso error when requireRole rejects', async () => {
-    vi.mocked(requireRole).mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+  it('throws permiso error when getWeeklyBalances rejects with PermissionError', async () => {
+    const { PermissionError } = await import('@/lib/errors/app-errors')
+    vi.mocked(getWeeklyBalances).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getHoursReport('2026-03-16')).rejects.toThrow('permiso')

@@ -1,11 +1,14 @@
 'use client'
 
+import { useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { Sun, Moon, LogOut, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -41,7 +44,21 @@ function ModeToggle() {
 }
 
 export function Topbar({ userEmail, role }: TopbarProps) {
+  const router = useRouter()
+  const [signingOut, startTransition] = useTransition()
   const initials = userEmail ? userEmail.slice(0, 2).toUpperCase() : 'US'
+
+  const handleSignOut = () => {
+    startTransition(async () => {
+      await signOut()
+      // Forzamos navegación dura: replace() + refresh() asegura que el
+      // estado de React del dashboard se descarta antes de que el siguiente
+      // login monte sus componentes. Sin esto los efectos del dashboard (p.ej.
+      // NotificationBell) siguen ejecutándose con cookies vacías.
+      router.replace('/login')
+      router.refresh()
+    })
+  }
 
   return (
     <header className="flex h-14 items-center border-b border-border bg-background px-4 gap-4">
@@ -64,30 +81,36 @@ export function Topbar({ userEmail, role }: TopbarProps) {
             }
           />
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col gap-1">
-                <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
-                {role && (
-                  <p className="text-xs font-medium text-primary">{ROLE_LABELS[role]}</p>
-                )}
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer">
-              <User className="h-4 w-4" />
-              Mi perfil
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="flex items-center gap-2 cursor-pointer"
-              data-variant="destructive"
-              onClick={async () => {
-                await signOut()
-              }}
-            >
-              <LogOut className="h-4 w-4" />
-              Cerrar sesión
-            </DropdownMenuItem>
+            {/*
+              Base UI requiere que los parts (Label, Item, Separator) vivan
+              dentro de un <Menu.Group>. Sin ello lanza "MenuGroupRootContext
+              is missing". Un único Group envuelve todo el contenido del menú.
+            */}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col gap-1">
+                  <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
+                  {role && (
+                    <p className="text-xs font-medium text-primary">{ROLE_LABELS[role]}</p>
+                  )}
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="flex items-center gap-2 cursor-pointer">
+                <User className="h-4 w-4" />
+                Mi perfil
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="flex items-center gap-2 cursor-pointer"
+                data-variant="destructive"
+                disabled={signingOut}
+                onClick={handleSignOut}
+              >
+                <LogOut className="h-4 w-4" />
+                {signingOut ? 'Cerrando…' : 'Cerrar sesión'}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

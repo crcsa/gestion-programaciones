@@ -10,6 +10,13 @@
  * - 1 campaign en estado 'confirmada' sin asignaciones aún
  * - 1 company y 1 location de referencia
  *
+ * Para los flujos de logística (09-logistica-flow, 10-area-isolation) además:
+ * - 1 usuario con role=banco_sangre + area=logistica (E2E_ADMIN_LOGISTICA_*)
+ * - 1+ vehicles activos (opcional, los tests skip si no hay)
+ * - 1 staff con area=logistica + staff_profile=conductor
+ * - E2E_LOGISTICS_CAMPAIGN_ID: UUID de una campaña confirmada para probar el
+ *   panel de logística (opcional, skip si no se provee)
+ *
  * En CI se debe seedear con `pnpm db:seed` apuntando a la BD de E2E.
  */
 
@@ -26,4 +33,16 @@ export const E2E_REQUIRED_ENV_VARS = [
   'E2E_COMERCIAL_PASSWORD',
   'E2E_OPERATIVO_EMAIL',
   'E2E_OPERATIVO_PASSWORD',
+] as const
+
+/**
+ * Variables opcionales para los flujos de logística. Los tests que las
+ * requieren se omiten con test.skip() si no están definidas.
+ */
+export const E2E_OPTIONAL_ENV_VARS = [
+  'E2E_ADMIN_LOGISTICA_EMAIL',
+  'E2E_ADMIN_LOGISTICA_PASSWORD',
+  'E2E_LOGISTICS_CAMPAIGN_ID',
+  'E2E_TENTATIVA_CAMPAIGN_ID',
+  'E2E_TEST_CREATES',
 ] as const

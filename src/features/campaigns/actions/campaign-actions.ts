@@ -1,12 +1,17 @@
 'use server'
 
-import { eq, ilike, and, or, sql, gte, lte, desc, asc, inArray } from 'drizzle-orm'
+import { eq, ilike, and, or, sql, gte, lte, desc, asc, inArray, type SQL } from 'drizzle-orm'
+import { AppError, ConflictError, NotFoundError, ValidationError } from '@/lib/errors/app-errors'
+import { campaignArea } from '@/features/dashboard/lib/dashboard-queries'
+import type { Area } from '@/types/areas'
+import { rethrowOrLog } from '@/lib/errors/rethrow'
+import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
-import { campaigns } from '@/lib/db/schema/campaigns'
+import { campaigns, campaignDays } from '@/lib/db/schema/campaigns'
 import { companies } from '@/lib/db/schema/companies'
 import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
 import { staffMembers } from '@/lib/db/schema/staff-members'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import {
   createCampaignSchema,
   updateCampaignSchema,
@@ -14,8 +19,13 @@ import {
   importExcelRowSchema,
 } from '../schemas/campaign-schemas'
 import { logAudit } from '@/lib/audit/log-audit'
-import type { CreateCampaignInput, ImportExcelRow } from '../schemas/campaign-schemas'
-import type { Campaign } from '@/lib/db/schema/campaigns'
+import { recalcAggregatesForCampaign } from '@/features/hours/lib/aggregate-staff-data'
+import type {
+  CampaignDaySchedule,
+  CreateCampaignInput,
+  ImportExcelRow,
+} from '../schemas/campaign-schemas'
+import type { Campaign, CampaignDay } from '@/lib/db/schema/campaigns'
 
 // ---- Types ----------------------------------------------------------------
 
@@ -52,8 +62,18 @@ export interface CampaignListResult {
 
 // ---- Helpers --------------------------------------------------------------
 
-function buildListConditions(filters: CampaignListFilters) {
-  const parts = [eq(campaigns.isDeleted, false)]
+function buildListConditions(
+  filters: CampaignListFilters,
+  areaScope: Area | null = null,
+) {
+  const parts: SQL[] = [eq(campaigns.isDeleted, false)]
+
+  // Scope por área: admin_area de banco_sangre/logística solo ve campañas de
+  // su área. Admin global y comercial (allowCrossArea) pasan con areaScope=null.
+  if (areaScope) {
+    const areaPredicate = campaignArea(areaScope)
+    if (areaPredicate) parts.push(areaPredicate)
+  }
 
   if (filters.search) {
     parts.push(
@@ -107,7 +127,10 @@ function buildListConditions(filters: CampaignListFilters) {
 export async function getCampaignsList(
   filters: CampaignListFilters = {},
 ): Promise<CampaignListResult> {
-  const { userId, role } = await requireRole(['admin', 'banco_sangre', 'comercial', 'operativo'])
+  const { userId, role, scope } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial', 'operativo'],
+    allowCrossArea: true,
+  })
 
   const { page = 1, limit = 20 } = filters
   const offset = (page - 1) * limit
@@ -118,7 +141,11 @@ export async function getCampaignsList(
       return await getOperativoCampaigns(userId, filters, offset, limit)
     }
 
-    const conditions = buildListConditions(filters)
+    // Admin global y comercial (allowCrossArea) → scope global, sin filtro.
+    // admin_area (banco_sangre/logística) → scope acotado a su área, filtra
+    // campañas con asignación activa en esa área (helper `campaignArea`).
+    const areaScope: Area | null = scope.kind === 'global' ? null : scope.area
+    const conditions = buildListConditions(filters, areaScope)
 
     const rows = await db
       .select({
@@ -149,8 +176,7 @@ export async function getCampaignsList(
 
     return { data: rows, total }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al obtener la lista de campañas')
+    rethrowOrLog(error, 'getCampaignsList', 'Error al obtener la lista de campañas')
   }
 }
 
@@ -168,6 +194,18 @@ async function getOperativoCampaigns(
     .limit(1)
 
   if (!staffRow) {
+    // Perfil operativo sin staff_member vinculado: pantalla vacía es legítima
+    // (el usuario no tiene asignaciones), pero loggeamos estructurado para que
+    // monitoring detecte cuentas mal aprovisionadas.
+    console.error(
+      JSON.stringify({
+        errorId: 'OPERATIVO_WITHOUT_STAFF_LINK',
+        action: 'getCampaignsList',
+        userId,
+        severity: 'warn',
+        reason: 'Operativo profile is not linked to any staff_member',
+      }),
+    )
     return { data: [], total: 0 }
   }
 
@@ -224,13 +262,66 @@ async function getOperativoCampaigns(
   return { data: rows, total }
 }
 
+// ---- Helpers --------------------------------------------------------------
+
+function buildDailySchedulesForRange(
+  startDate: string,
+  endDate: string,
+  startTime: string,
+  endTime: string,
+): CampaignDaySchedule[] {
+  const result: CampaignDaySchedule[] = []
+  const s = new Date(`${startDate}T00:00:00`)
+  const e = new Date(`${endDate}T00:00:00`)
+  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    const dayDate = d.toISOString().slice(0, 10)
+    const isLast = dayDate === endDate
+    result.push({
+      dayDate,
+      startTime,
+      endTime,
+      isOvernight: !isLast, // todos los días excepto el último marcan pernocta
+    })
+  }
+  return result
+}
+
+async function persistCampaignDays(
+  campaignId: string,
+  schedules: CampaignDaySchedule[] | undefined,
+): Promise<void> {
+  await db.delete(campaignDays).where(eq(campaignDays.campaignId, campaignId))
+  if (!schedules || schedules.length === 0) return
+  await db.insert(campaignDays).values(
+    schedules.map((s) => ({
+      campaignId,
+      dayDate: s.dayDate,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      isOvernight: s.isOvernight ?? false,
+    })),
+  )
+}
+
+export async function getCampaignDays(campaignId: string): Promise<CampaignDay[]> {
+  await requireAccess({ roles: ['admin', 'admin_area', 'comercial', 'operativo'] })
+  return await db
+    .select()
+    .from(campaignDays)
+    .where(eq(campaignDays.campaignId, campaignId))
+    .orderBy(asc(campaignDays.dayDate))
+}
+
 export async function getCampaignById(
   id: string,
-): Promise<Campaign & { companyName: string | null }> {
-  const { userId, role } = await requireRole(['admin', 'banco_sangre', 'comercial', 'operativo'])
+): Promise<Campaign & { companyName: string | null; days: CampaignDay[] }> {
+  const { userId, role, scope } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial', 'operativo'],
+    allowCrossArea: true,
+  })
 
   try {
-    // Operativo: only see campaigns they are actively assigned to
+    // Operativo: only see campaigns they are actively assigned to.
     if (role === 'operativo') {
       const [staffRow] = await db
         .select({ id: staffMembers.id })
@@ -238,7 +329,7 @@ export async function getCampaignById(
         .where(eq(staffMembers.profileId, userId))
         .limit(1)
 
-      if (!staffRow) throw new Error('Campaña no encontrada')
+      if (!staffRow) throw new NotFoundError('Campaña no encontrada')
 
       const [assignment] = await db
         .select({ campaignId: campaignAssignments.campaignId })
@@ -252,8 +343,16 @@ export async function getCampaignById(
         )
         .limit(1)
 
-      if (!assignment) throw new Error('Campaña no encontrada')
+      if (!assignment) throw new NotFoundError('Campaña no encontrada')
     }
+
+    // admin_area (banco_sangre/logística) solo puede ver la campaña si su
+    // área tiene asignación activa (banco_sangre staff o vehículo logístico).
+    // Comercial y admin global pasan con scope global.
+    const areaScope: Area | null = scope.kind === 'global' ? null : scope.area
+    const areaPredicate = areaScope ? campaignArea(areaScope) : undefined
+    const whereParts: SQL[] = [eq(campaigns.id, id), eq(campaigns.isDeleted, false)]
+    if (areaPredicate) whereParts.push(areaPredicate)
 
     const [row] = await db
       .select({
@@ -262,34 +361,33 @@ export async function getCampaignById(
       })
       .from(campaigns)
       .leftJoin(companies, eq(campaigns.companyId, companies.id))
-      .where(and(eq(campaigns.id, id), eq(campaigns.isDeleted, false)))
+      .where(and(...whereParts))
       .limit(1)
 
     if (!row) {
-      throw new Error('Campaña no encontrada')
+      throw new NotFoundError('Campaña no encontrada')
     }
 
-    return { ...row.campaign, companyName: row.companyName }
+    const days = await getCampaignDays(id)
+
+    return { ...row.campaign, companyName: row.companyName, days }
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === 'Campaña no encontrada' ||
-        error.message.includes('permiso'))
-    ) {
-      throw error
-    }
-    throw new Error('Error al obtener la campaña')
+    rethrowOrLog(error, 'getCampaignById', 'Error al obtener la campaña')
   }
 }
 
 export async function createCampaign(
   data: CreateCampaignInput,
 ): Promise<Campaign> {
-  const { userId } = await requireRole(['admin', 'banco_sangre', 'comercial'])
+  const { userId } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    areas: ['comercial'],
+    allowCrossArea: true,
+  })
 
   const validated = createCampaignSchema.safeParse(data)
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   const input = validated.data
@@ -302,8 +400,11 @@ export async function createCampaign(
       .limit(1)
 
     if (existing.length > 0) {
-      throw new Error('Ya existe una campaña con ese código')
+      throw new ConflictError('Ya existe una campaña con ese código')
     }
+
+    const isMultiDay = !!input.endDate && input.endDate > input.campaignDate
+    const effectiveEndDate = input.endDate && input.endDate >= input.campaignDate ? input.endDate : null
 
     const [created] = await db
       .insert(campaigns)
@@ -312,6 +413,7 @@ export async function createCampaign(
         companyId: input.companyId ?? null,
         locationId: input.locationId ?? null,
         campaignDate: input.campaignDate,
+        endDate: effectiveEndDate,
         startTime: input.startTime ?? null,
         endTime: input.endTime ?? null,
         size: input.size,
@@ -326,23 +428,59 @@ export async function createCampaign(
       })
       .returning()
 
+    // Persistir horario por día.
+    let schedules = input.dailySchedules
+    if (!schedules && isMultiDay && input.startTime && input.endTime && input.endDate) {
+      // Fallback: si es multi-día pero no envió dailySchedules explícitos, expandimos
+      // con startTime/endTime para todos los días (pernocta entre días intermedios).
+      schedules = buildDailySchedulesForRange(
+        input.campaignDate,
+        input.endDate,
+        input.startTime,
+        input.endTime,
+      )
+    } else if (!schedules && input.startTime && input.endTime) {
+      // Mono-día con horarios → 1 row en campaign_days para consistencia.
+      schedules = [
+        {
+          dayDate: input.campaignDate,
+          startTime: input.startTime,
+          endTime: input.endTime,
+          isOvernight: false,
+        },
+      ]
+    }
+
+    if (schedules && schedules.length > 0) {
+      await persistCampaignDays(created.id, schedules)
+    }
+
     await logAudit({
       profileId: userId,
       action: 'create',
       tableName: 'campaigns',
       recordId: created.id,
-      newData: { code: created.code, status: created.status },
+      newData: { code: created.code, status: created.status, days: schedules?.length ?? 0 },
     })
 
     return created
   } catch (error) {
+    if (error instanceof AppError) throw error
+    const cause = (error as { cause?: { message?: string; code?: string } })?.cause
+    const detail = cause?.message ?? (error instanceof Error ? error.message : '')
+    console.error('[createCampaign] error:', error, 'cause:', cause)
+    // Caso conocido: migración pendiente. Lo exponemos al cliente porque es
+    // accionable.
     if (
-      error instanceof Error &&
-      (error.message.includes('código') || error.message.includes('permiso'))
+      cause?.code === '42703' || // undefined column
+      /column .* does not exist/i.test(detail) ||
+      /relation .* does not exist/i.test(detail)
     ) {
-      throw error
+      throw new Error(
+        'Falta aplicar la migración de campañas multi-día. Ejecuta `pnpm db:migrate`.',
+      )
     }
-    throw new Error('Error al crear la campaña')
+    throw new Error('Error al crear la campaña. Revisa los logs para más detalles.')
   }
 }
 
@@ -350,14 +488,18 @@ export async function updateCampaign(
   id: string,
   data: Omit<CreateCampaignInput, 'code'>,
 ): Promise<Campaign> {
-  const { userId } = await requireRole(['admin', 'banco_sangre', 'comercial'])
+  const { userId } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    areas: ['comercial'],
+    allowCrossArea: true,
+  })
 
   const validated = updateCampaignSchema.safeParse({ id, ...data })
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
-  const { id: _id, ...fields } = validated.data
+  const { id: _id, dailySchedules, ...fields } = validated.data
 
   try {
     const [current] = await db
@@ -367,23 +509,67 @@ export async function updateCampaign(
       .limit(1)
 
     if (!current) {
-      throw new Error('Campaña no encontrada')
+      throw new NotFoundError('Campaña no encontrada')
     }
 
     if (current.status !== 'tentativa') {
-      throw new Error(
+      throw new ValidationError(
         'No se puede editar una campaña confirmada o cancelada',
       )
     }
 
+    // Normaliza endDate: null si es mono-día o si endDate < campaignDate
+    const normalizedFields: Record<string, unknown> = { ...fields, updatedAt: new Date() }
+    if (fields.endDate !== undefined) {
+      normalizedFields.endDate =
+        fields.endDate && fields.campaignDate && fields.endDate > fields.campaignDate
+          ? fields.endDate
+          : null
+    }
+
     const [updated] = await db
       .update(campaigns)
-      .set({ ...fields, updatedAt: new Date() })
+      .set(normalizedFields)
       .where(eq(campaigns.id, id))
       .returning()
 
     if (!updated) {
-      throw new Error('Campaña no encontrada')
+      throw new NotFoundError('Campaña no encontrada')
+    }
+
+    // Reescribe campaign_days si se proveyeron dailySchedules.
+    if (dailySchedules !== undefined) {
+      await persistCampaignDays(id, dailySchedules)
+    } else if (
+      updated.campaignDate &&
+      updated.endDate &&
+      updated.endDate > updated.campaignDate &&
+      updated.startTime &&
+      updated.endTime
+    ) {
+      // Multi-día sin schedules explícitos → expandir desde startTime/endTime.
+      const expanded = buildDailySchedulesForRange(
+        updated.campaignDate,
+        updated.endDate,
+        updated.startTime,
+        updated.endTime,
+      )
+      await persistCampaignDays(id, expanded)
+    } else if (
+      updated.campaignDate &&
+      (!updated.endDate || updated.endDate === updated.campaignDate) &&
+      updated.startTime &&
+      updated.endTime
+    ) {
+      // Mono-día → 1 row en campaign_days.
+      await persistCampaignDays(id, [
+        {
+          dayDate: updated.campaignDate,
+          startTime: updated.startTime,
+          endTime: updated.endTime,
+          isOvernight: false,
+        },
+      ])
     }
 
     await logAudit({
@@ -393,22 +579,20 @@ export async function updateCampaign(
       recordId: updated.id,
     })
 
+    revalidatePath('/campanas')
+    revalidatePath(`/campanas/${id}`)
     return updated
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('Campaña') ||
-        error.message.includes('editar') ||
-        error.message.includes('permiso'))
-    ) {
-      throw error
-    }
-    throw new Error('Error al actualizar la campaña')
+    rethrowOrLog(error, 'updateCampaign', 'Error al actualizar la campaña')
   }
 }
 
 export async function confirmCampaign(id: string): Promise<Campaign> {
-  const { userId } = await requireRole(['admin', 'comercial'])
+  const { userId } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    areas: ['comercial'],
+    allowCrossArea: true,
+  })
 
   try {
     const [current] = await db
@@ -418,15 +602,15 @@ export async function confirmCampaign(id: string): Promise<Campaign> {
       .limit(1)
 
     if (!current) {
-      throw new Error('Campaña no encontrada')
+      throw new NotFoundError('Campaña no encontrada')
     }
 
     if (current.status === 'confirmada') {
-      throw new Error('La campaña ya está confirmada')
+      throw new ValidationError('La campaña ya está confirmada')
     }
 
     if (current.status !== 'tentativa') {
-      throw new Error(
+      throw new ValidationError(
         'Solo se pueden confirmar campañas en estado tentativa',
       )
     }
@@ -441,18 +625,15 @@ export async function confirmCampaign(id: string): Promise<Campaign> {
       })
       .where(eq(campaigns.id, id))
       .returning()
+    if (!updated) {
+      throw new NotFoundError('Campaña no encontrada')
+    }
 
+    revalidatePath('/campanas')
+    revalidatePath(`/campanas/${id}`)
     return updated
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('Campaña') ||
-        error.message.includes('campaña') ||
-        error.message.includes('permiso'))
-    ) {
-      throw error
-    }
-    throw new Error('Error al confirmar la campaña')
+    rethrowOrLog(error, 'confirmCampaign', 'Error al confirmar la campaña')
   }
 }
 
@@ -460,33 +641,41 @@ export async function cancelCampaign(
   id: string,
   reason: string,
 ): Promise<Campaign> {
-  const { userId } = await requireRole(['admin', 'banco_sangre', 'comercial'])
+  const { userId } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    areas: ['comercial'],
+    allowCrossArea: true,
+  })
 
   const validated = cancelCampaignSchema.safeParse({
     id,
     cancelReason: reason,
   })
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   try {
     const [current] = await db
-      .select({ id: campaigns.id, status: campaigns.status })
+      .select({
+        id: campaigns.id,
+        status: campaigns.status,
+        campaignDate: campaigns.campaignDate,
+      })
       .from(campaigns)
       .where(and(eq(campaigns.id, id), eq(campaigns.isDeleted, false)))
       .limit(1)
 
     if (!current) {
-      throw new Error('Campaña no encontrada')
+      throw new NotFoundError('Campaña no encontrada')
     }
 
     if (current.status === 'cancelada') {
-      throw new Error('La campaña ya está cancelada')
+      throw new ValidationError('La campaña ya está cancelada')
     }
 
     if (current.status === 'ejecutada') {
-      throw new Error('No se puede cancelar una campaña ejecutada')
+      throw new ValidationError('No se puede cancelar una campaña ejecutada')
     }
 
     const [updated] = await db
@@ -499,6 +688,24 @@ export async function cancelCampaign(
       .where(eq(campaigns.id, id))
       .returning()
 
+    const assigned = await db
+      .select({ staffId: campaignAssignments.staffId })
+      .from(campaignAssignments)
+      .where(
+        and(
+          eq(campaignAssignments.campaignId, id),
+          eq(campaignAssignments.isActive, true),
+        ),
+      )
+
+    if (assigned.length > 0) {
+      await recalcAggregatesForCampaign(
+        id,
+        assigned.map((a) => a.staffId),
+        'cancelCampaign',
+      )
+    }
+
     await logAudit({
       profileId: userId,
       action: 'update',
@@ -507,24 +714,20 @@ export async function cancelCampaign(
       newData: { status: 'cancelada', cancelReason: reason },
     })
 
+    revalidatePath('/campanas')
+    revalidatePath(`/campanas/${id}`)
     return updated
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('Campaña') ||
-        error.message.includes('campaña') ||
-        error.message.includes('cancelar') ||
-        error.message.includes('motivo') ||
-        error.message.includes('permiso'))
-    ) {
-      throw error
-    }
-    throw new Error('Error al cancelar la campaña')
+    rethrowOrLog(error, 'cancelCampaign', 'Error al cancelar la campaña')
   }
 }
 
 export async function deleteCampaign(id: string): Promise<void> {
-  const { userId } = await requireRole(['admin', 'comercial'])
+  const { userId } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    areas: ['comercial'],
+    allowCrossArea: true,
+  })
 
   try {
     const [current] = await db
@@ -533,7 +736,7 @@ export async function deleteCampaign(id: string): Promise<void> {
       .where(and(eq(campaigns.id, id), eq(campaigns.isDeleted, false)))
       .limit(1)
 
-    if (!current) throw new Error('Campaña no encontrada')
+    if (!current) throw new NotFoundError('Campaña no encontrada')
 
     await db
       .update(campaigns)
@@ -546,11 +749,10 @@ export async function deleteCampaign(id: string): Promise<void> {
       tableName: 'campaigns',
       recordId: id,
     })
+
+    revalidatePath('/campanas')
   } catch (error) {
-    if (error instanceof Error && (error.message.includes('Campaña') || error.message.includes('permiso'))) {
-      throw error
-    }
-    throw new Error('Error al eliminar la campaña')
+    rethrowOrLog(error, 'deleteCampaign', 'Error al eliminar la campaña')
   }
 }
 
@@ -568,7 +770,7 @@ export interface CommercialStaffMember {
 export async function getAssignedStaffForCommercial(
   campaignId: string,
 ): Promise<CommercialStaffMember[]> {
-  await requireRole(['admin', 'comercial'])
+  await requireAccess({ roles: ['admin', 'comercial'] })
 
   try {
     const rows = await db
@@ -592,8 +794,7 @@ export async function getAssignedStaffForCommercial(
 
     return rows as CommercialStaffMember[]
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al obtener el personal asignado para vista comercial')
+    rethrowOrLog(error, 'getCampaignAssignedStaffForCommercial', 'Error al obtener el personal asignado para vista comercial')
   }
 }
 
@@ -608,7 +809,11 @@ export interface ImportResult {
 export async function importCampaignsFromExcel(
   rows: ImportExcelRow[],
 ): Promise<ImportResult> {
-  await requireRole(['admin', 'banco_sangre', 'comercial'])
+  await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    areas: ['comercial'],
+    allowCrossArea: true,
+  })
 
   const result: ImportResult = { imported: 0, skipped: 0, errors: [] }
 
@@ -672,11 +877,15 @@ export async function importCampaignsFromExcel(
       })
 
       result.imported++
-    } catch {
+    } catch (error) {
+      console.error('[importCampaignsFromExcel] row', rowNum, error)
+      const reason = error instanceof AppError
+        ? error.message
+        : 'Error al guardar en la base de datos (revisa los logs del servidor).'
       result.errors.push({
         row: rowNum,
         code: data.code,
-        reason: 'Error al guardar en la base de datos',
+        reason,
       })
     }
   }

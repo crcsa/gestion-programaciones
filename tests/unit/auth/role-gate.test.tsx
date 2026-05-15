@@ -5,7 +5,7 @@ import { RoleGate } from '@/features/auth/components/role-gate'
 describe('RoleGate', () => {
   it('renders children when role is allowed', () => {
     render(
-      <RoleGate allowedRoles={['admin', 'banco_sangre']} currentRole="admin">
+      <RoleGate allowedRoles={['admin', 'admin_area']} currentRole="admin">
         <span>Contenido admin</span>
       </RoleGate>
     )
