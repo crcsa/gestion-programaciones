@@ -20,6 +20,8 @@ vi.mock('lucide-react', () => ({
   Building2: () => <svg data-testid="icon-building" />,
   BarChart3: () => <svg data-testid="icon-barchart" />,
   ShieldCheck: () => <svg data-testid="icon-shield" />,
+  UserCog: () => <svg data-testid="icon-usercog" />,
+  Truck: () => <svg data-testid="icon-truck" />,
 }))
 
 describe('Sidebar', () => {
@@ -48,10 +50,12 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Configuración')).toBeNull()
   })
 
-  it('shows all items when role is null', () => {
+  it('shows no items when role is null', () => {
+    // Sidebar ahora consume canAccess. role=null nunca pasa el predicate,
+    // así que no debe renderizar ningún link (evita exponer rutas a la
+    // sesión vacía).
     render(<Sidebar role={null} />)
-    // All items visible (no filtering when role unknown)
-    expect(screen.getByText('Dashboard')).toBeDefined()
+    expect(screen.queryByText('Dashboard')).toBeNull()
   })
 
   it('applies hover style on mouse enter for inactive item', () => {

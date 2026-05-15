@@ -1,26 +1,27 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
+import { NotFoundError, ValidationError, PermissionError } from '@/lib/errors/app-errors'
+import { rethrowOrLog } from '@/lib/errors/rethrow'
 import { eq, and } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { campaignTimeline } from '@/lib/db/schema/campaign-timeline'
 import { campaigns } from '@/lib/db/schema/campaigns'
 import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
+import { staffMembers } from '@/lib/db/schema/staff-members'
 import { hoursLog } from '@/lib/db/schema/hours-log'
-import { requireRole } from '@/features/auth/lib/require-role'
-import { registerTimelineEventSchema } from '../schemas/hours-schemas'
-import { recalculateWeeklyBalance } from './hours-actions'
-import { TIMELINE_EVENT_ORDER } from '@/features/campaigns/lib/timeline-constants'
+import { requireAccess } from '@/features/auth/lib/require-access'
+import { logAudit } from '@/lib/audit/log-audit'
+import {
+  registerTimelineEventSchema,
+  scheduleTimelineEventsBatchSchema,
+  registerActualTimeSchema,
+} from '../schemas/hours-schemas'
+import { recalcAggregatesForCampaign } from '../lib/aggregate-staff-data'
+import { TIMELINE_EVENT_ORDER, type TimelineEventType } from '@/features/campaigns/lib/timeline-constants'
 import type { CampaignTimelineEvent } from '@/lib/db/schema/campaign-timeline'
 
 // ---- Helpers --------------------------------------------------------------
-
-function getMondayOfWeek(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00`)
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  d.setDate(d.getDate() + diff)
-  return d.toISOString().slice(0, 10)
-}
 
 function calcHoursBetween(fromIso: Date, toIso: Date): number {
   return Math.abs(toIso.getTime() - fromIso.getTime()) / 3_600_000
@@ -34,40 +35,20 @@ export async function registerTimelineEvent(data: {
   eventTime: string
   notes?: string
 }): Promise<void> {
-  const { userId } = await requireRole(['admin', 'banco_sangre'])
+  const { userId } = await requireAccess({ roles: ['admin', 'admin_area'] })
 
   const validated = registerTimelineEventSchema.safeParse(data)
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   const { campaignId, eventType, eventTime, notes } = validated.data
 
   try {
-    // Verify the user is the coordinator of this campaign
-    const [assignment] = await db
-      .select({ isCoordinator: campaignAssignments.isCoordinator })
-      .from(campaignAssignments)
-      .leftJoin(
-        campaigns,
-        eq(campaignAssignments.campaignId, campaigns.id),
-      )
-      .where(
-        and(
-          eq(campaignAssignments.campaignId, campaignId),
-          eq(campaignAssignments.isActive, true),
-          eq(campaignAssignments.isCoordinator, true),
-        ),
-      )
-      .limit(1)
-
-    // Only coordinators or admins can register (admin override via requireRole)
-    // If no coordinator found, only allow admins
-    const isAdmin = true  // already passed requireRole(['admin', 'banco_sangre'])
-    void isAdmin
-    void assignment
-
-    // Upsert — only one event per type per campaign
+    // Upsert — only one event per type per campaign.
+    // El gate `requireAccess({ roles: ['admin','admin_area'] })` ya garantiza que solo
+    // administradores entran aquí. `registerActualTime` aplica una verificación
+    // separada de coordinador para operativos.
     const existing = await db
       .select({ id: campaignTimeline.id })
       .from(campaignTimeline)
@@ -98,15 +79,167 @@ export async function registerTimelineEvent(data: {
       })
     }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al registrar el evento de línea de tiempo')
+    rethrowOrLog(error, 'registerTimelineEvent', 'Error al registrar el evento de línea de tiempo')
+  }
+}
+
+/**
+ * Bulk-upsert de horas PROGRAMADAS para una campaña. Solo admin / banco_sangre.
+ * No toca la columna event_time (hora real); deja intacto lo que el coordinador
+ * haya registrado.
+ */
+export async function scheduleTimelineEventsBatch(data: {
+  campaignId: string
+  events: { eventType: TimelineEventType; scheduledTime: string }[]
+}): Promise<void> {
+  const { userId } = await requireAccess({ roles: ['admin', 'admin_area'] })
+
+  const validated = scheduleTimelineEventsBatchSchema.safeParse(data)
+  if (!validated.success) {
+    throw new ValidationError(validated.error.issues[0].message)
+  }
+
+  const { campaignId, events } = validated.data
+
+  // Detectar duplicados de eventType dentro del batch.
+  const seen = new Set<string>()
+  for (const e of events) {
+    if (seen.has(e.eventType)) {
+      throw new Error(`Evento duplicado en el lote: ${e.eventType}`)
+    }
+    seen.add(e.eventType)
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      for (const e of events) {
+        const [existing] = await tx
+          .select({ id: campaignTimeline.id })
+          .from(campaignTimeline)
+          .where(
+            and(
+              eq(campaignTimeline.campaignId, campaignId),
+              eq(campaignTimeline.eventType, e.eventType),
+            ),
+          )
+          .limit(1)
+
+        if (existing) {
+          await tx
+            .update(campaignTimeline)
+            .set({ scheduledTime: new Date(e.scheduledTime) })
+            .where(eq(campaignTimeline.id, existing.id))
+        } else {
+          await tx.insert(campaignTimeline).values({
+            campaignId,
+            eventType: e.eventType,
+            scheduledTime: new Date(e.scheduledTime),
+            registeredById: userId,
+          })
+        }
+      }
+    })
+
+    await logAudit({
+      profileId: userId,
+      action: 'update',
+      tableName: 'campaign_timeline',
+      recordId: campaignId,
+      newData: { scheduled: events.map((e) => e.eventType) },
+    })
+
+    revalidatePath(`/campanas/${campaignId}`)
+  } catch (error) {
+    rethrowOrLog(error, 'scheduleTimelineEventsBatch', 'Error al programar las horas de la línea de tiempo')
+  }
+}
+
+/**
+ * Registra la hora REAL de un evento. Permitido a:
+ *   - admin / banco_sangre (siempre)
+ *   - operativo si es el coordinador asignado a ESTA campaña
+ */
+export async function registerActualTime(data: {
+  campaignId: string
+  eventType: TimelineEventType
+  actualTime: string
+}): Promise<void> {
+  const { userId, role } = await requireAccess({ roles: ['admin', 'admin_area', 'operativo'] })
+
+  const validated = registerActualTimeSchema.safeParse(data)
+  if (!validated.success) {
+    throw new ValidationError(validated.error.issues[0].message)
+  }
+
+  const { campaignId, eventType, actualTime } = validated.data
+
+  if (role === 'operativo') {
+    const [coord] = await db
+      .select({ staffId: campaignAssignments.staffId })
+      .from(campaignAssignments)
+      .innerJoin(staffMembers, eq(staffMembers.id, campaignAssignments.staffId))
+      .where(
+        and(
+          eq(campaignAssignments.campaignId, campaignId),
+          eq(campaignAssignments.isActive, true),
+          eq(campaignAssignments.isCoordinator, true),
+          eq(staffMembers.profileId, userId),
+        ),
+      )
+      .limit(1)
+
+    if (!coord) {
+      throw new PermissionError('No tiene permiso para registrar horas de esta campaña')
+    }
+  }
+
+  try {
+    const [existing] = await db
+      .select({ id: campaignTimeline.id })
+      .from(campaignTimeline)
+      .where(
+        and(
+          eq(campaignTimeline.campaignId, campaignId),
+          eq(campaignTimeline.eventType, eventType),
+        ),
+      )
+      .limit(1)
+
+    if (existing) {
+      await db
+        .update(campaignTimeline)
+        .set({
+          eventTime: new Date(actualTime),
+          registeredById: userId,
+        })
+        .where(eq(campaignTimeline.id, existing.id))
+    } else {
+      await db.insert(campaignTimeline).values({
+        campaignId,
+        eventType,
+        eventTime: new Date(actualTime),
+        registeredById: userId,
+      })
+    }
+
+    await logAudit({
+      profileId: userId,
+      action: 'update',
+      tableName: 'campaign_timeline',
+      recordId: campaignId,
+      newData: { eventType, actualTime },
+    })
+
+    revalidatePath(`/campanas/${campaignId}`)
+  } catch (error) {
+    rethrowOrLog(error, 'registerActualTime', 'Error al registrar la hora real')
   }
 }
 
 export async function getCampaignTimeline(
   campaignId: string,
 ): Promise<CampaignTimelineEvent[]> {
-  await requireRole(['admin', 'banco_sangre', 'comercial', 'operativo'])
+  await requireAccess({ roles: ['admin', 'admin_area', 'comercial', 'operativo'] })
 
   try {
     const events = await db
@@ -120,25 +253,29 @@ export async function getCampaignTimeline(
         TIMELINE_EVENT_ORDER.indexOf(b.eventType as (typeof TIMELINE_EVENT_ORDER)[number]),
     )
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al obtener la línea de tiempo de la campaña')
+    rethrowOrLog(error, 'getCampaignTimeline', 'Error al obtener la línea de tiempo de la campaña')
   }
 }
 
 export async function finalizeCampaignHours(campaignId: string): Promise<void> {
-  await requireRole(['admin', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'admin_area'] })
 
   try {
     const events = await getCampaignTimeline(campaignId)
 
-    if (events.length < TIMELINE_EVENT_ORDER.length) {
-      throw new Error(
-        `Faltan ${TIMELINE_EVENT_ORDER.length - events.length} eventos de línea de tiempo por registrar`,
+    // Solo eventos con hora REAL registrada (event_time NOT NULL).
+    const registered = events.filter((e) => e.eventTime !== null)
+    const missing = TIMELINE_EVENT_ORDER.filter(
+      (t) => !registered.some((e) => e.eventType === t),
+    )
+    if (missing.length > 0) {
+      throw new ValidationError(
+        `Faltan horas reales de: ${missing.join(', ')}`,
       )
     }
 
-    const eventMap = events.reduce<Record<string, Date>>(
-      (acc, e) => ({ ...acc, [e.eventType]: e.eventTime }),
+    const eventMap = registered.reduce<Record<string, Date>>(
+      (acc, e) => ({ ...acc, [e.eventType]: e.eventTime as Date }),
       {},
     )
 
@@ -148,7 +285,7 @@ export async function finalizeCampaignHours(campaignId: string): Promise<void> {
     const regresoAlmuerzo = eventMap['regreso_almuerzo']
 
     if (!salidaSede || !fin || !salidaAlmuerzo || !regresoAlmuerzo) {
-      throw new Error('Eventos clave de línea de tiempo no encontrados')
+      throw new NotFoundError('Eventos clave de línea de tiempo no encontrados')
     }
 
     const totalSpanHours = calcHoursBetween(salidaSede, fin)
@@ -161,7 +298,7 @@ export async function finalizeCampaignHours(campaignId: string): Promise<void> {
       .where(eq(campaigns.id, campaignId))
       .limit(1)
 
-    if (!campaign) throw new Error('Campaña no encontrada')
+    if (!campaign) throw new NotFoundError('Campaña no encontrada')
 
     const assignedStaff = await db
       .select({ staffId: campaignAssignments.staffId })
@@ -173,39 +310,36 @@ export async function finalizeCampaignHours(campaignId: string): Promise<void> {
         ),
       )
 
-    for (const { staffId } of assignedStaff) {
-      // Upsert hours_log entry
-      await db
-        .insert(hoursLog)
-        .values({
-          staffId,
-          logDate: campaign.campaignDate,
-          hoursWorked: workedHours,
-          sourceType: 'campaign',
-          sourceId: campaignId,
-        })
-        .onConflictDoNothing()
+    // Transacción: hours_log inserts + cambio de status van juntos. Si algo
+    // falla acá, nada se aplica. El recálculo de agregados queda fuera (no es
+    // parte de la consistencia del log; un fallo allí se loggea y reintenta
+    // vía cron `recalc-aggregates`).
+    await db.transaction(async (tx) => {
+      for (const { staffId } of assignedStaff) {
+        await tx
+          .insert(hoursLog)
+          .values({
+            staffId,
+            logDate: campaign.campaignDate,
+            hoursWorked: workedHours,
+            sourceType: 'campaign',
+            sourceId: campaignId,
+          })
+          .onConflictDoNothing()
+      }
+      await tx
+        .update(campaigns)
+        .set({ status: 'ejecutada', updatedAt: new Date() })
+        .where(eq(campaigns.id, campaignId))
+    })
 
-      // Recalculate weekly balance
-      const weekStart = getMondayOfWeek(campaign.campaignDate)
-      await recalculateWeeklyBalance(staffId, weekStart)
-    }
-
-    // Mark campaign as ejecutada
-    await db
-      .update(campaigns)
-      .set({ status: 'ejecutada', updatedAt: new Date() })
-      .where(eq(campaigns.id, campaignId))
+    // Recalcula balance semanal y contadores mensuales (fuera de la transacción).
+    await recalcAggregatesForCampaign(
+      campaignId,
+      assignedStaff.map((s) => s.staffId),
+      'finalizeCampaignHours',
+    )
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('permiso') ||
-        error.message.startsWith('Faltan') ||
-        error.message.includes('no encontrada') ||
-        error.message.includes('clave'))
-    ) {
-      throw error
-    }
-    throw new Error('Error al finalizar las horas de la campaña')
+    rethrowOrLog(error, 'finalizeCampaignHours', 'Error al finalizar las horas de la campaña')
   }
 }

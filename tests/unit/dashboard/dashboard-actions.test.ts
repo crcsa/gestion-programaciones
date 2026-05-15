@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PermissionError } from '@/lib/errors/app-errors'
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -11,6 +12,18 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
+}))
+
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
 }))
 
 vi.mock('@/lib/db/schema/campaigns', () => ({
@@ -57,11 +70,10 @@ vi.mock('@/lib/db/schema/campaign-assignments', () => ({
 }))
 
 import { db } from '@/lib/db'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import {
   getAdminDashboardData,
   getComercialDashboardData,
-  getOperativoDashboardData,
 } from '@/features/dashboard/actions/dashboard-actions'
 
 // Helper to create a chainable drizzle mock
@@ -117,8 +129,8 @@ describe('getAdminDashboardData', () => {
   })
 
   it('lanza error cuando requireRole rechaza', async () => {
-    vi.mocked(requireRole).mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getAdminDashboardData()).rejects.toThrow('permiso')
@@ -159,8 +171,8 @@ describe('getComercialDashboardData', () => {
   })
 
   it('lanza error cuando requireRole rechaza', async () => {
-    vi.mocked(requireRole).mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getComercialDashboardData()).rejects.toThrow('permiso')
@@ -173,72 +185,6 @@ describe('getComercialDashboardData', () => {
 
     expect(result.pendingTentativeCampaigns).toHaveLength(0)
     expect(result.upcomingConfirmedCampaigns).toHaveLength(0)
-  })
-})
-
-// ---- getOperativoDashboardData -------------------------------------------
-
-describe('getOperativoDashboardData', () => {
-  const STAFF_ID = 'staff-abc'
-
-  beforeEach(() => vi.clearAllMocks())
-
-  it('devuelve turnos y asignaciones del operativo', async () => {
-    const shifts = [
-      { id: 's1', shiftDate: '2026-03-17', shiftType: 'diurno_completo', startTime: '07:00', endTime: '19:00', totalHours: 12 },
-    ]
-    const assignments = [
-      { id: 'a1', campaignId: 'c1', campaignDate: '2026-03-18', municipality: 'Medellín', code: 'CAM-001', isCoordinator: false },
-    ]
-
-    let callCount = 0
-    mockDb.select = vi.fn(() => {
-      callCount++
-      return makeChain(callCount === 1 ? shifts : assignments)
-    })
-
-    const result = await getOperativoDashboardData(STAFF_ID)
-
-    expect(result.myWeeklyShifts).toHaveLength(1)
-    expect(result.myWeeklyShifts[0].shiftType).toBe('diurno_completo')
-    expect(result.myCampaignAssignments).toHaveLength(1)
-    expect(result.myCampaignAssignments[0].code).toBe('CAM-001')
-    expect(result.staffMemberId).toBe(STAFF_ID)
-  })
-
-  it('calcula weeklyHoursSum correctamente', async () => {
-    const shifts = [
-      { id: 's1', shiftDate: '2026-03-17', shiftType: 'diurno_completo', startTime: '07:00', endTime: '19:00', totalHours: 8 },
-      { id: 's2', shiftDate: '2026-03-18', shiftType: 'noche', startTime: '19:00', endTime: '07:00', totalHours: 10 },
-    ]
-
-    let callCount = 0
-    mockDb.select = vi.fn(() => {
-      callCount++
-      return makeChain(callCount === 1 ? shifts : [])
-    })
-
-    const result = await getOperativoDashboardData(STAFF_ID)
-
-    expect(result.weeklyHoursSum).toBe(18)
-  })
-
-  it('devuelve arrays vacíos cuando no hay actividad', async () => {
-    mockDb.select = vi.fn(() => makeChain([]))
-
-    const result = await getOperativoDashboardData(STAFF_ID)
-
-    expect(result.myWeeklyShifts).toHaveLength(0)
-    expect(result.myCampaignAssignments).toHaveLength(0)
-    expect(result.weeklyHoursSum).toBe(0)
-  })
-
-  it('lanza error cuando requireRole rechaza', async () => {
-    vi.mocked(requireRole).mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
-    )
-
-    await expect(getOperativoDashboardData(STAFF_ID)).rejects.toThrow('permiso')
   })
 })
 
@@ -265,19 +211,5 @@ describe('getComercialDashboardData — error wrapping', () => {
     })
 
     await expect(getComercialDashboardData()).rejects.toThrow('Error al obtener')
-  })
-})
-
-describe('getOperativoDashboardData — error wrapping', () => {
-  const STAFF_ID = 'staff-abc'
-
-  beforeEach(() => vi.clearAllMocks())
-
-  it('envuelve errores de DB inesperados', async () => {
-    mockDb.select = vi.fn(() => {
-      throw new Error('connection refused')
-    })
-
-    await expect(getOperativoDashboardData(STAFF_ID)).rejects.toThrow('Error al obtener')
   })
 })

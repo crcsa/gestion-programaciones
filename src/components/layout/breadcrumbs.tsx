@@ -10,20 +10,31 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
+import { useBreadcrumbOverrides } from './breadcrumb-context'
 
 const ROUTE_LABELS: Record<string, string> = {
   personal: 'Personal',
   campanas: 'Campañas',
   turnos: 'Turnos en Sede',
   configuracion: 'Configuración',
+  usuarios: 'Usuarios',
   nuevo: 'Nuevo',
   editar: 'Editar',
+  'mi-agenda': 'Mi Agenda',
   'mi-calendario': 'Mi Calendario',
+  empresas: 'Empresas',
+  horas: 'Horas',
+  reportes: 'Reportes',
+  disponibilidad: 'Disponibilidad',
+  auditoria: 'Auditoría',
+  vehiculos: 'Vehículos',
 }
 
 export function Breadcrumbs() {
   const pathname = usePathname()
   const segments = pathname.split('/').filter(Boolean)
+  const ctx = useBreadcrumbOverrides()
+  const overrides = ctx?.overrides ?? {}
 
   if (segments.length === 0) {
     return (
@@ -46,7 +57,7 @@ export function Breadcrumbs() {
         {segments.map((segment, index) => {
           const href = '/' + segments.slice(0, index + 1).join('/')
           const isLast = index === segments.length - 1
-          const label = ROUTE_LABELS[segment] ?? segment
+          const label = overrides[segment] ?? ROUTE_LABELS[segment] ?? segment
 
           return (
             <span key={href} className="flex items-center gap-2">

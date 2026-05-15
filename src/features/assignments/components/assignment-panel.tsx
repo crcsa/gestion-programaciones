@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { RequirementsMeter } from './requirements-meter'
 import { AssignedStaffList } from './assigned-staff-list'
 import { SmartStaffSelector } from './smart-staff-selector'
@@ -10,28 +10,42 @@ import {
   setCoordinator,
 } from '../actions/assignment-actions'
 import type { AssignedStaffMember } from '../actions/assignment-actions'
-import type { Role } from '@/types/roles'
 
 interface AssignmentPanelProps {
   campaignId: string
   campaignSize: 'S' | 'S_plus' | 'M' | 'L'
   campaignStatus: 'tentativa' | 'confirmada' | 'cancelada' | 'ejecutada'
-  currentRole: Role | null
+  /**
+   * True solo para admin global y admin_area de banco_sangre. Otras áreas ven
+   * el panel en modo read-only (sin botones de remover ni "hacer coordinador",
+   * sin selector de personal).
+   */
+  canEdit: boolean
 }
 
 export function AssignmentPanel({
   campaignId,
   campaignSize,
   campaignStatus,
-  currentRole,
+  canEdit,
 }: AssignmentPanelProps) {
   const [assigned, setAssigned] = useState<AssignedStaffMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const isEditable =
-    campaignStatus === 'confirmada' &&
-    (currentRole === 'admin' || currentRole === 'banco_sangre')
+  // Edición real: solo si tiene permiso Y la campaña está confirmada (no se
+  // edita en tentativa ni después de ejecutada/cancelada).
+  const isEditable = canEdit && campaignStatus === 'confirmada'
+
+  const { assignedBacteriologos, assignedTecnicos } = useMemo(() => {
+    let bact = 0
+    let tec = 0
+    for (const a of assigned) {
+      if (a.staffProfile === 'bacteriologo') bact++
+      else if (a.staffProfile === 'tecnico') tec++
+    }
+    return { assignedBacteriologos: bact, assignedTecnicos: tec }
+  }, [assigned])
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
@@ -110,7 +124,13 @@ export function AssignmentPanel({
       {isEditable && (
         <div>
           <h3 className="font-semibold mb-3">Agregar personal</h3>
-          <SmartStaffSelector campaignId={campaignId} onAssigned={fetchData} />
+          <SmartStaffSelector
+            campaignId={campaignId}
+            campaignSize={campaignSize}
+            assignedBacteriologos={assignedBacteriologos}
+            assignedTecnicos={assignedTecnicos}
+            onAssigned={fetchData}
+          />
         </div>
       )}
     </div>

@@ -1,16 +1,16 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { AppShell } from '@/components/layout/app-shell'
+import { getCurrentUserContext } from '@/features/auth/lib/user-context'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  const ctx = await getCurrentUserContext()
+  if (!ctx) {
     redirect('/login')
   }
 
-  return <AppShell>{children}</AppShell>
+  return (
+    <AppShell email={ctx.email} role={ctx.role} area={ctx.area}>
+      {children}
+    </AppShell>
+  )
 }

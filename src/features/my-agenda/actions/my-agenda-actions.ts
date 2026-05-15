@@ -1,33 +1,23 @@
 'use server'
 
 import { eq, and, asc } from 'drizzle-orm'
+import { AppError, ValidationError } from '@/lib/errors/app-errors'
 import { db } from '@/lib/db'
 import { profiles } from '@/lib/db/schema/profiles'
 import { staffMembers } from '@/lib/db/schema/staff-members'
-import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
-import { campaigns } from '@/lib/db/schema/campaigns'
 import { sedeShifts } from '@/lib/db/schema/sede-shifts'
 import { weeklyBalance } from '@/lib/db/schema/weekly-balance'
 import { monthlyCounters } from '@/lib/db/schema/monthly-counters'
 import { staffAvailability } from '@/lib/db/schema/staff-availability'
-import { requireRole } from '@/features/auth/lib/require-role'
-import { WEEKLY_HOURS_CONTRACT } from '@/features/assignments/lib/validation-constants'
+import { requireAccess } from '@/features/auth/lib/require-access'
+import { loadValidationRuntimeConfig } from '@/features/configuration/lib/runtime-config'
+import { getCurrentMondayIso, getSundayOfWeek } from '@/lib/date/week'
+import {
+  getMyUpcomingCampaigns,
+  type MyUpcomingCampaign,
+} from '@/features/dashboard/lib/operativo-queries'
 
 // ---- Types ----------------------------------------------------------------
-
-export interface MyUpcomingCampaign {
-  campaignId: string
-  assignmentId: string
-  code: string
-  campaignDate: string
-  startTime: string | null
-  endTime: string | null
-  municipality: string
-  status: string
-  size: string
-  modality: string
-  isCoordinator: boolean
-}
 
 export interface MySedeShift {
   id: string
@@ -62,39 +52,41 @@ export interface MyAgendaData {
   weeklyBalance: MyWeeklyBalance | null
   monthlyCounters: MyMonthlyCounters
   coordinatorCampaignIds: string[]
+  contractWeeklyHours: number
+  maxSundaysMonth: number
+  maxOvernightsMonth: number
 }
 
 // ---- Helpers --------------------------------------------------------------
 
 function getCurrentMondayISO(): string {
-  const d = new Date()
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  d.setDate(d.getDate() + diff)
-  return d.toISOString().slice(0, 10)
+  return getCurrentMondayIso()
 }
 
 function getWeekEndISO(weekStart: string): string {
-  const d = new Date(`${weekStart}T00:00:00`)
-  d.setDate(d.getDate() + 6)
-  return d.toISOString().slice(0, 10)
-}
-
-function getThirtyDaysFromNow(): string {
-  const d = new Date()
-  d.setDate(d.getDate() + 30)
-  return d.toISOString().slice(0, 10)
+  return getSundayOfWeek(weekStart)
 }
 
 function getTodayISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  // Local components — "hoy" según el huso del usuario, no UTC.
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function getCurrentHHMM(): string {
+  const now = new Date()
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 }
 
 function deriveBalanceState(
   workedHours: number,
+  weeklyHours: number,
 ): 'cumplio' | 'horas_extras' | 'debe_horas' {
-  if (workedHours === WEEKLY_HOURS_CONTRACT) return 'cumplio'
-  if (workedHours > WEEKLY_HOURS_CONTRACT) return 'horas_extras'
+  if (workedHours === weeklyHours) return 'cumplio'
+  if (workedHours > weeklyHours) return 'horas_extras'
   return 'debe_horas'
 }
 
@@ -121,59 +113,6 @@ async function getStaffMemberFromAuth(userId: string) {
     .limit(1)
 
   return staff ?? null
-}
-
-// ---- Fetch upcoming campaigns ---------------------------------------------
-
-async function fetchUpcomingCampaigns(staffId: string): Promise<MyUpcomingCampaign[]> {
-  const today = getTodayISO()
-  const endDate = getThirtyDaysFromNow()
-
-  const rows = await db
-    .select({
-      campaignId: campaigns.id,
-      assignmentId: campaignAssignments.id,
-      code: campaigns.code,
-      campaignDate: campaigns.campaignDate,
-      startTime: campaigns.startTime,
-      endTime: campaigns.endTime,
-      municipality: campaigns.municipality,
-      status: campaigns.status,
-      size: campaigns.size,
-      modality: campaigns.modality,
-      isCoordinator: campaignAssignments.isCoordinator,
-    })
-    .from(campaignAssignments)
-    .leftJoin(campaigns, eq(campaignAssignments.campaignId, campaigns.id))
-    .where(
-      and(
-        eq(campaignAssignments.staffId, staffId),
-        eq(campaignAssignments.isActive, true),
-      ),
-    )
-    .orderBy(asc(campaigns.campaignDate))
-
-  return rows
-    .filter(
-      (r) =>
-        r.campaignId !== null &&
-        r.campaignDate !== null &&
-        r.campaignDate >= today &&
-        r.campaignDate <= endDate,
-    )
-    .map((r) => ({
-      campaignId: r.campaignId!,
-      assignmentId: r.assignmentId,
-      code: r.code ?? '',
-      campaignDate: r.campaignDate ?? '',
-      startTime: r.startTime,
-      endTime: r.endTime,
-      municipality: r.municipality ?? '',
-      status: r.status ?? '',
-      size: r.size ?? '',
-      modality: r.modality ?? '',
-      isCoordinator: r.isCoordinator,
-    }))
 }
 
 // ---- Fetch sede shifts for current week -----------------------------------
@@ -203,7 +142,15 @@ async function fetchSedeShiftsThisWeek(staffId: string): Promise<MySedeShift[]> 
 
 // ---- Fetch weekly balance -------------------------------------------------
 
-async function fetchWeeklyBalance(staffId: string): Promise<MyWeeklyBalance | null> {
+async function fetchWeeklyBalance(
+  staffId: string,
+  weeklyHours: number,
+  /**
+   * Turnos de sede de la semana ya cargados arriba — los reusamos para no
+   * golpear la DB dos veces. Solo los pasamos para el cálculo progresivo.
+   */
+  weekShifts: { shiftDate: string; endTime: string; totalHours: number }[],
+): Promise<MyWeeklyBalance | null> {
   const weekStart = getCurrentMondayISO()
 
   const [balance] = await db
@@ -222,11 +169,46 @@ async function fetchWeeklyBalance(staffId: string): Promise<MyWeeklyBalance | nu
     )
     .limit(1)
 
-  if (!balance) return null
+  // Cálculo PROGRESIVO de "horas trabajadas hasta ahora":
+  // - turnos cuyo shiftDate ya pasó → suman completos.
+  // - turno de HOY → suma si su endTime ya pasó (HH:MM <= now local).
+  // - turnos futuros (shiftDate > hoy, o hoy con endTime > now) → 0.
+  //
+  // Por qué no usar `weeklyBalance.workedHours` directamente: ese campo refleja
+  // el TOTAL programado para la semana (planeación), no lo cumplido al momento.
+  // El usuario espera ver una barra que crece a medida que avanzan los días.
+  const today = getTodayISO()
+  const nowHHMM = getCurrentHHMM()
+  const workedSoFar = weekShifts.reduce((sum, s) => {
+    if (s.shiftDate < today) return sum + s.totalHours
+    if (s.shiftDate === today && s.endTime <= nowHHMM) return sum + s.totalHours
+    return sum
+  }, 0)
+
+  // Sin row en weekly_balance: si tampoco hay shifts en la semana, conservamos
+  // null (no hay nada que mostrar). Si hay shifts pero el recalc no ha corrido
+  // aún, sintetizamos un balance progresivo derivado SOLO de los shifts ya
+  // completados (sedeHours) — la UI muestra "12h" en vez de "0h" engañoso.
+  // Las horas de campaña entran cuando el cron de recalc-aggregates corre y
+  // crea el row real, prevaleciendo a partir de ese momento.
+  if (!balance) {
+    if (weekShifts.length === 0) return null
+    return {
+      workedHours: workedSoFar,
+      sedeHours: workedSoFar,
+      campaignHours: 0,
+      extraHours: Math.max(0, workedSoFar - weeklyHours),
+      balanceState: deriveBalanceState(workedSoFar, weeklyHours),
+    }
+  }
 
   return {
     ...balance,
-    balanceState: deriveBalanceState(balance.workedHours),
+    // Sobrescribimos workedHours con el valor progresivo. sedeHours y
+    // campaignHours mantienen el total de la semana (para mostrar "scheduled")
+    // si hace falta más adelante.
+    workedHours: workedSoFar,
+    balanceState: deriveBalanceState(workedSoFar, weeklyHours),
   }
 }
 
@@ -270,23 +252,26 @@ function extractCoordinatorCampaignIds(
 
 // ---- Public actions -------------------------------------------------------
 
-export async function getMyAgendaData(): Promise<MyAgendaData> {
-  const { userId } = await requireRole(['operativo', 'admin', 'banco_sangre', 'comercial'])
+export async function getMyAgendaData(): Promise<MyAgendaData | null> {
+  const { userId } = await requireAccess({ roles: ['operativo', 'admin', 'admin_area', 'comercial'] })
 
   try {
     const staff = await getStaffMemberFromAuth(userId)
 
     if (!staff) {
-      throw new Error('No tiene un perfil de funcionario asociado')
+      return null
     }
 
-    const [upcomingCampaigns, sedeShiftsThisWeek, balance, counters] =
-      await Promise.all([
-        fetchUpcomingCampaigns(staff.id),
-        fetchSedeShiftsThisWeek(staff.id),
-        fetchWeeklyBalance(staff.id),
-        fetchMonthlyCounters(staff.id),
-      ])
+    const cfg = await loadValidationRuntimeConfig()
+
+    // Cargamos los shifts ANTES del balance para poder pasárselos y calcular
+    // horas trabajadas progresivas sin un segundo round-trip a DB.
+    const [upcomingCampaigns, sedeShiftsThisWeek, counters] = await Promise.all([
+      getMyUpcomingCampaigns(staff.id),
+      fetchSedeShiftsThisWeek(staff.id),
+      fetchMonthlyCounters(staff.id),
+    ])
+    const balance = await fetchWeeklyBalance(staff.id, cfg.weeklyHours, sedeShiftsThisWeek)
 
     const coordinatorCampaignIds = extractCoordinatorCampaignIds(upcomingCampaigns)
 
@@ -300,10 +285,12 @@ export async function getMyAgendaData(): Promise<MyAgendaData> {
       weeklyBalance: balance,
       monthlyCounters: counters,
       coordinatorCampaignIds,
+      contractWeeklyHours: cfg.weeklyHours,
+      maxSundaysMonth: cfg.maxSundaysMonth,
+      maxOvernightsMonth: cfg.maxOvernightsMonth,
     }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    if (error instanceof Error && error.message.includes('perfil de funcionario')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener los datos de mi agenda')
   }
 }
@@ -313,13 +300,13 @@ export async function setMyAvailability(data: {
   status: 'vacaciones' | 'incapacidad' | 'licencia' | 'disponible'
   notes?: string
 }): Promise<void> {
-  const { userId } = await requireRole(['operativo', 'admin', 'banco_sangre', 'comercial'])
+  const { userId } = await requireAccess({ roles: ['operativo', 'admin', 'admin_area', 'comercial'] })
 
   try {
     const staff = await getStaffMemberFromAuth(userId)
 
     if (!staff) {
-      throw new Error('No tiene un perfil de funcionario asociado')
+      throw new ValidationError('No tiene un perfil de colaborador asociado')
     }
 
     const [existing] = await db
@@ -351,8 +338,8 @@ export async function setMyAvailability(data: {
       })
     }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    if (error instanceof Error && error.message.includes('perfil de funcionario')) throw error
+    if (error instanceof AppError) throw error
+    console.error('[setAvailability]', error)
     throw new Error('Error al registrar la disponibilidad')
   }
 }

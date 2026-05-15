@@ -14,6 +14,22 @@ vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
 }))
 
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'a@x.com',
+    fullName: 'A',
+    scope: { kind: 'global' as const },
+  }),
+}))
+
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+}))
+
 vi.mock('@/lib/db/schema/campaigns', () => ({
   campaigns: {
     id: 'id',
@@ -37,7 +53,16 @@ vi.mock('@/lib/db/schema/campaigns', () => ({
     trainingAreaId: 'training_area_id',
     observations: 'observations',
     hexabankCode: 'hexabank_code',
+    endDate: 'end_date',
     createdById: 'created_by_id',
+  },
+  campaignDays: {
+    id: 'id',
+    campaignId: 'campaign_id',
+    dayDate: 'day_date',
+    startTime: 'start_time',
+    endTime: 'end_time',
+    isOvernight: 'is_overnight',
   },
 }))
 
@@ -112,7 +137,7 @@ describe('Hexabank code integration', () => {
     startTime: null,
     endTime: null,
     size: 'M' as const,
-    modality: 'presencial' as const,
+    modality: 'corporativa' as const,
     status: 'tentativa' as const,
     municipality: 'Medellin',
     expectedDonations: 50,
@@ -156,7 +181,7 @@ describe('Hexabank code integration', () => {
     const result = await updateCampaign(CAMPAIGN_UUID, {
       campaignDate: '2026-04-15',
       size: 'M',
-      modality: 'presencial',
+      modality: 'corporativa',
       municipality: 'Medellin',
       hexabankCode: 'HXB-456',
     })
@@ -177,7 +202,7 @@ describe('Hexabank code integration', () => {
       code: 'CMP-001',
       campaignDate: '2026-04-15',
       size: 'M',
-      modality: 'presencial',
+      modality: 'corporativa',
       municipality: 'Medellin',
       expectedDonations: 50,
       hexabankCode: 'HXB-789',

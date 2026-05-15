@@ -1,9 +1,22 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
+import { matchNavItem, requirementFromNavItem } from '@/lib/navigation/nav-items'
+import { canAccess } from '@/features/auth/lib/can-access'
+import { parseRole } from '@/types/roles'
+import { parseArea } from '@/types/areas'
 
 const PUBLIC_ROUTES = ['/login']
-const ADMIN_ONLY_ROUTES = ['/configuracion']
-const COMERCIAL_RESTRICTED = ['/personal']
+
+/**
+ * Si un usuario autenticado no tiene acceso a la ruta solicitada, lo
+ * redirigimos a este path. Centralizado para que sea fácil cambiar.
+ */
+function fallbackHomeFor(role: string): string {
+  // Comercial es el único rol cuya home no es '/': el dashboard de comercial
+  // está en /campanas (cuando intentan ir a /personal, por ejemplo).
+  if (role === 'comercial') return '/campanas'
+  return '/'
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -15,6 +28,7 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/cron') ||
     pathname.includes('.')
   ) {
     return NextResponse.next()
@@ -28,18 +42,35 @@ export async function middleware(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, area, is_active')
     .eq('id', user.id)
     .single()
 
-  const role = profile?.role ?? 'operativo'
-
-  if (ADMIN_ONLY_ROUTES.some((r) => pathname.startsWith(r)) && role !== 'admin') {
-    return NextResponse.redirect(new URL('/', request.url))
+  if (!profile || profile.is_active === false) {
+    const url = new URL('/login', request.url)
+    return NextResponse.redirect(url)
   }
 
-  if (COMERCIAL_RESTRICTED.some((r) => pathname.startsWith(r)) && role === 'comercial') {
-    return NextResponse.redirect(new URL('/campanas', request.url))
+  const role = parseRole(profile.role)
+  const area = parseArea(profile.area)
+
+  if (!role) {
+    // Profile con rol inválido — redirigir a login.
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  // Match contra NAV_ITEMS para derivar los guards.
+  const item = matchNavItem(pathname)
+  if (!item) {
+    // Ruta no listada en navegación (típicamente APIs internas / rutas
+    // dinámicas de detalle). La auth ya pasó; permitimos.
+    return supabaseResponse
+  }
+
+  const result = canAccess({ role, area }, requirementFromNavItem(item))
+
+  if (!result.allowed) {
+    return NextResponse.redirect(new URL(fallbackHomeFor(role), request.url))
   }
 
   return supabaseResponse

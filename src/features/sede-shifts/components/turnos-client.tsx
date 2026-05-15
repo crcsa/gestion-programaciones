@@ -34,7 +34,7 @@ export function TurnosClient({ currentRole }: TurnosClientProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const isEditable = currentRole === 'admin' || currentRole === 'banco_sangre'
+  const isEditable = currentRole === 'admin' || currentRole === 'admin_area'
 
   const fetchWeek = useCallback(async (start: string) => {
     setIsLoading(true)

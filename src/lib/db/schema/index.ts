@@ -6,12 +6,17 @@ export * from './profiles'
 export * from './training-areas'
 export * from './staff-members'
 export * from './companies'
+export * from './company-contacts'
 export * from './locations'
 
 // Campaign tables
 export * from './campaigns'
 export * from './campaign-assignments'
 export * from './campaign-timeline'
+export * from './campaign-vehicles'
+
+// Logistics tables
+export * from './vehicles'
 
 // Shift & scheduling tables
 export * from './sede-shifts'

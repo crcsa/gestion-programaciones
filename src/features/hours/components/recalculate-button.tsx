@@ -17,11 +17,11 @@ export function RecalculateButton({ weekStart }: { weekStart: string }) {
       router.refresh()
       if (result.errors.length > 0) {
         toast.warning(`${result.updated} actualizados, ${result.errors.length} fallaron`, {
-          description: result.errors[0],
+          description: result.errors[0]?.message,
           duration: 10000,
         })
       } else {
-        toast.success(`${result.updated} funcionarios recalculados correctamente`)
+        toast.success(`${result.updated} colaboradores recalculados correctamente`)
       }
     } catch {
       toast.error('Error al recalcular los balances')

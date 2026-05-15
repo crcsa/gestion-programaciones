@@ -7,11 +7,24 @@ vi.mock('@/lib/db', () => ({
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    transaction: vi.fn(),
   },
 }))
 
 vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
+}))
+
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
 }))
 
 vi.mock('@/lib/db/schema/campaign-assignments', () => ({
@@ -40,6 +53,17 @@ vi.mock('@/lib/audit/log-audit', () => ({
   logAudit: vi.fn().mockResolvedValue(undefined),
 }))
 
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+}))
+
+vi.mock('@/features/hours/lib/aggregate-staff-data', () => ({
+  recalcStaffAggregates: vi.fn().mockResolvedValue(undefined),
+  recalcStaffAggregatesBatch: vi.fn().mockResolvedValue(undefined),
+  recalcAggregatesForCampaign: vi.fn().mockResolvedValue({ success: 0, failed: 0 }),
+  recalcAggregatesForDate: vi.fn().mockResolvedValue({ success: 0, failed: 0 }),
+}))
+
 import { db } from '@/lib/db'
 import {
   assignStaff,
@@ -55,7 +79,7 @@ function makeChain(resolvedValue: unknown) {
   const methods = [
     'select', 'from', 'where', 'limit', 'offset', 'orderBy',
     'insert', 'values', 'update', 'set', 'delete', 'returning',
-    'leftJoin',
+    'leftJoin', 'onConflictDoUpdate', 'onConflictDoNothing',
   ]
   for (const method of methods) {
     chain[method] = vi.fn(() => chain)
@@ -69,8 +93,18 @@ type SimpleMockDb = {
   insert: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
   delete: ReturnType<typeof vi.fn>
+  transaction: ReturnType<typeof vi.fn>
 }
 const mockDb = db as unknown as SimpleMockDb
+
+function setupTransaction() {
+  const txUpdate = vi.fn(() => makeChain([]))
+  const tx = { update: txUpdate }
+  mockDb.transaction = vi.fn(async (cb: (t: typeof tx) => Promise<void>) => {
+    await cb(tx)
+  })
+  return { tx, txUpdate }
+}
 
 describe('assignStaff', () => {
   const campaignId = '550e8400-e29b-41d4-a716-446655440000'
@@ -82,10 +116,19 @@ describe('assignStaff', () => {
   })
 
   it('asigna personal a la campaña correctamente', async () => {
-    // First select: existing assignments → empty
+    // El nuevo flujo hace:
+    //   1) select de areas para defensa profunda (debe retornar banco_sangre)
+    //   2) select de asignaciones activas (empty)
+    //   3) select de campaign date (puede ser empty o con row)
     let selectCallCount = 0
     mockDb.select = vi.fn(() => {
       selectCallCount++
+      if (selectCallCount === 1) {
+        return makeChain([
+          { id: staffId1, area: 'banco_sangre' },
+          { id: staffId2, area: 'banco_sangre' },
+        ])
+      }
       return makeChain([])
     })
     const insertChain = makeChain([])
@@ -99,7 +142,7 @@ describe('assignStaff', () => {
   it('rechaza lista vacía de staffIds', async () => {
     await expect(
       assignStaff({ campaignId, staffIds: [] }),
-    ).rejects.toThrow('Debe seleccionar al menos un funcionario')
+    ).rejects.toThrow('Debe seleccionar al menos un colaborador')
   })
 })
 
@@ -139,24 +182,103 @@ describe('setCoordinator', () => {
   it('lanza error si el staff no está asignado', async () => {
     // select returns assignments that do NOT include the target staffId
     mockDb.select = vi.fn(() =>
-      makeChain([{ staffId: '550e8400-e29b-41d4-a716-446655440099' }]),
+      makeChain([
+        {
+          staffId: '550e8400-e29b-41d4-a716-446655440099',
+          isCoordinator: true,
+        },
+      ]),
     )
 
     await expect(
       setCoordinator({ campaignId, staffId }),
-    ).rejects.toThrow('El funcionario no está asignado a esta campaña')
+    ).rejects.toThrow('El colaborador no está asignado a esta campaña')
   })
 
-  it('designa coordinador correctamente', async () => {
-    // select returns assignments that include the target staffId
-    mockDb.select = vi.fn(() => makeChain([{ staffId }]))
-    const updateChain = makeChain([])
-    mockDb.update = vi.fn(() => updateChain)
+  it('designa coordinador y limpia el anterior dentro de una transacción', async () => {
+    const previousCoordinatorId = '550e8400-e29b-41d4-a716-446655440099'
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) {
+        // Asignaciones activas
+        return makeChain([
+          { staffId: previousCoordinatorId, isCoordinator: true },
+          { staffId, isCoordinator: false },
+        ])
+      }
+      // Lookup del target staff: bacteriólogo de banco_sangre → elegible.
+      return makeChain([{ area: 'banco_sangre', staffProfile: 'bacteriologo' }])
+    })
+    const { txUpdate } = setupTransaction()
 
     await setCoordinator({ campaignId, staffId })
 
-    // Two update calls: one to clear previous coordinator, one to set new
-    expect(mockDb.update).toHaveBeenCalledTimes(2)
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1)
+    // Two updates inside the transaction: clear old + set new
+    expect(txUpdate).toHaveBeenCalledTimes(2)
+  })
+
+  it('omite trabajo si el staff ya es coordinador (idempotente)', async () => {
+    mockDb.select = vi.fn(() =>
+      makeChain([{ staffId, isCoordinator: true }]),
+    )
+    const { txUpdate } = setupTransaction()
+
+    await setCoordinator({ campaignId, staffId })
+
+    expect(mockDb.transaction).not.toHaveBeenCalled()
+    expect(txUpdate).not.toHaveBeenCalled()
+  })
+
+  it('designa coordinador cuando no había uno previamente (1 update)', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) {
+        return makeChain([
+          { staffId, isCoordinator: false },
+          { staffId: 'otro-id', isCoordinator: false },
+        ])
+      }
+      return makeChain([{ area: 'banco_sangre', staffProfile: 'tecnico' }])
+    })
+    const { txUpdate } = setupTransaction()
+
+    await setCoordinator({ campaignId, staffId })
+
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1)
+    expect(txUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('rechaza coordinador no bacteriólogo ni técnico (médico)', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) {
+        return makeChain([{ staffId, isCoordinator: false }])
+      }
+      return makeChain([{ area: 'banco_sangre', staffProfile: 'medico' }])
+    })
+
+    await expect(setCoordinator({ campaignId, staffId })).rejects.toThrow(
+      /Solo bacteriólogos o técnicos/,
+    )
+  })
+
+  it('rechaza coordinador de otra área (comercial)', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) {
+        return makeChain([{ staffId, isCoordinator: false }])
+      }
+      return makeChain([{ area: 'comercial', staffProfile: 'comercial' }])
+    })
+
+    await expect(setCoordinator({ campaignId, staffId })).rejects.toThrow(
+      /Solo bacteriólogos o técnicos/,
+    )
   })
 })
 
@@ -252,7 +374,16 @@ describe('assignStaff — ramas de error', () => {
   })
 
   it('no inserta cuando todos los staffIds ya están asignados', async () => {
-    mockDb.select = vi.fn(() => makeChain([{ staffId: staffId1 }]))
+    let selectCallCount = 0
+    mockDb.select = vi.fn(() => {
+      selectCallCount++
+      if (selectCallCount === 1) {
+        // Defensa profunda: area lookup → banco_sangre.
+        return makeChain([{ id: staffId1, area: 'banco_sangre' }])
+      }
+      // Asignaciones activas: ya incluye al staffId.
+      return makeChain([{ staffId: staffId1 }])
+    })
     mockDb.insert = vi.fn()
 
     await assignStaff({ campaignId, staffIds: [staffId1] })

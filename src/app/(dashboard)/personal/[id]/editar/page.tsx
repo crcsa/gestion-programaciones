@@ -1,30 +1,26 @@
-import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { notFound, redirect } from 'next/navigation'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { getStaffById, getTrainingAreas } from '@/features/staff/actions/staff-actions'
 import { StaffFormClient } from '@/features/staff/components/staff-form-client'
-import { RoleGate } from '@/features/auth/components/role-gate'
+import { loadValidationRuntimeConfig } from '@/features/configuration/lib/runtime-config'
 import type { CreateStaffInput } from '@/features/staff/schemas/staff-schemas'
-import type { Role } from '@/types/roles'
+import type { Area } from '@/types/areas'
 
 interface EditStaffPageProps {
   params: Promise<{ id: string }>
 }
 
-async function getCurrentRole(): Promise<Role | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  return (profile?.role as Role) ?? null
-}
-
 export default async function EditStaffPage({ params }: EditStaffPageProps) {
+  let canSelectArea = false
+  let callerArea: Area | null = null
+  try {
+    const ctx = await requireAccess({ roles: ['admin', 'admin_area'] })
+    canSelectArea = ctx.role === 'admin'
+    callerArea = ctx.area
+  } catch {
+    redirect('/')
+  }
+
   const { id } = await params
 
   let staff
@@ -38,9 +34,9 @@ export default async function EditStaffPage({ params }: EditStaffPageProps) {
     notFound()
   }
 
-  const [currentRole, areas] = await Promise.all([
-    getCurrentRole(),
+  const [areas, cfg] = await Promise.all([
     getTrainingAreas(),
+    loadValidationRuntimeConfig(),
   ])
 
   const defaultValues: Partial<CreateStaffInput> = {
@@ -49,31 +45,37 @@ export default async function EditStaffPage({ params }: EditStaffPageProps) {
     cedula: staff.cedula,
     email: staff.email ?? undefined,
     phone: staff.phone ?? undefined,
-    staffProfile: staff.staffProfile,
+    // Filtra el legacy 'coordinador' del enum DB (deprecado en 0025):
+    // si la row aún lo tiene, dejamos staffProfile undefined para forzar
+    // re-selección y respetar el invariant del schema.
+    staffProfile:
+      staff.staffProfile === 'coordinador'
+        ? undefined
+        : (staff.staffProfile as CreateStaffInput['staffProfile']),
+    area: staff.area,
     weeklyHours: staff.weeklyHours,
     hireDate: staff.hireDate ?? undefined,
     trainingAreaIds: staff.trainingAreaIds ?? [],
   }
 
   return (
-    <RoleGate allowedRoles={['admin', 'banco_sangre']} currentRole={currentRole}>
-      <div className="space-y-6 max-w-3xl">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Editar Funcionario
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {staff.firstName} {staff.lastName}
-          </p>
-        </div>
-
-        <StaffFormClient
-          mode="edit"
-          staffId={id}
-          defaultValues={defaultValues}
-          areas={areas}
-        />
+    <div className="space-y-6 max-w-3xl">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Editar Colaborador</h1>
+        <p className="text-muted-foreground text-sm">
+          {staff.firstName} {staff.lastName}
+        </p>
       </div>
-    </RoleGate>
+
+      <StaffFormClient
+        mode="edit"
+        staffId={id}
+        defaultValues={defaultValues}
+        areas={areas}
+        defaultWeeklyHours={cfg.weeklyHours}
+        canSelectArea={canSelectArea}
+        callerArea={callerArea}
+      />
+    </div>
   )
 }

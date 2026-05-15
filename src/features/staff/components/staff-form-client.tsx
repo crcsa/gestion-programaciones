@@ -7,19 +7,26 @@ import { StaffForm } from './staff-form'
 import { createStaff, updateStaff } from '@/features/staff/actions/staff-actions'
 import type { CreateStaffInput } from '@/features/staff/schemas/staff-schemas'
 import type { TrainingArea } from '@/lib/db/schema/training-areas'
+import type { Area } from '@/types/areas'
 
-interface CreateMode {
-  mode: 'create'
+interface CommonProps {
   areas: TrainingArea[]
+  defaultWeeklyHours: number
+  /** True si el caller es admin global (puede elegir cualquier área). */
+  canSelectArea?: boolean
+  /** Área del caller (para fijarla en el formulario cuando no puede elegir). */
+  callerArea?: Area | null
   onSuccess?: () => void
 }
 
-interface EditMode {
+interface CreateMode extends CommonProps {
+  mode: 'create'
+}
+
+interface EditMode extends CommonProps {
   mode: 'edit'
   staffId: string
   defaultValues: Partial<CreateStaffInput>
-  areas: TrainingArea[]
-  onSuccess?: () => void
 }
 
 type StaffFormClientProps = CreateMode | EditMode
@@ -33,7 +40,7 @@ export function StaffFormClient(props: StaffFormClientProps) {
     try {
       if (props.mode === 'edit') {
         await updateStaff(props.staffId, data)
-        toast.success('Funcionario actualizado correctamente')
+        toast.success('Colaborador actualizado correctamente')
         if (props.onSuccess) {
           props.onSuccess()
         } else {
@@ -41,7 +48,7 @@ export function StaffFormClient(props: StaffFormClientProps) {
         }
       } else {
         await createStaff(data)
-        toast.success('Funcionario creado correctamente')
+        toast.success('Colaborador creado correctamente')
         if (props.onSuccess) {
           props.onSuccess()
         } else {
@@ -49,7 +56,7 @@ export function StaffFormClient(props: StaffFormClientProps) {
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al guardar el funcionario')
+      toast.error(err instanceof Error ? err.message : 'Error al guardar el colaborador')
     } finally {
       setIsLoading(false)
     }
@@ -63,6 +70,9 @@ export function StaffFormClient(props: StaffFormClientProps) {
       onSubmit={handleSubmit}
       isLoading={isLoading}
       areas={props.areas}
+      defaultWeeklyHours={props.defaultWeeklyHours}
+      canSelectArea={props.canSelectArea ?? false}
+      callerArea={props.callerArea ?? null}
     />
   )
 }

@@ -1,15 +1,18 @@
 'use server'
 
 import { eq, and, sql, gte, lte, inArray } from 'drizzle-orm'
+import { AppError } from '@/lib/errors/app-errors'
 import { db } from '@/lib/db'
 import { campaigns } from '@/lib/db/schema/campaigns'
 import { companies } from '@/lib/db/schema/companies'
 import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
 import { staffMembers } from '@/lib/db/schema/staff-members'
 import { weeklyBalance } from '@/lib/db/schema/weekly-balance'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { getWeeklyBalances } from '@/features/hours/actions/hours-actions'
 import type { WeeklyBalanceRow } from '@/features/hours/actions/hours-actions'
+import { campaignArea } from '@/features/dashboard/lib/dashboard-queries'
+import type { Area } from '@/types/areas'
 
 // ---- Types ----------------------------------------------------------------
 
@@ -67,15 +70,25 @@ interface CampaignsReportParams {
   dateTo?: string
   status?: string
   companyId?: string
+  area?: Area | null
 }
 
 export async function getCampaignsReport(
   params: CampaignsReportParams,
 ): Promise<CampaignReportRow[]> {
-  await requireRole(['admin', 'banco_sangre', 'comercial'])
+  const { scope } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    allowCrossArea: true,
+  })
+  // Admin global y comercial (cross-área) respetan params.area; admin_area
+  // queda anclado a su scope.area.
+  const areaScope: Area | null =
+    scope.kind === 'global' ? params.area ?? null : scope.area
 
   try {
-    const conditions = [eq(campaigns.isDeleted, false)]
+    const conditions: (ReturnType<typeof eq> | ReturnType<typeof gte> | ReturnType<typeof lte> | ReturnType<typeof sql>)[] = [
+      eq(campaigns.isDeleted, false),
+    ]
 
     if (params.dateFrom) {
       conditions.push(gte(campaigns.campaignDate, params.dateFrom))
@@ -88,6 +101,13 @@ export async function getCampaignsReport(
     }
     if (params.companyId) {
       conditions.push(eq(campaigns.companyId, params.companyId))
+    }
+
+    // Filtro por área: reusa el helper compartido `campaignArea` para que el
+    // criterio sea idéntico al resto de queries del dashboard / notificaciones.
+    if (areaScope) {
+      const areaPredicate = campaignArea(areaScope)
+      if (areaPredicate) conditions.push(areaPredicate)
     }
 
     const campaignRows = await db
@@ -158,7 +178,7 @@ export async function getCampaignsReport(
       hexabankCode: row.hexabankCode ?? null,
     }))
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener el reporte de campanas')
   }
 }
@@ -166,11 +186,22 @@ export async function getCampaignsReport(
 export async function getPersonalReport(params: {
   dateFrom: string
   dateTo: string
+  area?: Area | null
 }): Promise<PersonalReportRow[]> {
-  await requireRole(['admin', 'banco_sangre'])
+  const { scope } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    allowCrossArea: true,
+  })
+  // Admin global y comercial (cross-área) eligen libre; banco_sangre queda
+  // anclado a su área.
+  const areaScope: Area | null =
+    scope.kind === 'global' ? params.area ?? null : scope.area
 
   try {
     const weekStarts = getMondaysInRange(params.dateFrom, params.dateTo)
+
+    const staffWhere = [eq(staffMembers.isActive, true)]
+    if (areaScope) staffWhere.push(eq(staffMembers.area, areaScope))
 
     const activeStaff = await db
       .select({
@@ -180,7 +211,7 @@ export async function getPersonalReport(params: {
         staffProfile: staffMembers.staffProfile,
       })
       .from(staffMembers)
-      .where(eq(staffMembers.isActive, true))
+      .where(and(...staffWhere))
 
     if (activeStaff.length === 0) {
       return []
@@ -260,18 +291,21 @@ export async function getPersonalReport(params: {
       }
     })
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener el reporte de personal')
   }
 }
 
-export async function getHoursReport(weekStart: string): Promise<WeeklyBalanceRow[]> {
-  await requireRole(['admin', 'banco_sangre'])
-
+export async function getHoursReport(
+  weekStart: string,
+  area?: Area | null,
+): Promise<WeeklyBalanceRow[]> {
+  // requireAccess se invoca dentro de getWeeklyBalances, que ya respeta el
+  // scoping de área.
   try {
-    return await getWeeklyBalances(weekStart)
+    return await getWeeklyBalances(weekStart, area)
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener el reporte de horas')
   }
 }

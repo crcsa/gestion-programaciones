@@ -40,11 +40,11 @@ const SIZE_LABELS: Record<string, string> = {
 }
 
 const MODALITY_LABELS: Record<string, string> = {
-  presencial: 'Presencial',
-  virtual: 'Virtual',
-  mixta: 'Mixta',
-  movil: 'Movil',
-  institucional: 'Institucional',
+  corporativa: 'Corporativa',
+  carpa: 'Carpa',
+  unidad_movil: 'Unidad Movil',
+  municipal: 'Municipal',
+  combinada: 'Combinada',
 }
 
 function handleExport(rows: CampaignReportRow[]) {

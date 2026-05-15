@@ -20,11 +20,11 @@ export const CAMPAIGN_SIZE_LABELS: Record<string, string> = {
 }
 
 export const CAMPAIGN_MODALITY_LABELS: Record<string, string> = {
-  presencial:    'Presencial',
-  virtual:       'Virtual',
-  mixta:         'Mixta',
-  movil:         'Movil',
-  institucional: 'Institucional',
+  corporativa:  'Corporativa',
+  carpa:        'Carpa',
+  unidad_movil: 'Unidad Movil',
+  municipal:    'Municipal',
+  combinada:    'Combinada',
 }
 
 export const PAGE_LIMIT = 20

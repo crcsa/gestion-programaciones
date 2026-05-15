@@ -2,36 +2,60 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { createClient } from '@/lib/supabase/server'
+import { and, eq } from 'drizzle-orm'
+import { db } from '@/lib/db'
+import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
+import { staffMembers } from '@/lib/db/schema/staff-members'
 import { getCampaignById } from '@/features/campaigns/actions/campaign-actions'
 import { getCampaignTimeline } from '@/features/hours/actions/hours-balance-actions'
 import { CampaignStatusBadge } from '@/features/campaigns/components/campaign-status-badge'
 import { CampaignSizeBadge } from '@/features/campaigns/components/campaign-size-badge'
 import { AssignmentPanel } from '@/features/assignments/components/assignment-panel'
-import { TimelineForm } from '@/features/hours/components/timeline-form'
+import { CommercialAssignmentPanel } from '@/features/assignments/components/commercial-assignment-panel'
+import { LogisticsAssignmentPanel } from '@/features/logistics/components/logistics-assignment-panel'
+import {
+  getAssignedVehicles,
+  getAvailableVehicles,
+  getAvailableDrivers,
+} from '@/features/logistics/actions/campaign-vehicle-actions'
+import { getCurrentUserContext } from '@/features/auth/lib/user-context'
+import { TimelineProgrammingForm } from '@/features/hours/components/timeline-programming-form'
+import { TimelineExecutionDialog } from '@/features/hours/components/timeline-execution-dialog'
+import { TimelineReadOnlyView } from '@/features/hours/components/timeline-readonly-view'
 import { CampaignCommercialView } from '@/features/campaigns/components/campaign-commercial-view'
+import { CampaignBreadcrumbLabel } from '@/features/campaigns/components/campaign-breadcrumb-label'
 import { Button } from '@/components/ui/button'
 import {
   CAMPAIGN_MODALITY_LABELS,
 } from '@/features/campaigns/lib/constants'
-import type { Role } from '@/types/roles'
+import {
+  canAccessLogistics,
+  canAccessCommercial,
+  canAccessBancoSangre,
+} from '@/lib/auth/area-gates'
 
 interface CampaignDetailPageProps {
   params: Promise<{ id: string }>
 }
 
-async function getCurrentRole(): Promise<Role | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  return (profile?.role as Role) ?? null
+async function isCoordinatorOfCampaign(
+  campaignId: string,
+  userId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: campaignAssignments.id })
+    .from(campaignAssignments)
+    .innerJoin(staffMembers, eq(staffMembers.id, campaignAssignments.staffId))
+    .where(
+      and(
+        eq(campaignAssignments.campaignId, campaignId),
+        eq(campaignAssignments.isActive, true),
+        eq(campaignAssignments.isCoordinator, true),
+        eq(staffMembers.profileId, userId),
+      ),
+    )
+    .limit(1)
+  return Boolean(row)
 }
 
 export default async function CampaignDetailPage({ params }: CampaignDetailPageProps) {
@@ -48,20 +72,63 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
     notFound()
   }
 
-  const [currentRole, timelineEvents] = await Promise.all([
-    getCurrentRole(),
-    (campaign.status === 'confirmada' || campaign.status === 'ejecutada')
-      ? getCampaignTimeline(id).catch(() => [])
+  const isAssignable =
+    campaign.status === 'confirmada' || campaign.status === 'ejecutada'
+
+  const [timelineEvents, ctx, assignedVehicles] = await Promise.all([
+    isAssignable ? getCampaignTimeline(id).catch(() => []) : Promise.resolve([]),
+    getCurrentUserContext(),
+    isAssignable ? getAssignedVehicles(id).catch(() => []) : Promise.resolve([]),
+  ])
+  const userId = ctx?.userId ?? null
+  const currentRole = ctx?.role ?? null
+
+  // Cada área edita SOLO su propio panel. Los demás (incluyendo otras áreas
+  // admin) ven los paneles en read-only para coordinación. Predicates en
+  // `area-gates` (única fuente de verdad consumida también por el server gate
+  // de los actions correspondientes).
+  const canEditLogistics = canAccessLogistics(ctx?.role, ctx?.area)
+  const canEditCommercial = canAccessCommercial(ctx?.role, ctx?.area)
+  const canEditBancoSangrePersonal = canAccessBancoSangre(ctx?.role, ctx?.area)
+
+  // Solo cargamos pools cuando el caller puede editar — read-only no necesita.
+  const [availableVehicles, availableDrivers] = await Promise.all([
+    isAssignable && canEditLogistics
+      ? getAvailableVehicles(id).catch(() => [])
+      : Promise.resolve([]),
+    isAssignable && canEditLogistics
+      ? getAvailableDrivers(id).catch(() => [])
       : Promise.resolve([]),
   ])
 
   const isTentativa = campaign.status === 'tentativa'
-  const canEdit = isTentativa && (currentRole === 'admin' || currentRole === 'comercial')
-  const isCoordinatorOrAdmin = currentRole === 'admin' || currentRole === 'banco_sangre'
-  const isCommercial = currentRole === 'admin' || currentRole === 'comercial'
+  // Solo super-admin y comercial (role='comercial' o admin_area+comercial)
+  // pueden editar la campaña en sí. Banco_sangre y logistica solo asignan
+  // su personal/vehículos via los paneles.
+  const canManageCampaigns = canEditCommercial
+  const canEdit = isTentativa && canManageCampaigns
+  // Multi-día: tenemos endDate posterior a campaignDate, o más de 1 row en campaign_days.
+  const isMultiDay =
+    (!!campaign.endDate && campaign.endDate > campaign.campaignDate) ||
+    campaign.days.length > 1
+  const totalDays = isMultiDay
+    ? campaign.days.length || daysBetween(campaign.campaignDate, campaign.endDate ?? campaign.campaignDate)
+    : 1
+  const overnightCount = campaign.days.filter((d) => d.isOvernight).length
+  // Solo admin global o admin_area de banco_sangre programan/editan la línea
+  // de tiempo. Comercial y logística la ven en modo read-only.
+  const canSchedule = canEditBancoSangrePersonal
+  const isCoordinatorAssigned =
+    currentRole === 'operativo' && userId
+      ? await isCoordinatorOfCampaign(id, userId)
+      : false
+  const canRegisterActual = canSchedule || isCoordinatorAssigned
+  // admin_area+comercial también ve la vista comercial (alineado con canEditCommercial).
+  const isCommercial = canEditCommercial
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
+      <CampaignBreadcrumbLabel id={campaign.id} code={campaign.code} />
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -87,7 +154,24 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         <DetailRow label="Código" value={campaign.code} />
         <DetailRow label="Empresa" value={campaign.companyName ?? '—'} />
         <DetailRow label="Municipio" value={campaign.municipality} />
-        <DetailRow label="Fecha" value={formatCampaignDate(campaign.campaignDate)} />
+        {isMultiDay ? (
+          <>
+            <DetailRow
+              label="Fecha inicio"
+              value={formatCampaignDate(campaign.campaignDate)}
+            />
+            <DetailRow
+              label="Fecha fin"
+              value={formatCampaignDate(campaign.endDate ?? campaign.campaignDate)}
+            />
+            <DetailRow
+              label="Pernoctas"
+              value={`${overnightCount} ${overnightCount === 1 ? 'noche' : 'noches'} (${totalDays} días)`}
+            />
+          </>
+        ) : (
+          <DetailRow label="Fecha" value={formatCampaignDate(campaign.campaignDate)} />
+        )}
         <div>
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tamaño</p>
           <div className="mt-1">
@@ -117,28 +201,82 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         )}
       </div>
 
+      {/* Logistics — vehículos y conductores */}
+      {isAssignable && (
+        <LogisticsAssignmentPanel
+          campaignId={campaign.id}
+          assigned={assignedVehicles}
+          availableVehicles={availableVehicles}
+          availableDrivers={availableDrivers}
+          canEdit={canEditLogistics}
+        />
+      )}
+
+      {/* Operativos comerciales — área comercial edita, las demás solo ven */}
+      {isAssignable && (
+        <section className="rounded-lg border border-border p-5">
+          <h2 className="text-base font-semibold mb-4">Operativos comerciales</h2>
+          <CommercialAssignmentPanel
+            campaignId={campaign.id}
+            campaignStatus={campaign.status}
+            canEdit={canEditCommercial}
+          />
+        </section>
+      )}
+
       {/* Assignment + Timeline */}
-      {(campaign.status === 'confirmada' || campaign.status === 'ejecutada') && (
+      {isAssignable && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <section className="rounded-lg border border-border p-5">
-            <h2 className="text-base font-semibold mb-4">Personal asignado</h2>
+            <h2 className="text-base font-semibold mb-4">Personal asignado (banco de sangre)</h2>
             <AssignmentPanel
               campaignId={campaign.id}
               campaignSize={campaign.size}
               campaignStatus={campaign.status}
-              currentRole={currentRole}
+              canEdit={canEditBancoSangrePersonal}
             />
           </section>
 
           <div className="space-y-6">
-            {isCoordinatorOrAdmin && (
+            {canSchedule && (
               <section className="rounded-lg border border-border p-5">
-                <TimelineForm
+                <TimelineProgrammingForm
                   campaignId={campaign.id}
+                  campaignDate={campaign.campaignDate}
+                  startTime={campaign.startTime}
+                  endTime={campaign.endTime}
                   existingEvents={timelineEvents}
-                  isCoordinator={isCoordinatorOrAdmin}
                 />
               </section>
+            )}
+            {canRegisterActual && (
+              <section className="rounded-lg border border-border p-5">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <h2 className="text-base font-semibold">Registro de ejecución</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Registra las horas reales cuando inicies la jornada de campo.
+                    </p>
+                  </div>
+                  <TimelineExecutionDialog
+                    campaignId={campaign.id}
+                    campaignDate={campaign.campaignDate}
+                    initialEvents={timelineEvents}
+                  />
+                </div>
+              </section>
+            )}
+            {/*
+              Comercial y logística (que NO programan ni registran la línea de
+              tiempo) ven la vista de solo lectura para coordinar. Admin global
+              y admin_area de banco_sangre ya tienen el form de edición arriba.
+            */}
+            {!canSchedule && !canRegisterActual && (
+              <TimelineReadOnlyView
+                events={timelineEvents}
+                campaignStartTime={campaign.startTime}
+                campaignEndTime={campaign.endTime}
+              />
             )}
             {isCommercial && (
               <CampaignCommercialView campaignId={campaign.id} size={campaign.size} />
@@ -170,5 +308,16 @@ function formatCampaignDate(dateStr: string): string {
     return format(new Date(`${dateStr}T00:00:00`), 'dd/MM/yyyy', { locale: es })
   } catch {
     return dateStr
+  }
+}
+
+function daysBetween(startDate: string, endDate: string): number {
+  try {
+    const start = new Date(`${startDate}T00:00:00`)
+    const end = new Date(`${endDate}T00:00:00`)
+    const ms = end.getTime() - start.getTime()
+    return Math.max(1, Math.round(ms / (24 * 60 * 60 * 1000)) + 1)
+  } catch {
+    return 1
   }
 }

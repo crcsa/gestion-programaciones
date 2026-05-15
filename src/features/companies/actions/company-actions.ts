@@ -1,10 +1,11 @@
 'use server'
 
 import { eq, and, ilike, or, gte } from 'drizzle-orm'
+import { AppError, ConflictError, NotFoundError, ValidationError } from '@/lib/errors/app-errors'
 import { db } from '@/lib/db'
 import { companies } from '@/lib/db/schema/companies'
 import { campaigns } from '@/lib/db/schema/campaigns'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { logAudit } from '@/lib/audit/log-audit'
 import { createCompanySchema, updateCompanySchema } from '../schemas/company-schemas'
 import type { CreateCompanyInput, UpdateCompanyInput } from '../schemas/company-schemas'
@@ -24,7 +25,7 @@ export interface CompanyListFilters {
 export async function getCompaniesList(
   filters: CompanyListFilters = {},
 ): Promise<{ data: Company[]; total: number }> {
-  await requireRole(['admin', 'comercial'])
+  await requireAccess({ roles: ['admin', 'comercial'] })
 
   const { page = 1, limit = 20, search, isActive } = filters
   const offset = (page - 1) * limit
@@ -63,13 +64,13 @@ export async function getCompaniesList(
 
     return { data: rows, total: countRows.length }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener la lista de empresas')
   }
 }
 
 export async function getCompanyById(id: string): Promise<Company> {
-  await requireRole(['admin', 'comercial'])
+  await requireAccess({ roles: ['admin', 'comercial'] })
 
   try {
     const [company] = await db
@@ -78,25 +79,20 @@ export async function getCompanyById(id: string): Promise<Company> {
       .where(eq(companies.id, id))
       .limit(1)
 
-    if (!company) throw new Error('Empresa no encontrada')
+    if (!company) throw new NotFoundError('Empresa no encontrada')
     return company
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === 'Empresa no encontrada' || error.message.includes('permiso'))
-    ) {
-      throw error
-    }
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener la empresa')
   }
 }
 
 export async function createCompany(data: CreateCompanyInput): Promise<Company> {
-  const { userId } = await requireRole(['admin', 'comercial'])
+  const { userId } = await requireAccess({ roles: ['admin', 'comercial'] })
 
   const validated = createCompanySchema.safeParse(data)
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   try {
@@ -108,7 +104,7 @@ export async function createCompany(data: CreateCompanyInput): Promise<Company> 
         .limit(1)
 
       if (existing) {
-        throw new Error('Ya existe una empresa con ese NIT')
+        throw new ConflictError('Ya existe una empresa con ese NIT')
       }
     }
 
@@ -127,22 +123,17 @@ export async function createCompany(data: CreateCompanyInput): Promise<Company> 
 
     return created
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('permiso') || error.message.includes('NIT'))
-    ) {
-      throw error
-    }
+    if (error instanceof AppError) throw error
     throw new Error('Error al crear la empresa')
   }
 }
 
 export async function updateCompany(data: UpdateCompanyInput): Promise<Company> {
-  const { userId } = await requireRole(['admin', 'comercial'])
+  const { userId } = await requireAccess({ roles: ['admin', 'comercial'] })
 
   const validated = updateCompanySchema.safeParse(data)
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   const { id, ...updateData } = validated.data
@@ -156,7 +147,7 @@ export async function updateCompany(data: UpdateCompanyInput): Promise<Company> 
         .limit(1)
 
       if (existing && existing.id !== id) {
-        throw new Error('Ya existe otra empresa con ese NIT')
+        throw new ConflictError('Ya existe otra empresa con ese NIT')
       }
     }
 
@@ -166,7 +157,7 @@ export async function updateCompany(data: UpdateCompanyInput): Promise<Company> 
       .where(eq(companies.id, id))
       .returning()
 
-    if (!updated) throw new Error('Empresa no encontrada')
+    if (!updated) throw new NotFoundError('Empresa no encontrada')
 
     await logAudit({
       profileId: userId,
@@ -177,20 +168,13 @@ export async function updateCompany(data: UpdateCompanyInput): Promise<Company> 
 
     return updated
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('permiso') ||
-        error.message.includes('NIT') ||
-        error.message === 'Empresa no encontrada')
-    ) {
-      throw error
-    }
+    if (error instanceof AppError) throw error
     throw new Error('Error al actualizar la empresa')
   }
 }
 
 export async function deactivateCompany(id: string): Promise<void> {
-  const { userId } = await requireRole(['admin', 'comercial'])
+  const { userId } = await requireAccess({ roles: ['admin', 'comercial'] })
 
   try {
     const today = new Date().toISOString().slice(0, 10)
@@ -212,7 +196,7 @@ export async function deactivateCompany(id: string): Promise<void> {
       .limit(1)
 
     if (futureCampaigns.length > 0) {
-      throw new Error('No se puede desactivar la empresa: tiene campañas tentativas o confirmadas futuras')
+      throw new ValidationError('No se puede desactivar la empresa: tiene campañas tentativas o confirmadas futuras')
     }
 
     const [updated] = await db
@@ -221,7 +205,7 @@ export async function deactivateCompany(id: string): Promise<void> {
       .where(eq(companies.id, id))
       .returning()
 
-    if (!updated) throw new Error('Empresa no encontrada')
+    if (!updated) throw new NotFoundError('Empresa no encontrada')
 
     await logAudit({
       profileId: userId,
@@ -230,20 +214,13 @@ export async function deactivateCompany(id: string): Promise<void> {
       recordId: id,
     })
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('permiso') ||
-        error.message.startsWith('No se puede desactivar') ||
-        error.message === 'Empresa no encontrada')
-    ) {
-      throw error
-    }
+    if (error instanceof AppError) throw error
     throw new Error('Error al desactivar la empresa')
   }
 }
 
 export async function activateCompany(id: string): Promise<void> {
-  await requireRole(['admin', 'comercial'])
+  await requireAccess({ roles: ['admin', 'comercial'] })
 
   try {
     const [updated] = await db
@@ -252,14 +229,9 @@ export async function activateCompany(id: string): Promise<void> {
       .where(eq(companies.id, id))
       .returning()
 
-    if (!updated) throw new Error('Empresa no encontrada')
+    if (!updated) throw new NotFoundError('Empresa no encontrada')
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('permiso') || error.message === 'Empresa no encontrada')
-    ) {
-      throw error
-    }
+    if (error instanceof AppError) throw error
     throw new Error('Error al activar la empresa')
   }
 }

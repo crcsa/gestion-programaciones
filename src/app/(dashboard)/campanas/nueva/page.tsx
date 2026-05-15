@@ -1,29 +1,18 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireAccess } from '@/features/auth/lib/require-access'
+import { PermissionError } from '@/lib/errors/app-errors'
 import { CampaignCreateClient } from '@/features/campaigns/components/campaign-create-client'
-import type { Role } from '@/types/roles'
-
-const ALLOWED_ROLES: Role[] = ['admin', 'banco_sangre', 'comercial']
-
-async function getCurrentRole(): Promise<Role | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  return (profile?.role as Role) ?? null
-}
 
 export default async function NuevaCampanaPage() {
-  const currentRole = await getCurrentRole()
-
-  if (!currentRole || !ALLOWED_ROLES.includes(currentRole)) {
-    redirect('/campanas')
+  try {
+    await requireAccess({
+      roles: ['admin', 'admin_area', 'comercial'],
+      areas: ['comercial'],
+      allowCrossArea: true,
+    })
+  } catch (err) {
+    if (err instanceof PermissionError) redirect('/campanas')
+    throw err
   }
 
   return (

@@ -3,7 +3,7 @@
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { ShiftCell } from './shift-cell'
-import { STAFF_PROFILE_LABELS } from '@/features/staff/lib/constants'
+import { getStaffProfileLabel } from '@/features/staff/lib/constants'
 import type { StaffMember } from '@/lib/db/schema/staff-members'
 import type { SedeShift } from '@/lib/db/schema/sede-shifts'
 import type { UpsertShiftInput } from '../schemas/shift-schemas'
@@ -55,7 +55,7 @@ export function WeeklyScheduleGrid({
         <thead className="bg-muted/50">
           <tr>
             <th className="sticky left-0 z-10 bg-muted/50 px-3 py-2 text-left font-medium text-muted-foreground min-w-[180px]">
-              Funcionario
+              Colaborador
             </th>
             {weekDays.map((day) => (
               <th
@@ -76,7 +76,7 @@ export function WeeklyScheduleGrid({
                     {member.firstName} {member.lastName}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {STAFF_PROFILE_LABELS[member.staffProfile] ?? member.staffProfile}
+                    {getStaffProfileLabel(member.staffProfile) ?? member.staffProfile}
                   </span>
                 </div>
               </td>

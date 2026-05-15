@@ -7,7 +7,7 @@ export const PUBLIC_ROUTES = ['/login']
 
 export const ROLE_DEFAULT_ROUTES: Record<Role, string> = {
   admin: '/',
-  banco_sangre: '/',
+  admin_area: '/',
   comercial: '/campanas',
   operativo: '/mi-agenda',
 }
@@ -23,11 +23,11 @@ export const CAMPAIGN_SIZE_COMPOSITION: Record<CampaignSize, { bacteriologos: nu
 }
 
 export const CAMPAIGN_MODALITIES = [
-  'presencial',
-  'virtual',
-  'mixta',
-  'movil',
-  'institucional',
+  'corporativa',
+  'carpa',
+  'unidad_movil',
+  'municipal',
+  'combinada',
 ] as const
 export type CampaignModality = (typeof CAMPAIGN_MODALITIES)[number]
 

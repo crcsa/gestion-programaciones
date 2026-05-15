@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -30,7 +30,6 @@ const PROFILE_LABELS: Record<string, string> = {
   tecnico: 'Técnico',
   medico: 'Médico',
   auxiliar: 'Auxiliar',
-  coordinador: 'Coordinador',
 }
 
 interface CancelCampaignDialogProps {
@@ -51,7 +50,7 @@ export function CancelCampaignDialog({
   isLoading = false,
 }: CancelCampaignDialogProps) {
   const [affectedStaff, setAffectedStaff] = useState<AssignedStaffMember[]>([])
-  const [loadingStaff, setLoadingStaff] = useState(false)
+  const [loadingStaff, startLoadingStaff] = useTransition()
 
   const {
     register,
@@ -64,11 +63,14 @@ export function CancelCampaignDialog({
 
   useEffect(() => {
     if (!open || !campaignId) return
-    setLoadingStaff(true)
-    getAssignedStaff(campaignId)
-      .then(setAffectedStaff)
-      .catch(() => setAffectedStaff([]))
-      .finally(() => setLoadingStaff(false))
+    startLoadingStaff(async () => {
+      try {
+        const staff = await getAssignedStaff(campaignId)
+        setAffectedStaff(staff)
+      } catch {
+        setAffectedStaff([])
+      }
+    })
   }, [open, campaignId])
 
   async function handleConfirm(data: CancelReasonForm) {

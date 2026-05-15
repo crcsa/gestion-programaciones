@@ -1,52 +1,50 @@
 'use server'
 
 import { eq, ilike, and, or, sql, inArray } from 'drizzle-orm'
+import { revalidatePath } from 'next/cache'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { db } from '@/lib/db'
 import { staffMembers, staffTrainingAreas } from '@/lib/db/schema/staff-members'
 import { trainingAreas } from '@/lib/db/schema/training-areas'
-import { profiles } from '@/lib/db/schema/profiles'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
+import { assertSameArea } from '@/features/auth/lib/assert-same-area'
+import { AppError, ConflictError, NotFoundError, ValidationError } from '@/lib/errors/app-errors'
+import { rethrowOrLog } from '@/lib/errors/rethrow'
+import { loadValidationRuntimeConfig } from '@/features/configuration/lib/runtime-config'
 import { logAudit } from '@/lib/audit/log-audit'
 import { createStaffSchema, updateStaffSchema } from '../schemas/staff-schemas'
 import type { CreateStaffInput, UpdateStaffInput } from '../schemas/staff-schemas'
 import type { StaffMember } from '@/lib/db/schema/staff-members'
 import type { TrainingArea } from '@/lib/db/schema/training-areas'
-
-// ---- Types ----------------------------------------------------------------
-
-export interface StaffListFilters {
-  search?: string
-  perfil?: 'bacteriologo' | 'tecnico' | 'medico' | 'auxiliar' | 'coordinador'
-  estado?: 'activo' | 'inactivo'
-  page?: number
-  limit?: number
-}
-
-export type StaffListRow = StaffMember & { trainingAreaNames: string[]; trainingAreaIds: string[] }
-
-export interface StaffListResult {
-  data: StaffListRow[]
-  total: number
-}
-
-// ---- Helpers ---------------------------------------------------------------
-
-function generateTempPassword(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$'
-  return Array.from({ length: 16 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-}
+import type { Area } from '@/types/areas'
+import { AREA_LABELS } from '@/types/areas'
+import type { Role } from '@/types/roles'
+import {
+  ALLOWED_PROFILES_BY_AREA,
+  getStaffProfileLabel,
+  isProfileAllowedForArea,
+  type StaffProfile,
+} from '@/features/staff/lib/constants'
+import type {
+  StaffListFilters,
+  StaffListRow,
+  StaffListResult,
+} from './staff-types'
 
 // ---- Actions ---------------------------------------------------------------
 
 export async function getStaffList(filters: StaffListFilters = {}): Promise<StaffListResult> {
-  await requireRole(['admin', 'banco_sangre'])
+  const { scope } = await requireAccess({ roles: ['admin', 'admin_area'] })
 
   const { search, perfil, estado, page = 1, limit = 20 } = filters
+  // Admin (scope global) respeta el filtro recibido; admin de área queda
+  // anclado a su scope.area. El cliente nunca puede saltarse el scoping.
+  const areaScope: Area | null =
+    scope.kind === 'global' ? filters.area ?? null : scope.area
   const offset = (page - 1) * limit
 
   try {
-    const conditions = buildListConditions(search, perfil, estado)
+    const conditions = buildListConditions(search, perfil, estado, areaScope)
 
     const [rows, countRows] = await Promise.all([
       db.select().from(staffMembers).where(conditions ?? undefined).limit(limit).offset(offset).orderBy(staffMembers.lastName),
@@ -81,15 +79,33 @@ export async function getStaffList(filters: StaffListFilters = {}): Promise<Staf
 
     return { data, total }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al obtener la lista de funcionarios')
+    rethrowOrLog(error, 'getStaffList', 'Error al obtener la lista de colaboradores')
   }
+}
+
+/**
+ * Lanza si el caller no puede tocar el staff con `staffId`. Admin global pasa
+ * siempre; banco_sangre solo si su área coincide con la del staff.
+ */
+async function ensureCallerCanEditStaff(
+  ctx: { role: Role; area: Area | null },
+  staffId: string,
+): Promise<void> {
+  if (ctx.role === 'admin') return
+  const [staff] = await db
+    .select({ area: staffMembers.area })
+    .from(staffMembers)
+    .where(eq(staffMembers.id, staffId))
+    .limit(1)
+  if (!staff) throw new NotFoundError('Colaborador no encontrado')
+  assertSameArea(ctx, staff.area, 'personal')
 }
 
 function buildListConditions(
   search: string | undefined,
   perfil: StaffListFilters['perfil'],
-  estado: StaffListFilters['estado']
+  estado: StaffListFilters['estado'],
+  area: Area | null,
 ) {
   const parts = []
 
@@ -113,13 +129,17 @@ function buildListConditions(
     parts.push(eq(staffMembers.isActive, false))
   }
 
+  if (area) {
+    parts.push(eq(staffMembers.area, area))
+  }
+
   if (parts.length === 0) return null
   if (parts.length === 1) return parts[0]
   return and(...(parts as [ReturnType<typeof eq>, ...ReturnType<typeof eq>[]]))
 }
 
 export async function getStaffById(id: string): Promise<StaffMember & { trainingAreaIds: string[] }> {
-  await requireRole(['admin', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'admin_area'] })
 
   try {
     const [staff] = await db
@@ -129,7 +149,7 @@ export async function getStaffById(id: string): Promise<StaffMember & { training
       .limit(1)
 
     if (!staff) {
-      throw new Error('Funcionario no encontrado')
+      throw new NotFoundError('Colaborador no encontrado')
     }
 
     const areaRows = await db
@@ -142,18 +162,12 @@ export async function getStaffById(id: string): Promise<StaffMember & { training
       trainingAreaIds: areaRows.map((r) => r.trainingAreaId),
     }
   } catch (error) {
-    if (error instanceof Error && (
-      error.message === 'Funcionario no encontrado' ||
-      error.message.includes('permiso')
-    )) {
-      throw error
-    }
-    throw new Error('Error al obtener el funcionario')
+    rethrowOrLog(error, 'getStaffById', 'Error al obtener el colaborador')
   }
 }
 
 export async function getTrainingAreas(): Promise<TrainingArea[]> {
-  await requireRole(['admin', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'admin_area'] })
 
   try {
     return await db
@@ -162,20 +176,36 @@ export async function getTrainingAreas(): Promise<TrainingArea[]> {
       .where(eq(trainingAreas.isActive, true))
       .orderBy(trainingAreas.name)
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al obtener las areas de entrenamiento')
+    rethrowOrLog(error, 'getTrainingAreas', 'Error al obtener las areas de entrenamiento')
   }
 }
 
 export async function createStaff(data: CreateStaffInput): Promise<StaffMember> {
-  const { userId } = await requireRole(['admin', 'banco_sangre'])
+  const { userId, scope } = await requireAccess({ roles: ['admin', 'admin_area'] })
 
   const validated = createStaffSchema.safeParse(data)
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   const input = validated.data
+
+  // Admin global usa el área del input (default banco_sangre); admin de área
+  // queda anclado a su scope.area.
+  const targetArea: Area =
+    scope.kind === 'global' ? input.area ?? 'banco_sangre' : scope.area
+
+  // Cross-field profile×area: el schema ya valida cuando ambos vienen en el
+  // input, pero `targetArea` puede divergir del `input.area` (admin de área
+  // sobrescribe). Re-validamos con la combinación final efectiva.
+  if (!isProfileAllowedForArea(input.staffProfile, targetArea)) {
+    const allowed = ALLOWED_PROFILES_BY_AREA[targetArea]
+      .map((p) => getStaffProfileLabel(p))
+      .join(', ')
+    throw new ValidationError(
+      `El perfil "${getStaffProfileLabel(input.staffProfile)}" no es válido para el área "${AREA_LABELS[targetArea]}". Permitidos: ${allowed}.`,
+    )
+  }
 
   try {
     const existing = await db
@@ -185,104 +215,95 @@ export async function createStaff(data: CreateStaffInput): Promise<StaffMember> 
       .limit(1)
 
     if (existing.length > 0) {
-      throw new Error('Ya existe un funcionario con esa cedula')
+      throw new ConflictError('Ya existe un colaborador con esa cedula')
     }
 
-    const supabaseAdmin = getSupabaseAdmin()
-    const tempPassword = generateTempPassword()
+    // NO se crea auth user ni profile en este flujo. El colaborador queda
+    // como personal "Sin acceso" hasta que el admin le cree credenciales
+    // explícitamente desde /usuarios. Si en ese momento el correo coincide
+    // con `staff_members.email`, `createUser` vincula automáticamente
+    // (vía `staffMemberId` que recibe del modal).
+    const [created] = await db
+      .insert(staffMembers)
+      .values({
+        profileId: null,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        cedula: input.cedula,
+        phone: input.phone || null,
+        email: input.email,
+        staffProfile: input.staffProfile,
+        area: targetArea,
+        weeklyHours: input.weeklyHours,
+        hireDate: input.hireDate || null,
+        notes: input.notes || null,
+      })
+      .returning()
 
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: input.email,
-      password: tempPassword,
-      email_confirm: true,
+    if (input.trainingAreaIds && input.trainingAreaIds.length > 0) {
+      await db.insert(staffTrainingAreas).values(
+        input.trainingAreaIds.map((trainingAreaId) => ({ staffId: created.id, trainingAreaId }))
+      )
+    }
+
+    await logAudit({
+      profileId: userId,
+      action: 'create',
+      tableName: 'staff_members',
+      recordId: created.id,
+      newData: { cedula: created.cedula, staffProfile: created.staffProfile, area: created.area },
     })
 
-    if (authError || !authData.user) {
-      const isEmailTaken = authError?.message?.toLowerCase().includes('already been registered')
-        || authError?.message?.toLowerCase().includes('already registered')
-        || authError?.message?.toLowerCase().includes('email address is already')
-      if (isEmailTaken) {
-        throw new Error('Ya existe una cuenta de acceso con ese correo electrónico. Use un correo diferente.')
-      }
-      throw new Error(`Error al crear el usuario de autenticación: ${authError?.message ?? 'usuario nulo'}`)
-    }
-
-    const authUserId = authData.user.id
-
-    try {
-      await db.insert(profiles).values({
-        id: authUserId,
-        email: input.email,
-        fullName: `${input.firstName} ${input.lastName}`,
-        role: 'operativo',
-      }).onConflictDoUpdate({
-        target: profiles.id,
-        set: {
-          email: input.email,
-          fullName: `${input.firstName} ${input.lastName}`,
-          role: 'operativo',
-        },
-      })
-
-      const [created] = await db
-        .insert(staffMembers)
-        .values({
-          profileId: authUserId,
-          firstName: input.firstName,
-          lastName: input.lastName,
-          cedula: input.cedula,
-          phone: input.phone || null,
-          email: input.email,
-          staffProfile: input.staffProfile,
-          weeklyHours: input.weeklyHours,
-          hireDate: input.hireDate || null,
-          notes: input.notes || null,
-        })
-        .returning()
-
-      if (input.trainingAreaIds && input.trainingAreaIds.length > 0) {
-        await db.insert(staffTrainingAreas).values(
-          input.trainingAreaIds.map((trainingAreaId) => ({ staffId: created.id, trainingAreaId }))
-        )
-      }
-
-      await logAudit({
-        profileId: userId,
-        action: 'create',
-        tableName: 'staff_members',
-        recordId: created.id,
-        newData: { cedula: created.cedula, staffProfile: created.staffProfile },
-      })
-
-      return created
-    } catch (dbError) {
-      // Rollback: delete the auth user so the email can be reused
-      await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => null)
-      throw new Error(`Error al guardar el funcionario en la base de datos: ${dbError instanceof Error ? dbError.message : String(dbError)}`)
-    }
+    revalidatePath('/personal')
+    revalidatePath('/usuarios')
+    return created
   } catch (error) {
-    if (error instanceof Error && (
-      error.message === 'Ya existe un funcionario con esa cedula' ||
-      error.message.includes('Ya existe una cuenta') ||
-      error.message.includes('permiso') ||
-      error.message.includes('autenticaci') ||
-      error.message.includes('base de datos')
-    )) {
-      throw error
-    }
-    throw new Error('Error al crear el funcionario')
+    rethrowOrLog(error, 'createStaff', 'Error al crear el colaborador')
   }
 }
 
 export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>): Promise<StaffMember> {
-  const { userId } = await requireRole(['admin', 'banco_sangre'])
+  const ctx = await requireAccess({ roles: ['admin', 'admin_area'] })
+  const { userId, scope } = ctx
 
   const validated = updateStaffSchema.safeParse({ id, ...data })
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   const { id: _id, trainingAreaIds, ...fields } = validated.data
+
+  // Verifica que el caller pueda tocar este staff (misma area).
+  await ensureCallerCanEditStaff(ctx, id)
+
+  // Admin de área no puede mover personal entre áreas; admin global sí.
+  if (scope.kind === 'area' && fields.area && fields.area !== scope.area) {
+    throw new ValidationError('No puedes mover personal entre áreas.')
+  }
+
+  // Si el update toca staffProfile o area, validar la combinación final
+  // (puede divergir del schema cuando solo viene uno de los dos campos).
+  if (fields.staffProfile !== undefined || fields.area !== undefined) {
+    const [existing] = await db
+      .select({ area: staffMembers.area, staffProfile: staffMembers.staffProfile })
+      .from(staffMembers)
+      .where(eq(staffMembers.id, id))
+      .limit(1)
+    if (!existing) throw new NotFoundError('Colaborador no encontrado')
+
+    const finalArea: Area = fields.area ?? existing.area
+    // El enum DB aún incluye 'coordinador' (legacy). Si una row antigua lo
+    // tuviera, forzamos a re-elegir un perfil válido.
+    const dbProfile = (fields.staffProfile ?? existing.staffProfile) as string
+    if (dbProfile === 'coordinador' || !isProfileAllowedForArea(dbProfile as StaffProfile, finalArea)) {
+      const allowed = ALLOWED_PROFILES_BY_AREA[finalArea]
+        .map((p) => getStaffProfileLabel(p))
+        .join(', ')
+      throw new ValidationError(
+        `El perfil "${getStaffProfileLabel(dbProfile)}" no es válido para el área "${AREA_LABELS[finalArea]}". Permitidos: ${allowed}.`,
+      )
+    }
+  }
 
   try {
     if (fields.cedula) {
@@ -293,7 +314,7 @@ export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>
         .limit(1)
 
       if (existing.length > 0) {
-        throw new Error('Ya existe otro funcionario con esa cedula')
+        throw new ConflictError('Ya existe otro colaborador con esa cedula')
       }
     }
 
@@ -311,7 +332,7 @@ export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>
       .returning()
 
     if (!updated) {
-      throw new Error('Funcionario no encontrado')
+      throw new NotFoundError('Colaborador no encontrado')
     }
 
     if (trainingAreaIds !== undefined) {
@@ -330,21 +351,16 @@ export async function updateStaff(id: string, data: Omit<UpdateStaffInput, 'id'>
       recordId: updated.id,
     })
 
+    revalidatePath('/personal')
+    revalidatePath(`/personal/${id}`)
     return updated
   } catch (error) {
-    if (error instanceof Error && (
-      error.message.includes('cedula') ||
-      error.message === 'Funcionario no encontrado' ||
-      error.message.includes('permiso')
-    )) {
-      throw error
-    }
-    throw new Error('Error al actualizar el funcionario')
+    rethrowOrLog(error, 'updateStaff', 'Error al actualizar el colaborador')
   }
 }
 
 export async function deleteStaff(id: string): Promise<void> {
-  const { userId } = await requireRole(['admin'])
+  const { userId } = await requireAccess({ roles: ['admin'] })
 
   try {
     const [staff] = await db
@@ -354,7 +370,21 @@ export async function deleteStaff(id: string): Promise<void> {
       .limit(1)
 
     if (!staff) {
-      throw new Error('Funcionario no encontrado')
+      throw new NotFoundError('Colaborador no encontrado')
+    }
+
+    // ORDEN CRÍTICO: borramos el usuario Auth ANTES que el staff_member.
+    // Si Auth falla, abortamos sin tocar la DB — el usuario sigue podiendo
+    // loguearse pero al menos no quedó un staff_member huérfano. El patrón
+    // inverso (DB primero, Auth con fire-and-forget) dejaba usuarios capaces
+    // de loguear sin staff_member en DB tras un fallo de Supabase Auth.
+    if (staff.profileId) {
+      const supabaseAdmin = getSupabaseAdmin()
+      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(staff.profileId)
+      if (authError) {
+        console.error('[deleteStaff] auth.admin.deleteUser failed', staff.profileId, authError)
+        throw new ConflictError('No se pudo borrar el usuario asociado. Intenta de nuevo.')
+      }
     }
 
     await db.delete(staffTrainingAreas).where(eq(staffTrainingAreas.staffId, id))
@@ -367,23 +397,15 @@ export async function deleteStaff(id: string): Promise<void> {
       recordId: id,
     })
 
-    if (staff.profileId) {
-      const supabaseAdmin = getSupabaseAdmin()
-      await supabaseAdmin.auth.admin.deleteUser(staff.profileId).catch(() => null)
-    }
+    revalidatePath('/personal')
   } catch (error) {
-    if (error instanceof Error && (
-      error.message === 'Funcionario no encontrado' ||
-      error.message.includes('permiso')
-    )) {
-      throw error
-    }
-    throw new Error('Error al eliminar el funcionario')
+    rethrowOrLog(error, 'deleteStaff', 'Error al eliminar el colaborador')
   }
 }
 
 export async function toggleStaffStatus(id: string): Promise<StaffMember> {
-  await requireRole(['admin', 'banco_sangre'])
+  const ctx = await requireAccess({ roles: ['admin', 'admin_area'] })
+  await ensureCallerCanEditStaff(ctx, id)
 
   try {
     const [current] = await db
@@ -393,7 +415,7 @@ export async function toggleStaffStatus(id: string): Promise<StaffMember> {
       .limit(1)
 
     if (!current) {
-      throw new Error('Funcionario no encontrado')
+      throw new NotFoundError('Colaborador no encontrado')
     }
 
     const [updated] = await db
@@ -402,20 +424,16 @@ export async function toggleStaffStatus(id: string): Promise<StaffMember> {
       .where(eq(staffMembers.id, id))
       .returning()
 
+    revalidatePath('/personal')
     return updated
   } catch (error) {
-    if (error instanceof Error && (
-      error.message === 'Funcionario no encontrado' ||
-      error.message.includes('permiso')
-    )) {
-      throw error
-    }
-    throw new Error('Error al cambiar el estado del funcionario')
+    rethrowOrLog(error, 'toggleStaffStatus', 'Error al cambiar el estado del colaborador')
   }
 }
 
 export async function updateTrainingAreas(staffId: string, areaIds: string[]): Promise<void> {
-  await requireRole(['admin', 'banco_sangre'])
+  const ctx = await requireAccess({ roles: ['admin', 'admin_area'] })
+  await ensureCallerCanEditStaff(ctx, staffId)
 
   try {
     await db
@@ -428,8 +446,7 @@ export async function updateTrainingAreas(staffId: string, areaIds: string[]): P
       areaIds.map((trainingAreaId) => ({ staffId, trainingAreaId }))
     )
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al actualizar las areas de entrenamiento')
+    rethrowOrLog(error, 'updateTrainingAreas', 'Error al actualizar las areas de entrenamiento')
   }
 }
 
@@ -439,7 +456,7 @@ export interface ImportStaffRow {
   cedula: string
   firstName: string
   lastName: string
-  staffProfile: 'bacteriologo' | 'tecnico' | 'medico' | 'auxiliar' | 'coordinador'
+  staffProfile: 'bacteriologo' | 'tecnico' | 'medico' | 'auxiliar' | 'comercial'
   contractType?: 'indefinido' | 'fijo' | 'prestacion_servicios' | 'aprendizaje'
   phone?: string
   email?: string
@@ -455,11 +472,18 @@ export interface ImportStaffResult {
 export async function importStaffFromExcel(
   rows: ImportStaffRow[],
 ): Promise<ImportStaffResult> {
-  await requireRole(['admin', 'banco_sangre'])
+  const ctx = await requireAccess({ roles: ['admin', 'admin_area'] })
 
   const result: ImportStaffResult = { imported: 0, skipped: 0, errors: [] }
+  const cfg = await loadValidationRuntimeConfig()
 
-  const validProfiles = ['bacteriologo', 'tecnico', 'medico', 'auxiliar', 'coordinador']
+  const validProfiles = ['bacteriologo', 'tecnico', 'medico', 'auxiliar', 'comercial']
+
+  // Admin global no podría inferir un área para un importer en bloque sin
+  // intervención manual — exigimos que el bulk lo ejecute un admin de área.
+  // El área del staff insertado se fuerza a la del caller para evitar fugas
+  // entre áreas vía importador.
+  const targetArea: Area = ctx.area ?? 'banco_sangre'
 
   for (let i = 0; i < rows.length; i++) {
     const raw = rows[i]
@@ -497,6 +521,20 @@ export async function importStaffFromExcel(
       })
       continue
     }
+    // Cross-field profile×area: rechaza filas cuyo perfil no aplique al
+    // área del caller. Cubre 'conductor' (solo logistica), 'comercial' (solo
+    // comercial), y perfiles de banco que no aplican a otras áreas.
+    if (!isProfileAllowedForArea(raw.staffProfile, targetArea)) {
+      const allowed = ALLOWED_PROFILES_BY_AREA[targetArea]
+        .map((p) => getStaffProfileLabel(p))
+        .join(', ')
+      result.errors.push({
+        row: rowNum,
+        cedula: raw.cedula,
+        reason: `Perfil "${getStaffProfileLabel(raw.staffProfile)}" no permitido en área "${AREA_LABELS[targetArea]}". Permitidos: ${allowed}.`,
+      })
+      continue
+    }
 
     try {
       const existing = await db
@@ -515,19 +553,27 @@ export async function importStaffFromExcel(
         lastName: raw.lastName,
         cedula: raw.cedula,
         staffProfile: raw.staffProfile,
+        area: targetArea,
         contractType: raw.contractType ?? null,
         phone: raw.phone ?? null,
         email: raw.email ?? null,
         hireDate: raw.hireDate ?? null,
-        weeklyHours: 44,
+        weeklyHours: cfg.weeklyHours,
       })
 
       result.imported++
-    } catch {
+    } catch (error) {
+      console.error('[importStaffFromExcel] row', rowNum, error)
+      // Solo exponemos mensajes de AppError (validaciones de negocio); para
+      // errores de DB/Drizzle damos un mensaje genérico que no filtra nombres
+      // de schema/constraint.
+      const reason = error instanceof AppError
+        ? error.message
+        : 'Error al guardar en la base de datos (revisa los logs del servidor).'
       result.errors.push({
         row: rowNum,
         cedula: raw.cedula,
-        reason: 'Error al guardar en la base de datos',
+        reason,
       })
     }
   }

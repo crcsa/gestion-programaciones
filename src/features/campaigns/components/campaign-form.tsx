@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Input } from '@/components/ui/input'
@@ -16,9 +16,29 @@ import {
 } from '@/components/ui/select'
 import {
   createCampaignSchema,
+  type CampaignDaySchedule,
   type CreateCampaignInput,
 } from '@/features/campaigns/schemas/campaign-schemas'
 import { CompanySelector } from './company-selector'
+import { ColombiaLocationSelector } from '@/components/colombia-location-selector'
+import { getDepartmentForMunicipality } from '@/lib/data/colombia-locations'
+
+const WEEKDAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+
+function expandDates(start: string, end: string): string[] {
+  const out: string[] = []
+  const s = new Date(`${start}T00:00:00`)
+  const e = new Date(`${end}T00:00:00`)
+  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    out.push(d.toISOString().slice(0, 10))
+  }
+  return out
+}
+
+function formatDayLabel(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00`)
+  return `${WEEKDAY_LABELS[d.getDay()]} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+}
 
 interface CampaignFormProps {
   defaultValues?: Partial<CreateCampaignInput>
@@ -42,6 +62,8 @@ export function CampaignForm({
   } = useForm<CreateCampaignInput>({
     resolver: zodResolver(createCampaignSchema),
     defaultValues: {
+      startTime: '07:00',
+      endTime: '17:00',
       ...defaultValues,
     },
   })
@@ -49,7 +71,58 @@ export function CampaignForm({
   const size = watch('size')
   const modality = watch('modality')
   const companyId = watch('companyId')
+  const municipality = watch('municipality')
+  const campaignDate = watch('campaignDate')
+  const endDate = watch('endDate')
+  const startTime = watch('startTime')
+  const endTime = watch('endTime')
+  const dailySchedules = watch('dailySchedules')
+
   const [selectedCompanyName, setSelectedCompanyName] = useState<string | undefined>(defaultCompanyName)
+  const [department, setDepartment] = useState<string>(
+    () => getDepartmentForMunicipality(defaultValues?.municipality ?? '')
+  )
+
+  const isMultiDay = !!campaignDate && !!endDate && endDate > campaignDate
+  const rangeDates = useMemo(
+    () => (isMultiDay && campaignDate && endDate ? expandDates(campaignDate, endDate) : []),
+    [isMultiDay, campaignDate, endDate],
+  )
+
+  // Cuando cambia el rango, inicializa o ajusta los horarios por día.
+  useEffect(() => {
+    if (!isMultiDay) {
+      // Mono-día: limpia los daily schedules
+      if (dailySchedules !== undefined) {
+        setValue('dailySchedules', undefined, { shouldValidate: false })
+      }
+      return
+    }
+    const baseStart = startTime ?? '07:00'
+    const baseEnd = endTime ?? '17:00'
+    const existing = dailySchedules ?? []
+    const next: CampaignDaySchedule[] = rangeDates.map((dayDate, idx) => {
+      const found = existing.find((s) => s.dayDate === dayDate)
+      const isLast = idx === rangeDates.length - 1
+      return (
+        found ?? {
+          dayDate,
+          startTime: baseStart,
+          endTime: baseEnd,
+          isOvernight: !isLast,
+        }
+      )
+    })
+    setValue('dailySchedules', next, { shouldValidate: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMultiDay, campaignDate, endDate])
+
+  function updateDaySchedule(dayDate: string, patch: Partial<CampaignDaySchedule>) {
+    const list = (dailySchedules ?? []).map((s) =>
+      s.dayDate === dayDate ? { ...s, ...patch } : s,
+    )
+    setValue('dailySchedules', list, { shouldValidate: true })
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -80,23 +153,23 @@ export function CampaignForm({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="municipality">Municipio</Label>
-          <Input
-            id="municipality"
-            {...register('municipality')}
-            aria-invalid={!!errors.municipality}
-            placeholder="Ej: Bogotá"
-          />
-          {errors.municipality && (
-            <p className="text-sm text-destructive">
-              {errors.municipality.message}
-            </p>
-          )}
-        </div>
+        <ColombiaLocationSelector
+          idPrefix="campaign-"
+          department={department}
+          municipality={municipality ?? ''}
+          onDepartmentChange={(dep) => {
+            setDepartment(dep)
+            setValue('municipality', '', { shouldValidate: false })
+          }}
+          onMunicipalityChange={(mun) =>
+            setValue('municipality', mun, { shouldValidate: true })
+          }
+          municipalityError={errors.municipality?.message}
+          municipalityRequired
+        />
 
         <div className="space-y-1.5">
-          <Label htmlFor="campaignDate">Fecha de campaña</Label>
+          <Label htmlFor="campaignDate">Fecha de inicio</Label>
           <Input
             id="campaignDate"
             type="date"
@@ -107,6 +180,25 @@ export function CampaignForm({
             <p className="text-sm text-destructive">
               {errors.campaignDate.message}
             </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="endDate">
+            Fecha de fin <span className="text-muted-foreground text-xs">(opcional)</span>
+          </Label>
+          <Input
+            id="endDate"
+            type="date"
+            min={campaignDate || undefined}
+            {...register('endDate')}
+            aria-invalid={!!errors.endDate}
+          />
+          <p className="text-xs text-muted-foreground">
+            Si es mayor a la fecha de inicio, se programa por día con pernocta entre días intermedios.
+          </p>
+          {errors.endDate && (
+            <p className="text-sm text-destructive">{errors.endDate.message}</p>
           )}
         </div>
 
@@ -155,6 +247,66 @@ export function CampaignForm({
           )}
         </div>
 
+        {isMultiDay && rangeDates.length > 0 && (
+          <div className="sm:col-span-2 rounded-lg border border-border p-3 space-y-2">
+            <div>
+              <p className="text-sm font-medium">Horarios por día ({rangeDates.length} días)</p>
+              <p className="text-xs text-muted-foreground">
+                Ajusta inicio/fin de cada día y marca pernocta si el equipo se queda en el sitio
+                esa noche. Por defecto los días intermedios quedan con pernocta y el último sin.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {rangeDates.map((dayDate) => {
+                const day = (dailySchedules ?? []).find((d) => d.dayDate === dayDate)
+                return (
+                  <div
+                    key={dayDate}
+                    className="flex flex-wrap items-end gap-2 rounded-md border border-border/60 p-2"
+                  >
+                    <div className="min-w-[120px] flex-1">
+                      <Label className="text-xs">{formatDayLabel(dayDate)}</Label>
+                      <p className="text-[10px] text-muted-foreground font-mono">{dayDate}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Inicio</Label>
+                      <Input
+                        type="time"
+                        value={day?.startTime ?? ''}
+                        onChange={(e) => updateDaySchedule(dayDate, { startTime: e.target.value })}
+                        className="h-8 w-28 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Fin</Label>
+                      <Input
+                        type="time"
+                        value={day?.endTime ?? ''}
+                        onChange={(e) => updateDaySchedule(dayDate, { endTime: e.target.value })}
+                        className="h-8 w-28 text-xs"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-5">
+                      <input
+                        type="checkbox"
+                        id={`overnight-${dayDate}`}
+                        checked={day?.isOvernight ?? false}
+                        onChange={(e) =>
+                          updateDaySchedule(dayDate, { isOvernight: e.target.checked })
+                        }
+                        className="h-4 w-4 rounded border-input"
+                      />
+                      <Label htmlFor={`overnight-${dayDate}`} className="text-xs cursor-pointer">
+                        Pernocta esta noche
+                      </Label>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-1.5">
           <Label htmlFor="size">Tamaño</Label>
           <Select
@@ -202,11 +354,11 @@ export function CampaignForm({
               <SelectValue placeholder="Seleccionar modalidad" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="presencial">Presencial</SelectItem>
-              <SelectItem value="virtual">Virtual</SelectItem>
-              <SelectItem value="mixta">Mixta</SelectItem>
-              <SelectItem value="movil">Móvil</SelectItem>
-              <SelectItem value="institucional">Institucional</SelectItem>
+              <SelectItem value="corporativa">Corporativa</SelectItem>
+              <SelectItem value="carpa">Carpa</SelectItem>
+              <SelectItem value="unidad_movil">Unidad Móvil</SelectItem>
+              <SelectItem value="municipal">Municipal</SelectItem>
+              <SelectItem value="combinada">Combinada</SelectItem>
             </SelectContent>
           </Select>
           {errors.modality && (

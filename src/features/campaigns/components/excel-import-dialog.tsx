@@ -22,10 +22,11 @@ const SIZE_MAP: Record<string, ImportExcelRow['size']> = {
 }
 
 const MODALITY_MAP: Record<string, ImportExcelRow['modality']> = {
-  presencial: 'presencial', corporativa: 'presencial', institucional: 'institucional',
-  virtual: 'virtual', mixta: 'mixta', combinada: 'mixta',
-  movil: 'movil', móvil: 'movil', 'unidad movil': 'movil', 'unidad móvil': 'movil',
-  carpa: 'institucional', municipal: 'institucional',
+  corporativa: 'corporativa', presencial: 'corporativa',
+  carpa: 'carpa',
+  'unidad movil': 'unidad_movil', 'unidad móvil': 'unidad_movil', movil: 'unidad_movil', móvil: 'unidad_movil', unidad_movil: 'unidad_movil',
+  municipal: 'municipal', institucional: 'municipal',
+  combinada: 'combinada', mixta: 'combinada', virtual: 'combinada',
 }
 
 function normalize(v: unknown): string {
@@ -70,7 +71,7 @@ function mapRow(raw: Record<string, unknown>): ImportExcelRow {
     municipality: String(key(['municipio', 'municipality', 'ciudad']) ?? '').trim(),
     campaignDate: parseExcelDate(key(['fecha', 'date', 'campaigndate', 'campaign date'])),
     size: SIZE_MAP[sizeRaw] ?? 'S',
-    modality: MODALITY_MAP[modalityRaw] ?? 'presencial',
+    modality: MODALITY_MAP[modalityRaw] ?? 'corporativa',
     expectedDonations: Number(key(['donaciones', 'meta', 'expecteddonations', 'expected donations'])) || undefined,
     observations: String(key(['observaciones', 'observations', 'notas', 'notes']) ?? '').trim() || undefined,
   }

@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -11,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useDebounce } from '@/hooks/use-debounce'
-import type { StaffListFilters } from '@/features/staff/actions/staff-actions'
+import type { StaffListFilters } from '@/features/staff/actions/staff-types'
 
 type StaffFilters = StaffListFilters
 
@@ -44,6 +46,14 @@ export function StaffFilters({ onFiltersChange }: StaffFiltersProps) {
     onFiltersChange(filters)
   }, [debouncedSearch, perfil, estado, onFiltersChange])
 
+  const hasActiveFilters = search.trim() !== '' || perfil !== 'todos' || estado !== 'todos'
+
+  function handleClear() {
+    setSearch('')
+    setPerfil('todos')
+    setEstado('todos')
+  }
+
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
       <div className="flex-1 min-w-0">
@@ -73,7 +83,7 @@ export function StaffFilters({ onFiltersChange }: StaffFiltersProps) {
             <SelectItem value="tecnico">Técnico</SelectItem>
             <SelectItem value="medico">Médico</SelectItem>
             <SelectItem value="auxiliar">Auxiliar</SelectItem>
-            <SelectItem value="coordinador">Coordinador</SelectItem>
+            <SelectItem value="comercial">Comercial</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -93,6 +103,19 @@ export function StaffFilters({ onFiltersChange }: StaffFiltersProps) {
           </SelectContent>
         </Select>
       </div>
+
+      {hasActiveFilters && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleClear}
+          className="h-9 gap-1.5"
+        >
+          <X className="size-3.5" aria-hidden />
+          Limpiar
+        </Button>
+      )}
     </div>
   )
 }

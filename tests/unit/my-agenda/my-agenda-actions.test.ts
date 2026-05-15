@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PermissionError } from '@/lib/errors/app-errors'
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -10,6 +11,18 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-1', role: 'operativo' }),
+}))
+
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
 }))
 
 vi.mock('@/lib/db/schema/profiles', () => ({
@@ -70,8 +83,26 @@ vi.mock('@/lib/db/schema/staff-availability', () => ({
   },
 }))
 
+vi.mock('@/features/configuration/lib/runtime-config', () => {
+  const cfg = {
+    weeklyHours: 44,
+    maxExtraHoursWeek: 12,
+    maxShiftHours: 12,
+    minRestHours: 12,
+    maxSundaysMonth: 2,
+    maxOvernightsMonth: 1,
+    municipalCutoffTime: '00:00',
+    sedeMunicipality: 'Medellin',
+  }
+  return {
+    loadValidationRuntimeConfig: vi.fn().mockResolvedValue(cfg),
+    loadValidationRuntimeConfigAt: vi.fn().mockResolvedValue(cfg),
+    invalidateRuntimeConfigCache: vi.fn(),
+  }
+})
+
 import { db } from '@/lib/db'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import {
   getMyAgendaData,
   setMyAvailability,
@@ -97,7 +128,7 @@ type MockDb = {
   update: ReturnType<typeof vi.fn>
 }
 const mockDb = db as unknown as MockDb
-const mockRequireRole = requireRole as ReturnType<typeof vi.fn>
+const mockRequireAccess = requireAccess as ReturnType<typeof vi.fn>
 
 const staffId = '550e8400-e29b-41d4-a716-446655440001'
 const profileRow = { id: 'user-1' }
@@ -136,18 +167,19 @@ describe('getMyAgendaData', () => {
 
     const result = await getMyAgendaData()
 
-    expect(result.staffMemberId).toBe(staffId)
-    expect(result.firstName).toBe('Ana')
-    expect(result.lastName).toBe('Lopez')
-    expect(result.staffProfile).toBe('bacteriologo')
-    expect(result.upcomingCampaigns).toEqual([])
-    expect(result.sedeShiftsThisWeek).toEqual([])
-    expect(result.weeklyBalance).toBeNull()
-    expect(result.monthlyCounters).toEqual({ sundayCount: 0, overnightCount: 0 })
-    expect(result.coordinatorCampaignIds).toEqual([])
+    expect(result).not.toBeNull()
+    expect(result!.staffMemberId).toBe(staffId)
+    expect(result!.firstName).toBe('Ana')
+    expect(result!.lastName).toBe('Lopez')
+    expect(result!.staffProfile).toBe('bacteriologo')
+    expect(result!.upcomingCampaigns).toEqual([])
+    expect(result!.sedeShiftsThisWeek).toEqual([])
+    expect(result!.weeklyBalance).toBeNull()
+    expect(result!.monthlyCounters).toEqual({ sundayCount: 0, overnightCount: 0 })
+    expect(result!.coordinatorCampaignIds).toEqual([])
   })
 
-  it('throws when no staff member associated', async () => {
+  it('returns null when no staff member associated', async () => {
     let selectCount = 0
     mockDb.select = vi.fn(() => {
       selectCount++
@@ -156,9 +188,7 @@ describe('getMyAgendaData', () => {
       return makeChain([])
     })
 
-    await expect(getMyAgendaData()).rejects.toThrow(
-      'No tiene un perfil de funcionario asociado',
-    )
+    await expect(getMyAgendaData()).resolves.toBeNull()
   })
 
   it('throws user-friendly error on DB failure', async () => {
@@ -172,8 +202,8 @@ describe('getMyAgendaData', () => {
   })
 
   it('propagates requireRole rejection', async () => {
-    mockRequireRole.mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+    mockRequireAccess.mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getMyAgendaData()).rejects.toThrow('permiso')
@@ -259,12 +289,12 @@ describe('setMyAvailability', () => {
         availabilityDate: '2026-04-01',
         status: 'vacaciones',
       }),
-    ).rejects.toThrow('No tiene un perfil de funcionario asociado')
+    ).rejects.toThrow('No tiene un perfil de colaborador asociado')
   })
 
   it('propagates requireRole rejection', async () => {
-    mockRequireRole.mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+    mockRequireAccess.mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(

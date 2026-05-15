@@ -1,23 +1,31 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { NAV_ITEMS } from '@/lib/navigation/nav-items'
+import { NAV_ITEMS, requirementFromNavItem } from '@/lib/navigation/nav-items'
+import { canAccess } from '@/features/auth/lib/can-access'
 import type { Role } from '@/types/roles'
+import type { Area } from '@/types/areas'
 
 interface SidebarProps {
   role: Role | null
+  area?: Area | null
 }
 
-export function Sidebar({ role }: SidebarProps) {
+export function Sidebar({ role, area = null }: SidebarProps) {
   const pathname = usePathname()
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => !role || item.allowedRoles.includes(role)
-  )
+  // Filtrado vía `canAccess` con el mismo `AccessRequirement` que arma el
+  // middleware → garantiza que sidebar y middleware nunca divergen.
+  const visibleItems = role
+    ? NAV_ITEMS.filter(
+        (item) => canAccess({ role, area }, requirementFromNavItem(item)).allowed,
+      )
+    : []
 
   return (
     <TooltipProvider delay={0}>
@@ -31,15 +39,21 @@ export function Sidebar({ role }: SidebarProps) {
         {/* Logo area */}
         <div className="relative flex h-16 items-center justify-center">
           {/* Icon: centered, fades out on expand */}
-          <img
+          <Image
             src="/logo-icon.svg"
             alt="CRCSA"
+            width={36}
+            height={36}
+            priority
             className="h-9 w-9 object-contain opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0"
           />
           {/* Full logo: centered absolute, fades in on expand */}
-          <img
+          <Image
             src="/logo-full-dark.svg"
             alt="Cruz Roja Colombiana Seccional Antioquia"
+            width={240}
+            height={64}
+            priority
             className="absolute h-16 w-60 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
           />
         </div>

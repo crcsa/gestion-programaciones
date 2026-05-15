@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { createClient as createClientType } from '@/lib/supabase/server'
+
+type MockClient = Awaited<ReturnType<typeof createClientType>>
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(),
@@ -9,7 +12,7 @@ vi.mock('@/lib/db', () => ({
     select: vi.fn().mockReturnValue({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
-          limit: vi.fn().mockResolvedValue([{ role: 'admin' }]),
+          limit: vi.fn().mockResolvedValue([{ role: 'admin', area: null, email: 'a@x.com', fullName: 'A', isActive: true }]),
         }),
       }),
     }),
@@ -32,7 +35,7 @@ describe('requireRole', () => {
           error: new Error('Not authenticated'),
         }),
       },
-    } as any)
+    } as unknown as MockClient)
 
     await expect(requireRole(['admin'])).rejects.toThrow('No autenticado')
   })
@@ -45,7 +48,7 @@ describe('requireRole', () => {
           error: null,
         }),
       },
-    } as any)
+    } as unknown as MockClient)
 
     const result = await requireRole(['admin'])
     expect(result.userId).toBe('user-123')

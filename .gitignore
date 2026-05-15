@@ -29,6 +29,9 @@ yarn-error.log*
 
 # Testing
 coverage/
+playwright-report/
+test-results/
+playwright/.cache/
 
 # Drizzle
 drizzle/
@@ -40,3 +43,7 @@ drizzle/
 .superpowers/
 .tsconfig.tsbuildinfo
 .vercel
+
+# Claude   
+.claude/
+claude.md

@@ -1,37 +1,23 @@
 'use server'
 
 import { eq, and, gte, lte } from 'drizzle-orm'
+import { AppError, ValidationError } from '@/lib/errors/app-errors'
 import { db } from '@/lib/db'
 import { staffMembers, staffTrainingAreas } from '@/lib/db/schema/staff-members'
 import { staffAvailability } from '@/lib/db/schema/staff-availability'
 import { sedeShifts } from '@/lib/db/schema/sede-shifts'
 import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
-import { campaigns } from '@/lib/db/schema/campaigns'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { campaigns, campaignDays } from '@/lib/db/schema/campaigns'
+import { campaignVehicles } from '@/lib/db/schema/campaign-vehicles'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { setAvailabilityOverrideSchema, weeklyAvailabilityGridSchema } from '../schemas/availability-schemas'
-
-// ---- Types ----------------------------------------------------------------
-
-export type AvailabilityCellStatus =
-  | 'libre'
-  | 'en_sede'
-  | 'en_campana'
-  | 'vacaciones'
-  | 'incapacidad'
-  | 'licencia'
-
-export interface AvailabilityCellData {
-  status: AvailabilityCellStatus
-  referenceCode?: string
-}
-
-export interface AvailabilityGridRow {
-  staffId: string
-  firstName: string
-  lastName: string
-  staffProfile: string
-  days: Record<string, AvailabilityCellData>  // key: 'YYYY-MM-DD'
-}
+import type { WeeklyAvailabilityGridInput } from '../schemas/availability-schemas'
+import type { Area } from '@/types/areas'
+import type {
+  AvailabilityCellStatus,
+  AvailabilityCellData,
+  AvailabilityGridRow,
+} from './availability-types'
 
 // ---- Helpers --------------------------------------------------------------
 
@@ -45,24 +31,35 @@ function getWeekDates(weekStart: string): string[] {
 
 // ---- Actions --------------------------------------------------------------
 
-export async function getWeeklyAvailabilityGrid(params: {
-  weekStart: string
-  staffProfile?: string
-  trainingAreaId?: string
-}): Promise<AvailabilityGridRow[]> {
-  await requireRole(['admin', 'banco_sangre'])
+export async function getWeeklyAvailabilityGrid(
+  params: WeeklyAvailabilityGridInput & { area?: Area | null },
+): Promise<AvailabilityGridRow[]> {
+  // Admin global y comercial (cross-área) ven todas las áreas; admin_area
+  // queda anclado a su propia área (banco_sangre / logística solo ven la suya).
+  const { scope } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    allowCrossArea: true,
+  })
 
   const validated = weeklyAvailabilityGridSchema.safeParse(params)
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   const { weekStart, staffProfile, trainingAreaId } = validated.data
   const weekDates = getWeekDates(weekStart)
   const weekEnd = weekDates[6]
+  const areaScope: Area | null =
+    scope.kind === 'global' ? params.area ?? null : scope.area
 
   try {
-    let staffQuery = db
+    const baseWhere = [eq(staffMembers.isActive, true)]
+    if (areaScope) baseWhere.push(eq(staffMembers.area, areaScope))
+    if (staffProfile) {
+      baseWhere.push(eq(staffMembers.staffProfile, staffProfile))
+    }
+
+    let allStaff = await db
       .select({
         id: staffMembers.id,
         firstName: staffMembers.firstName,
@@ -70,19 +67,7 @@ export async function getWeeklyAvailabilityGrid(params: {
         staffProfile: staffMembers.staffProfile,
       })
       .from(staffMembers)
-      .where(eq(staffMembers.isActive, true))
-      .$dynamic()
-
-    if (staffProfile) {
-      staffQuery = staffQuery.where(
-        and(
-          eq(staffMembers.isActive, true),
-          eq(staffMembers.staffProfile, staffProfile as 'bacteriologo' | 'tecnico' | 'medico' | 'auxiliar' | 'coordinador'),
-        ),
-      )
-    }
-
-    let allStaff = await staffQuery
+      .where(and(...baseWhere))
 
     // Filter by training area if provided
     if (trainingAreaId) {
@@ -134,33 +119,59 @@ export async function getWeeklyAvailabilityGrid(params: {
       return { ...acc, [row.staffId]: existing }
     }, {})
 
-    // Batch fetch campaign assignments for the week
-    const campaignRows = await db
-      .select({
-        staffId: campaignAssignments.staffId,
-        campaignDate: campaigns.campaignDate,
-        campaignCode: campaigns.code,
-      })
-      .from(campaignAssignments)
-      .leftJoin(campaigns, eq(campaignAssignments.campaignId, campaigns.id))
-      .where(
-        and(
-          eq(campaignAssignments.isActive, true),
-          gte(campaigns.campaignDate, weekStart),
-          lte(campaigns.campaignDate, weekEnd),
+    // Batch fetch campaign assignments expandidos por día. Para campañas
+    // multi-día usamos campaign_days (1 fila por día) en vez de
+    // campaigns.campaign_date, que solo refleja el día de inicio. Filtramos
+    // por dayDate dentro de la semana, así una campaña que arranca antes del
+    // lunes pero continúa hasta el miércoles también se pinta.
+    //
+    // Incluye dos fuentes paralelas de "estoy en campaña":
+    //   a) campaign_assignments (banco_sangre, comercial)
+    //   b) campaign_vehicles.driver_staff_id (logística)
+    const [assignmentRows, driverRows] = await Promise.all([
+      db
+        .select({
+          staffId: campaignAssignments.staffId,
+          dayDate: campaignDays.dayDate,
+          campaignCode: campaigns.code,
+        })
+        .from(campaignAssignments)
+        .innerJoin(campaigns, eq(campaignAssignments.campaignId, campaigns.id))
+        .innerJoin(campaignDays, eq(campaignDays.campaignId, campaigns.id))
+        .where(
+          and(
+            eq(campaignAssignments.isActive, true),
+            gte(campaignDays.dayDate, weekStart),
+            lte(campaignDays.dayDate, weekEnd),
+          ),
         ),
-      )
+      db
+        .select({
+          staffId: campaignVehicles.driverStaffId,
+          dayDate: campaignDays.dayDate,
+          campaignCode: campaigns.code,
+        })
+        .from(campaignVehicles)
+        .innerJoin(campaigns, eq(campaignVehicles.campaignId, campaigns.id))
+        .innerJoin(campaignDays, eq(campaignDays.campaignId, campaigns.id))
+        .where(
+          and(
+            eq(campaignVehicles.isActive, true),
+            gte(campaignDays.dayDate, weekStart),
+            lte(campaignDays.dayDate, weekEnd),
+          ),
+        ),
+    ])
 
-    const campaignMap = campaignRows.reduce<
+    const campaignMap = [...assignmentRows, ...driverRows].reduce<
       Record<string, Record<string, string>>
     >((acc, row) => {
-      if (!row.campaignDate) return acc
-      const date = row.campaignDate
+      if (!row.staffId || !row.dayDate) return acc
       return {
         ...acc,
         [row.staffId]: {
           ...(acc[row.staffId] ?? {}),
-          [date]: row.campaignCode ?? '',
+          [row.dayDate]: row.campaignCode ?? '',
         },
       }
     }, {})
@@ -198,7 +209,7 @@ export async function getWeeklyAvailabilityGrid(params: {
       }
     })
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al obtener la grilla de disponibilidad')
   }
 }
@@ -209,28 +220,19 @@ export async function setStaffAvailabilityOverride(data: {
   status: 'vacaciones' | 'incapacidad' | 'licencia'
   notes?: string
 }): Promise<void> {
-  await requireRole(['admin', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'admin_area'] })
 
   const validated = setAvailabilityOverrideSchema.safeParse(data)
   if (!validated.success) {
-    throw new Error(validated.error.issues[0].message)
+    throw new ValidationError(validated.error.issues[0].message)
   }
 
   const { staffId, availabilityDate, status, notes } = validated.data
 
   try {
-    await db
-      .insert(staffAvailability)
-      .values({
-        staffId,
-        availabilityDate,
-        status,
-        notes: notes ?? null,
-        referenceType: 'manual',
-      })
-      .onConflictDoNothing()
-
-    // If already exists, update it
+    // staff_availability NO tiene UNIQUE en (staffId, availabilityDate), por
+    // lo que un onConflictDoUpdate no es válido. Hacemos select-first y
+    // branch insert/update para evitar duplicar filas en cada llamada.
     const [existing] = await db
       .select({ id: staffAvailability.id })
       .from(staffAvailability)
@@ -247,9 +249,17 @@ export async function setStaffAvailabilityOverride(data: {
         .update(staffAvailability)
         .set({ status, notes: notes ?? null, updatedAt: new Date() })
         .where(eq(staffAvailability.id, existing.id))
+    } else {
+      await db.insert(staffAvailability).values({
+        staffId,
+        availabilityDate,
+        status,
+        notes: notes ?? null,
+        referenceType: 'manual',
+      })
     }
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
-    throw new Error('Error al actualizar la disponibilidad del funcionario')
+    if (error instanceof AppError) throw error
+    throw new Error('Error al actualizar la disponibilidad del colaborador')
   }
 }

@@ -12,6 +12,18 @@ vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-1', role: 'admin' }),
 }))
 
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-1',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
+}))
+
 vi.mock('@/lib/db/schema/staff-members', () => ({
   staffMembers: {
     id: 'id', firstName: 'first_name', lastName: 'last_name',
@@ -45,9 +57,40 @@ vi.mock('@/lib/db/schema/campaign-assignments', () => ({
 
 vi.mock('@/lib/db/schema/campaigns', () => ({
   campaigns: {
-    id: 'id', campaignDate: 'campaign_date', startTime: 'start_time', endTime: 'end_time',
+    id: 'id',
+    campaignDate: 'campaign_date',
+    endDate: 'end_date',
+    startTime: 'start_time',
+    endTime: 'end_time',
+    status: 'status',
+  },
+  campaignDays: {
+    id: 'id',
+    campaignId: 'campaign_id',
+    dayDate: 'day_date',
+    startTime: 'start_time',
+    endTime: 'end_time',
+    isOvernight: 'is_overnight',
   },
 }))
+
+vi.mock('@/features/configuration/lib/runtime-config', () => {
+  const cfg = {
+    weeklyHours: 44,
+    maxExtraHoursWeek: 12,
+    maxShiftHours: 12,
+    minRestHours: 12,
+    maxSundaysMonth: 2,
+    maxOvernightsMonth: 1,
+    municipalCutoffTime: '00:00',
+    sedeMunicipality: 'Medellin',
+  }
+  return {
+    loadValidationRuntimeConfig: vi.fn().mockResolvedValue(cfg),
+    loadValidationRuntimeConfigAt: vi.fn().mockResolvedValue(cfg),
+    invalidateRuntimeConfigCache: vi.fn(),
+  }
+})
 
 import { db } from '@/lib/db'
 import {

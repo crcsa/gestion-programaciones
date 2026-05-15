@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ColombiaLocationSelector } from '@/components/colombia-location-selector'
 import { createCompany, updateCompany } from '../actions/company-actions'
+import { ContactList } from './contact-list'
 import type { Company } from '@/lib/db/schema/companies'
 
 interface CompanyFormProps {
@@ -149,25 +151,17 @@ export function CompanyForm({ company, onSuccess, onCancel }: CompanyFormProps) 
           />
         </div>
 
-        <div className="space-y-1">
-          <Label htmlFor="municipality">Municipio</Label>
-          <Input
-            id="municipality"
-            value={form.municipality}
-            onChange={handleChange('municipality')}
-            placeholder="Medellín"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label htmlFor="department">Departamento</Label>
-          <Input
-            id="department"
-            value={form.department}
-            onChange={handleChange('department')}
-            placeholder="Antioquia"
-          />
-        </div>
+        <ColombiaLocationSelector
+          idPrefix="company-"
+          department={form.department}
+          municipality={form.municipality}
+          onDepartmentChange={(dep) =>
+            setForm((prev) => ({ ...prev, department: dep, municipality: '' }))
+          }
+          onMunicipalityChange={(mun) =>
+            setForm((prev) => ({ ...prev, municipality: mun }))
+          }
+        />
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
@@ -178,6 +172,12 @@ export function CompanyForm({ company, onSuccess, onCancel }: CompanyFormProps) 
           {isLoading ? 'Guardando...' : isEditing ? 'Actualizar' : 'Crear empresa'}
         </Button>
       </div>
+
+      {isEditing && company && (
+        <div className="border-t border-border pt-4">
+          <ContactList companyId={company.id} />
+        </div>
+      )}
     </form>
   )
 }

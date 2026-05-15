@@ -16,7 +16,7 @@ export interface CampaignListFilters {
   search?: string
   status?: 'tentativa' | 'confirmada' | 'cancelada' | 'ejecutada'
   size?: 'S' | 'S_plus' | 'M' | 'L'
-  modality?: 'presencial' | 'virtual' | 'mixta' | 'movil' | 'institucional'
+  modality?: 'corporativa' | 'carpa' | 'unidad_movil' | 'municipal' | 'combinada'
   dateFrom?: string
   dateTo?: string
 }
@@ -30,6 +30,8 @@ export function CampaignFilters({ onFiltersChange }: CampaignFiltersProps) {
   const [status, setStatus] = useState<string>('todos')
   const [size, setSize] = useState<string>('todos')
   const [modality, setModality] = useState<string>('todos')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -52,8 +54,33 @@ export function CampaignFilters({ onFiltersChange }: CampaignFiltersProps) {
       filters.modality = modality as CampaignListFilters['modality']
     }
 
+    if (dateFrom) {
+      filters.dateFrom = dateFrom
+    }
+
+    if (dateTo) {
+      filters.dateTo = dateTo
+    }
+
     onFiltersChange(filters)
-  }, [debouncedSearch, status, size, modality, onFiltersChange])
+  }, [debouncedSearch, status, size, modality, dateFrom, dateTo, onFiltersChange])
+
+  const hasActiveFilters =
+    search.trim() !== '' ||
+    status !== 'todos' ||
+    size !== 'todos' ||
+    modality !== 'todos' ||
+    dateFrom !== '' ||
+    dateTo !== ''
+
+  function handleClear() {
+    setSearch('')
+    setStatus('todos')
+    setSize('todos')
+    setModality('todos')
+    setDateFrom('')
+    setDateTo('')
+  }
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
@@ -125,14 +152,50 @@ export function CampaignFilters({ onFiltersChange }: CampaignFiltersProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="presencial">Presencial</SelectItem>
-            <SelectItem value="virtual">Virtual</SelectItem>
-            <SelectItem value="mixta">Mixta</SelectItem>
-            <SelectItem value="movil">Móvil</SelectItem>
-            <SelectItem value="institucional">Institucional</SelectItem>
+            <SelectItem value="corporativa">Corporativa</SelectItem>
+            <SelectItem value="carpa">Carpa</SelectItem>
+            <SelectItem value="unidad_movil">Unidad Móvil</SelectItem>
+            <SelectItem value="municipal">Municipal</SelectItem>
+            <SelectItem value="combinada">Combinada</SelectItem>
           </SelectContent>
         </Select>
       </div>
+
+      <div className="w-full sm:w-40">
+        <Label htmlFor="campaign-date-from" className="mb-1.5">
+          Desde
+        </Label>
+        <Input
+          id="campaign-date-from"
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          max={dateTo || undefined}
+        />
+      </div>
+
+      <div className="w-full sm:w-40">
+        <Label htmlFor="campaign-date-to" className="mb-1.5">
+          Hasta
+        </Label>
+        <Input
+          id="campaign-date-to"
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          min={dateFrom || undefined}
+        />
+      </div>
+
+      {hasActiveFilters && (
+        <button
+          type="button"
+          onClick={handleClear}
+          className="h-9 self-end rounded-md border border-border bg-background px-3 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        >
+          Limpiar
+        </button>
+      )}
     </div>
   )
 }

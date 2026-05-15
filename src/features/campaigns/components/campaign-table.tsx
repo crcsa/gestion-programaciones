@@ -10,7 +10,7 @@ import {
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Eye, Pencil, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Eye, Pencil, CheckCircle2, XCircle, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { CampaignStatusBadge } from './campaign-status-badge'
@@ -23,9 +23,10 @@ interface CampaignTableProps {
   total: number
   page: number
   onPageChange: (page: number) => void
-  onEdit: (campaign: CampaignListItem) => void
+  onEdit?: (campaign: CampaignListItem) => void
   onConfirm?: (campaign: CampaignListItem) => void
   onCancel?: (campaign: CampaignListItem) => void
+  onDelete?: (campaign: CampaignListItem) => void
 }
 
 const columnHelper = createColumnHelper<CampaignListItem>()
@@ -68,6 +69,7 @@ export function CampaignTable({
   onEdit,
   onConfirm,
   onCancel,
+  onDelete,
 }: CampaignTableProps) {
   const columns = useMemo(
     () => [
@@ -136,7 +138,7 @@ export function CampaignTable({
                   <TooltipContent>Ver detalle</TooltipContent>
                 </Tooltip>
 
-                {isTentativa && (
+                {isTentativa && onEdit && (
                   <IconButton
                     label="Editar"
                     onClick={() => onEdit(campaign)}
@@ -165,13 +167,23 @@ export function CampaignTable({
                     <XCircle className="h-4 w-4" />
                   </IconButton>
                 )}
+
+                {onDelete && (
+                  <IconButton
+                    label="Eliminar campaña"
+                    onClick={() => onDelete(campaign)}
+                    className="hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </IconButton>
+                )}
               </div>
             </TooltipProvider>
           )
         },
       }),
     ],
-    [onEdit, onConfirm, onCancel]
+    [onEdit, onConfirm, onCancel, onDelete]
   )
 
   const table = useReactTable({

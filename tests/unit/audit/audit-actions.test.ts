@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PermissionError } from '@/lib/errors/app-errors'
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -11,6 +12,18 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
+}))
+
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
 }))
 
 vi.mock('@/lib/db/schema/audit-log', () => ({
@@ -34,6 +47,7 @@ vi.mock('@/lib/db/schema/profiles', () => ({
 
 import { db } from '@/lib/db'
 import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { getAuditLog } from '@/features/audit/actions/audit-actions'
 
 function makeChain(resolvedValue: unknown) {
@@ -125,8 +139,8 @@ describe('getAuditLog', () => {
   })
 
   it('throws when requireRole rejects (admin only)', async () => {
-    vi.mocked(requireRole).mockRejectedValue(
-      new Error('No tienes permiso para realizar esta accion.'),
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getAuditLog()).rejects.toThrow('permiso')

@@ -1,9 +1,10 @@
 'use server'
 
 import { eq, and, sql } from 'drizzle-orm'
+import { AppError } from '@/lib/errors/app-errors'
 import { db } from '@/lib/db'
 import { monthlyCounters } from '@/lib/db/schema/monthly-counters'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 
 // ---- Actions --------------------------------------------------------------
 
@@ -14,7 +15,7 @@ export async function incrementMonthlyCounters(data: {
   isSunday: boolean
   isOvernight: boolean
 }): Promise<void> {
-  await requireRole(['admin', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'admin_area'] })
 
   const { staffId, year, month, isSunday, isOvernight } = data
 
@@ -41,7 +42,7 @@ export async function incrementMonthlyCounters(data: {
         },
       })
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al incrementar contadores mensuales')
   }
 }
@@ -53,7 +54,7 @@ export async function decrementMonthlyCounters(data: {
   isSunday: boolean
   isOvernight: boolean
 }): Promise<void> {
-  await requireRole(['admin', 'banco_sangre'])
+  await requireAccess({ roles: ['admin', 'admin_area'] })
 
   const { staffId, year, month, isSunday, isOvernight } = data
 
@@ -91,7 +92,7 @@ export async function decrementMonthlyCounters(data: {
         ),
       )
   } catch (error) {
-    if (error instanceof Error && error.message.includes('permiso')) throw error
+    if (error instanceof AppError) throw error
     throw new Error('Error al decrementar contadores mensuales')
   }
 }

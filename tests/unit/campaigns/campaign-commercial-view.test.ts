@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PermissionError } from '@/lib/errors/app-errors'
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -10,6 +11,18 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-1', role: 'admin' }),
+}))
+
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
 }))
 
 vi.mock('@/lib/db/schema/campaign-assignments', () => ({
@@ -35,7 +48,7 @@ vi.mock('@/lib/audit/log-audit', () => ({
 }))
 
 import { db } from '@/lib/db'
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { getAssignedStaffForCommercial } from '@/features/campaigns/actions/campaign-actions'
 
 function makeChain(resolvedValue: unknown) {
@@ -93,8 +106,8 @@ describe('getAssignedStaffForCommercial', () => {
   })
 
   it('requires admin or comercial role', async () => {
-    vi.mocked(requireRole).mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getAssignedStaffForCommercial(campaignId)).rejects.toThrow('permiso')

@@ -45,7 +45,7 @@ const makeCampaign = (overrides: Partial<CampaignListItem> = {}): CampaignListIt
   municipality: 'Bogotá',
   campaignDate: '2026-03-17',
   size: 'M',
-  modality: 'presencial',
+  modality: 'corporativa',
   status: 'tentativa',
   expectedDonations: 50,
   companyName: 'Empresa SA',

@@ -1,37 +1,38 @@
-import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import { getCampaignsReport } from '@/features/reports/actions/report-actions'
 import { getWeeklyBalances } from '@/features/hours/actions/hours-actions'
 import { ReportsClient } from '@/features/reports/components/reports-client'
+import { loadValidationRuntimeConfig } from '@/features/configuration/lib/runtime-config'
+import { getCurrentMondayIso } from '@/lib/date/week'
 
 export default async function ReportesPage() {
-  await requireRole(['admin', 'banco_sangre', 'comercial'])
+  await requireAccess({ roles: ['admin', 'admin_area', 'comercial'] })
 
+  // Timezone-safe: monday-de-esta-semana sin shifts UTC.
+  const weekStart = getCurrentMondayIso()
+
+  // Month range: usamos LOCAL components para que "este mes" coincida con la
+  // percepción del usuario en su huso (Colombia UTC-5). El día 1 y el último
+  // día son strings YYYY-MM-DD construidos manualmente para evitar volver a
+  // pasar por toISOString() (UTC).
   const today = new Date()
+  const yearLocal = today.getFullYear()
+  const monthLocal = today.getMonth() + 1
+  const lastDayLocal = new Date(yearLocal, monthLocal, 0).getDate()
+  const mm = String(monthLocal).padStart(2, '0')
+  const monthStart = `${yearLocal}-${mm}-01`
+  const monthEnd = `${yearLocal}-${mm}-${String(lastDayLocal).padStart(2, '0')}`
 
-  // Get current week Monday
-  const day = today.getDay()
-  const diff = today.getDate() - day + (day === 0 ? -6 : 1)
-  const monday = new Date(today)
-  monday.setDate(diff)
-  const weekStart = monday.toISOString().slice(0, 10)
-
-  // Get first and last day of current month
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
-    .toISOString()
-    .slice(0, 10)
-  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-    .toISOString()
-    .slice(0, 10)
-
-  const [initialCampaigns, initialHoursRows] = await Promise.all([
+  const [initialCampaigns, initialHoursRows, cfg] = await Promise.all([
     getCampaignsReport({ dateFrom: monthStart, dateTo: monthEnd }),
     getWeeklyBalances(weekStart),
+    loadValidationRuntimeConfig(),
   ])
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Reportes</h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Reportes</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Consulta y exporta datos operativos
         </p>
@@ -39,6 +40,8 @@ export default async function ReportesPage() {
       <ReportsClient
         initialCampaigns={initialCampaigns}
         initialHoursRows={initialHoursRows}
+        contractHours={cfg.weeklyHours}
+        extraHoursLimit={cfg.maxExtraHoursWeek}
       />
     </div>
   )

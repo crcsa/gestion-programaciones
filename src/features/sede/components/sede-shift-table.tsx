@@ -25,7 +25,6 @@ const PROFILE_LABELS: Record<string, string> = {
   tecnico: 'Tecnico',
   medico: 'Medico',
   auxiliar: 'Auxiliar',
-  coordinador: 'Coordinador',
 }
 
 // ---- Helpers --------------------------------------------------------------
@@ -62,7 +61,7 @@ export function SedeShiftTable({ rows, onEdit, onDelete }: SedeShiftTableProps) 
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Funcionario</TableHead>
+          <TableHead>Colaborador</TableHead>
           <TableHead>Perfil</TableHead>
           <TableHead>Fecha</TableHead>
           <TableHead>Tipo</TableHead>
@@ -84,7 +83,15 @@ export function SedeShiftTable({ rows, onEdit, onDelete }: SedeShiftTableProps) 
             <TableCell>{SHIFT_TYPE_LABELS[row.shiftType] ?? row.shiftType}</TableCell>
             <TableCell>{row.startTime}</TableCell>
             <TableCell>{row.endTime}</TableCell>
-            <TableCell>{row.totalHours}h</TableCell>
+            <TableCell
+              title={
+                row.shiftType === 'diurno_completo'
+                  ? 'Horas efectivas (descuenta 1h de almuerzo en Diurno completo)'
+                  : 'Horas efectivas del turno'
+              }
+            >
+              {row.totalHours}h
+            </TableCell>
             <TableCell>{row.isOvernight ? 'Si' : 'No'}</TableCell>
             <TableCell className="text-right">
               <div className="flex items-center justify-end gap-1">

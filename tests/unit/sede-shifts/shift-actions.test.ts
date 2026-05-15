@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PermissionError } from '@/lib/errors/app-errors'
 
 // Mock modules before imports
 vi.mock('@/lib/db', () => ({
@@ -12,6 +13,18 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-123', role: 'admin' }),
+}))
+
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-123',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
 }))
 
 vi.mock('@/lib/db/schema/sede-shifts', () => ({
@@ -42,6 +55,7 @@ vi.mock('@/lib/db/schema/staff-members', () => ({
 
 import { db } from '@/lib/db'
 import { requireRole } from '@/features/auth/lib/require-role'
+import { requireAccess } from '@/features/auth/lib/require-access'
 import {
   upsertShift,
   deleteShift,
@@ -171,8 +185,8 @@ describe('deleteShift', () => {
   })
 
   it('propaga error de permiso sin envolver', async () => {
-    vi.mocked(requireRole).mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(deleteShift('shift-abc')).rejects.toThrow('permiso')
@@ -280,8 +294,8 @@ describe('getStaffOccupancy', () => {
   })
 
   it('propaga error de permiso sin envolver', async () => {
-    vi.mocked(requireRole).mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getStaffOccupancy('2026-03-17')).rejects.toThrow('permiso')
@@ -377,8 +391,8 @@ describe('getWeeklyShifts', () => {
   })
 
   it('lanza error cuando requireRole rechaza', async () => {
-    vi.mocked(requireRole).mockRejectedValueOnce(
-      new Error('No tienes permiso para realizar esta accion.'),
+    vi.mocked(requireAccess).mockRejectedValueOnce(
+      new PermissionError('No tienes permiso para realizar esta accion.'),
     )
 
     await expect(getWeeklyShifts('2026-03-17')).rejects.toThrow('permiso')

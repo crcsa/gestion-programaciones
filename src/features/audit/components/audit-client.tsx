@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, Fragment } from 'react'
 import * as XLSX from 'xlsx'
 import { Download, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -241,7 +241,7 @@ export function AuditClient({ initialData, initialTotal }: AuditClientProps) {
             {data.map((row) => {
               const isExpanded = expandedRow === row.id
               return (
-                <tbody key={row.id}>
+                <Fragment key={row.id}>
                   <tr className="border-t border-border hover:bg-muted/50">
                     <td className="px-4 py-2 whitespace-nowrap">
                       {formatDateTime(row.createdAt)}
@@ -294,7 +294,7 @@ export function AuditClient({ initialData, initialTotal }: AuditClientProps) {
                       </td>
                     </tr>
                   )}
-                </tbody>
+                </Fragment>
               )
             })}
           </tbody>

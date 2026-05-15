@@ -12,6 +12,18 @@ vi.mock('@/features/auth/lib/require-role', () => ({
   requireRole: vi.fn().mockResolvedValue({ userId: 'user-1', role: 'admin' }),
 }))
 
+vi.mock('@/features/auth/lib/require-access', () => ({
+  requireAccess: vi.fn().mockResolvedValue({
+    userId: 'user-1',
+    role: 'admin',
+    area: null,
+    staffId: null,
+    email: 'admin@test.com',
+    fullName: 'Admin Test',
+    scope: { kind: 'global' as const },
+  }),
+}))
+
 vi.mock('@/lib/db/schema/staff-members', () => ({
   staffMembers: {
     id: 'id', firstName: 'first_name', lastName: 'last_name',
@@ -46,6 +58,15 @@ vi.mock('@/lib/db/schema/campaigns', () => ({
   campaigns: {
     id: 'id', campaignDate: 'campaign_date', code: 'code',
   },
+  campaignDays: {
+    id: 'id', campaignId: 'campaign_id', dayDate: 'day_date',
+  },
+}))
+
+vi.mock('@/lib/db/schema/campaign-vehicles', () => ({
+  campaignVehicles: {
+    id: 'id', campaignId: 'campaign_id', driverStaffId: 'driver_staff_id', isActive: 'is_active',
+  },
 }))
 
 import { db } from '@/lib/db'
@@ -57,7 +78,7 @@ import {
 function makeChain(resolvedValue: unknown) {
   const chain: Record<string, unknown> = {}
   const methods = ['select', 'from', 'where', 'limit', 'insert', 'values',
-    'update', 'set', 'leftJoin', 'returning', 'onConflictDoNothing',
+    'update', 'set', 'leftJoin', 'innerJoin', 'returning', 'onConflictDoNothing',
     '$dynamic', 'orderBy']
   for (const method of methods) {
     chain[method] = vi.fn(() => chain)
@@ -118,7 +139,11 @@ describe('getWeeklyAvailabilityGrid', () => {
       if (selectCount === 1) return makeChain(mockStaff)
       if (selectCount === 2) return makeChain([])  // no overrides
       if (selectCount === 3) return makeChain([])  // no shifts
-      if (selectCount === 4) return makeChain([{ staffId, campaignDate: '2026-03-16', campaignCode: 'C001' }])
+      // Las queries de campañas se expanden a campaign_days; el campo es
+      // ahora `dayDate` (uno por día). Las hacemos en paralelo (assignments
+      // + drivers) así que devolvemos las dos cuentas.
+      if (selectCount === 4) return makeChain([{ staffId, dayDate: '2026-03-16', campaignCode: 'C001' }])
+      if (selectCount === 5) return makeChain([])  // no driver assignments
       return makeChain([])
     })
 
@@ -135,7 +160,8 @@ describe('getWeeklyAvailabilityGrid', () => {
       if (selectCount === 1) return makeChain(mockStaff)
       if (selectCount === 2) return makeChain([])  // no overrides
       if (selectCount === 3) return makeChain([{ staffId, shiftDate: '2026-03-16' }])
-      if (selectCount === 4) return makeChain([])  // no campaigns
+      if (selectCount === 4) return makeChain([])  // no campaign assignments
+      if (selectCount === 5) return makeChain([])  // no driver assignments
       return makeChain([])
     })
 
@@ -152,7 +178,8 @@ describe('getWeeklyAvailabilityGrid', () => {
       if (selectCount === 1) return makeChain(mockStaff)
       if (selectCount === 2) return makeChain([{ staffId, date: '2026-03-16', status: 'vacaciones' }])
       if (selectCount === 3) return makeChain([])  // no shifts
-      if (selectCount === 4) return makeChain([{ staffId, campaignDate: '2026-03-16', campaignCode: 'C002' }])
+      if (selectCount === 4) return makeChain([{ staffId, dayDate: '2026-03-16', campaignCode: 'C002' }])
+      if (selectCount === 5) return makeChain([])  // no driver assignments
       return makeChain([])
     })
 
@@ -216,10 +243,10 @@ describe('getWeeklyAvailabilityGrid — error path', () => {
 describe('setStaffAvailabilityOverride', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('upserts availability override', async () => {
-    const insertChain = makeChain([])
-    mockDb.insert = vi.fn(() => insertChain)
-    // Second select returns existing record
+  it('updates existing availability override', async () => {
+    // Si existe registro previo, va por la rama update (sin insert) para
+    // evitar duplicar filas (no hay UNIQUE en staff_id+availability_date).
+    mockDb.insert = vi.fn(() => makeChain([]))
     mockDb.select = vi.fn(() => makeChain([{ id: 'avail-1' }]))
     mockDb.update = vi.fn(() => makeChain([{ id: 'avail-1' }]))
 
@@ -231,8 +258,23 @@ describe('setStaffAvailabilityOverride', () => {
       }),
     ).resolves.toBeUndefined()
 
-    expect(mockDb.insert).toHaveBeenCalledTimes(1)
+    expect(mockDb.insert).not.toHaveBeenCalled()
     expect(mockDb.update).toHaveBeenCalledTimes(1)
+  })
+
+  it('inserts new availability override when no row exists', async () => {
+    mockDb.select = vi.fn(() => makeChain([])) // no existe
+    mockDb.insert = vi.fn(() => makeChain([{ id: 'new' }]))
+    mockDb.update = vi.fn(() => makeChain([]))
+
+    await setStaffAvailabilityOverride({
+      staffId,
+      availabilityDate: '2026-03-18',
+      status: 'vacaciones',
+    })
+
+    expect(mockDb.insert).toHaveBeenCalledTimes(1)
+    expect(mockDb.update).not.toHaveBeenCalled()
   })
 
   it('validates schema — rejects invalid status', async () => {
