@@ -25,8 +25,10 @@ if (!connectionString) {
  * pools sin cerrar en dev.
  *
  * Config del pool:
- * - `max: 5` — suficiente para el server dev y deja margen en el plan de
- *   Supabase.
+ * - `max` — En producción 10 (Vercel function puede recibir 10+ requests
+ *   concurrentes durante prefetch del sidebar; postgres-js NO tiene timeout
+ *   para la espera del pool, así que un pool chico cuelga las requests).
+ *   En dev 5 (HMR conservador). Override via env `POSTGRES_POOL_MAX`.
  * - `idle_timeout: 20` — devuelve conexiones inactivas tras 20s.
  * - `max_lifetime: 60 * 30` — recicla conexiones cada 30 min.
  * - `connect_timeout: 10` — falla rápido si el handshake tarda más de 10s.
@@ -45,11 +47,17 @@ type GlobalWithDb = typeof globalThis & {
 }
 const g = globalThis as GlobalWithDb
 
+const poolMax = (() => {
+  const fromEnv = Number(process.env.POSTGRES_POOL_MAX)
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv
+  return process.env.NODE_ENV === 'production' ? 10 : 5
+})()
+
 const client =
   g.__postgresClient ??
   postgres(connectionString, {
     prepare: false,
-    max: 5,
+    max: poolMax,
     idle_timeout: 20,
     max_lifetime: 60 * 30,
     connect_timeout: 10,
