@@ -38,7 +38,7 @@ export function Sidebar({ role, area = null }: SidebarProps) {
       >
         {/* Logo area — badge blanco contenido alrededor del logo */}
         <div className="relative flex h-24 shrink-0 items-start justify-center px-1.5 pt-2">
-          <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-300 ease-in-out group-hover/sidebar:h-20 group-hover/sidebar:w-56">
+          <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-300 ease-in-out group-hover/sidebar:h-14 group-hover/sidebar:w-24">
             {/* Icon: centered, fades out on expand */}
             <Image
               src="/logo-icon.svg"
@@ -55,7 +55,7 @@ export function Sidebar({ role, area = null }: SidebarProps) {
               width={224}
               height={72}
               priority
-              className="absolute h-16 w-52 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
+              className="absolute h-12 w-20 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
             />
           </div>
         </div>
