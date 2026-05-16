@@ -36,20 +36,9 @@ export function Sidebar({ role, area = null }: SidebarProps) {
           borderRight: '1px solid var(--sidebar-border)',
         }}
       >
-        {/* Logo area — fondo blanco difuminado al fondo oscuro del sidebar */}
-        <div className="relative h-20 shrink-0">
-          {/* Background blanco con fade-out suave al sidebar oscuro */}
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-white"
-            style={{
-              maskImage:
-                'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
-              WebkitMaskImage:
-                'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
-            }}
-          />
-          <div className="relative flex h-16 items-center justify-center">
+        {/* Logo area — badge blanco contenido alrededor del logo */}
+        <div className="relative flex h-20 shrink-0 items-center justify-center px-2">
+          <div className="relative flex h-14 w-12 items-center justify-center overflow-hidden rounded-lg bg-white shadow-sm transition-[width] duration-300 ease-in-out group-hover/sidebar:w-52">
             {/* Icon: centered, fades out on expand */}
             <Image
               src="/logo-icon.svg"
@@ -63,10 +52,10 @@ export function Sidebar({ role, area = null }: SidebarProps) {
             <Image
               src="/logo-full.svg"
               alt="Cruz Roja Colombiana Seccional Antioquia"
-              width={224}
-              height={56}
+              width={208}
+              height={52}
               priority
-              className="absolute h-14 w-56 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
+              className="absolute h-12 w-48 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
             />
           </div>
         </div>
