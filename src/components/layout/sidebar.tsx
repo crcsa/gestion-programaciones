@@ -36,30 +36,40 @@ export function Sidebar({ role, area = null }: SidebarProps) {
           borderRight: '1px solid var(--sidebar-border)',
         }}
       >
-        {/* Logo area — fondo blanco por branding institucional */}
-        <div className="relative flex h-16 items-center justify-center border-b border-slate-200 bg-white">
-          {/* Icon: centered, fades out on expand */}
-          <Image
-            src="/logo-icon.svg"
-            alt="CRCSA"
-            width={36}
-            height={36}
-            priority
-            className="h-9 w-9 object-contain opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0"
+        {/* Logo area — fondo blanco difuminado al fondo oscuro del sidebar */}
+        <div className="relative h-20 shrink-0">
+          {/* Background blanco con fade-out suave al sidebar oscuro */}
+          <div
+            aria-hidden
+            className="absolute inset-0 bg-white"
+            style={{
+              maskImage:
+                'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
+              WebkitMaskImage:
+                'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
+            }}
           />
-          {/* Full logo: centered absolute, fades in on expand */}
-          <Image
-            src="/logo-full.svg"
-            alt="Cruz Roja Colombiana Seccional Antioquia"
-            width={224}
-            height={56}
-            priority
-            className="absolute h-14 w-56 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
-          />
+          <div className="relative flex h-16 items-center justify-center">
+            {/* Icon: centered, fades out on expand */}
+            <Image
+              src="/logo-icon.svg"
+              alt="CRCSA"
+              width={36}
+              height={36}
+              priority
+              className="h-9 w-9 object-contain opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0"
+            />
+            {/* Full logo: centered absolute, fades in on expand */}
+            <Image
+              src="/logo-full.svg"
+              alt="Cruz Roja Colombiana Seccional Antioquia"
+              width={224}
+              height={56}
+              priority
+              className="absolute h-14 w-56 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
+            />
+          </div>
         </div>
-
-        {/* Divider */}
-        <div className="mx-3 border-t" style={{ borderColor: 'var(--sidebar-border)' }} />
 
         {/* Nav items */}
         <nav className="flex flex-1 flex-col gap-1 p-2 pt-3">

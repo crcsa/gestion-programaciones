@@ -38,7 +38,17 @@ export function MobileNav({ role }: MobileNavProps) {
         className="w-64 p-0"
         style={{ backgroundColor: 'var(--sidebar-bg)' }}
       >
-        <SheetHeader className="border-b border-slate-200 bg-white p-4">
+        <SheetHeader className="relative p-4 pb-6">
+          <div
+            aria-hidden
+            className="absolute inset-0 bg-white"
+            style={{
+              maskImage:
+                'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
+              WebkitMaskImage:
+                'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
+            }}
+          />
           <SheetTitle className="sr-only">Programaciones CRCSA</SheetTitle>
           <div className="relative h-10 w-44">
             <Image
