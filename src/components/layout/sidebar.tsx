@@ -37,7 +37,7 @@ export function Sidebar({ role, area = null }: SidebarProps) {
         }}
       >
         {/* Logo area — badge blanco contenido alrededor del logo */}
-        <div className="relative flex h-24 shrink-0 items-center justify-center px-1.5">
+        <div className="relative flex h-24 shrink-0 items-start justify-center px-1.5 pt-2">
           <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-300 ease-in-out group-hover/sidebar:h-20 group-hover/sidebar:w-56">
             {/* Icon: centered, fades out on expand */}
             <Image
