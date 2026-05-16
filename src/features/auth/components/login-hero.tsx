@@ -25,13 +25,8 @@ export function LoginHero() {
       />
 
       <div className="relative z-10">
-        <div className="relative inline-block">
-          {/* Halo difuminado gris→blanco detrás del logo para legibilidad */}
-          <div
-            aria-hidden
-            className="absolute inset-0 -m-12 rounded-[40%] bg-[radial-gradient(ellipse_at_center,_rgba(255,255,255,0.55)_0%,_rgba(226,232,240,0.25)_45%,_transparent_75%)] blur-md"
-          />
-          <div className="relative h-20 w-36">
+        <div className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 shadow-lg shadow-black/30">
+          <div className="relative h-14 w-44">
             <Image
               src="/logo-full.svg"
               alt="Cruz Roja Colombiana Seccional Antioquia"
