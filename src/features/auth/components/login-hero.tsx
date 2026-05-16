@@ -25,8 +25,8 @@ export function LoginHero() {
       />
 
       <div className="relative z-10">
-        <div className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 shadow-lg shadow-black/30">
-          <div className="relative h-14 w-44">
+        <div className="inline-flex items-center justify-center rounded-xl bg-white px-3 py-2 shadow-lg shadow-black/30">
+          <div className="relative h-20 w-32">
             <Image
               src="/logo-full.svg"
               alt="Cruz Roja Colombiana Seccional Antioquia"
