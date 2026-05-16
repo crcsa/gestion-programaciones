@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu } from 'lucide-react'
@@ -37,13 +38,17 @@ export function MobileNav({ role }: MobileNavProps) {
         className="w-64 p-0"
         style={{ backgroundColor: 'var(--sidebar-bg)' }}
       >
-        <SheetHeader className="p-4">
-          <SheetTitle className="flex items-center gap-2 text-white">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#c8102e]">
-              <span className="text-sm font-bold text-white">+</span>
-            </div>
-            Programaciones CRCA
-          </SheetTitle>
+        <SheetHeader className="border-b border-slate-200 bg-white p-4">
+          <SheetTitle className="sr-only">Programaciones CRCSA</SheetTitle>
+          <div className="relative h-10 w-44">
+            <Image
+              src="/logo-full.svg"
+              alt="Cruz Roja Colombiana Seccional Antioquia"
+              fill
+              priority
+              className="object-contain object-left"
+            />
+          </div>
         </SheetHeader>
         <nav className="flex flex-col gap-1 px-2">
           {visibleItems.map((item) => {

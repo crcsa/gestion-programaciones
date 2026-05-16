@@ -36,8 +36,8 @@ export function Sidebar({ role, area = null }: SidebarProps) {
           borderRight: '1px solid var(--sidebar-border)',
         }}
       >
-        {/* Logo area */}
-        <div className="relative flex h-16 items-center justify-center">
+        {/* Logo area — fondo blanco por branding institucional */}
+        <div className="relative flex h-16 items-center justify-center border-b border-slate-200 bg-white">
           {/* Icon: centered, fades out on expand */}
           <Image
             src="/logo-icon.svg"
@@ -49,12 +49,12 @@ export function Sidebar({ role, area = null }: SidebarProps) {
           />
           {/* Full logo: centered absolute, fades in on expand */}
           <Image
-            src="/logo-full-dark.svg"
+            src="/logo-full.svg"
             alt="Cruz Roja Colombiana Seccional Antioquia"
-            width={240}
-            height={64}
+            width={224}
+            height={56}
             priority
-            className="absolute h-16 w-60 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
+            className="absolute h-14 w-56 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
           />
         </div>
 
