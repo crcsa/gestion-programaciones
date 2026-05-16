@@ -38,24 +38,24 @@ export function Sidebar({ role, area = null }: SidebarProps) {
       >
         {/* Logo area — badge blanco contenido alrededor del logo */}
         <div className="relative flex h-24 shrink-0 items-center justify-center px-1.5">
-          <div className="relative flex h-16 w-12 items-center justify-center overflow-hidden rounded-lg bg-white shadow-sm transition-[width] duration-300 ease-in-out group-hover/sidebar:w-56">
+          <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-300 ease-in-out group-hover/sidebar:h-20 group-hover/sidebar:w-56">
             {/* Icon: centered, fades out on expand */}
             <Image
               src="/logo-icon.svg"
               alt="CRCSA"
-              width={40}
-              height={40}
+              width={28}
+              height={28}
               priority
-              className="h-10 w-10 object-contain opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0"
+              className="h-7 w-7 object-contain opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0"
             />
             {/* Full logo: centered absolute, fades in on expand */}
             <Image
               src="/logo-full.svg"
               alt="Cruz Roja Colombiana Seccional Antioquia"
               width={224}
-              height={60}
+              height={72}
               priority
-              className="absolute h-14 w-52 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
+              className="absolute h-16 w-52 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
             />
           </div>
         </div>
