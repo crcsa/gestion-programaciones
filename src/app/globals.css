@@ -102,3 +102,49 @@
   }
 }
 
+/* === Login mesh animation === */
+@keyframes mesh-float-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(40px, 30px) scale(1.1); }
+}
+@keyframes mesh-float-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-30px, 40px) scale(1.08); }
+}
+@keyframes mesh-float-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(20px, -30px) scale(1.12); }
+}
+
+@layer utilities {
+  .animate-mesh-float-1 { animation: mesh-float-1 18s ease-in-out infinite; }
+  .animate-mesh-float-2 { animation: mesh-float-2 22s ease-in-out infinite -4s; }
+  .animate-mesh-float-3 { animation: mesh-float-3 20s ease-in-out infinite -8s; }
+}
+
+/* === Login button shimmer === */
+.login-shimmer { position: relative; overflow: hidden; }
+.login-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.7s ease;
+  pointer-events: none;
+}
+.login-shimmer:hover::after,
+.login-shimmer:focus-visible::after { transform: translateX(100%); }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-mesh-float-1,
+  .animate-mesh-float-2,
+  .animate-mesh-float-3 { animation: none; }
+  .login-shimmer::after { display: none; }
+}
+
