@@ -74,6 +74,11 @@ export function Sidebar({ role, area = null }: SidebarProps) {
                   render={
                     <Link
                       href={item.href}
+                      // Sin prefetch: el sidebar tiene 13 links y Next.js
+                      // prefetcha TODOS al hover/render, lo que dispara una
+                      // ráfaga de Server Components con queries DB
+                      // concurrentes. Cada ruta navega bien on-demand.
+                      prefetch={false}
                       className={cn(
                         'flex h-9 items-center rounded-md px-2.5 transition-colors',
                         isActive ? 'text-white' : 'hover:text-white'
