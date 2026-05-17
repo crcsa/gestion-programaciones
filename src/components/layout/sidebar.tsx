@@ -36,30 +36,29 @@ export function Sidebar({ role, area = null }: SidebarProps) {
           borderRight: '1px solid var(--sidebar-border)',
         }}
       >
-        {/* Logo area */}
-        <div className="relative flex h-16 items-center justify-center">
-          {/* Icon: centered, fades out on expand */}
-          <Image
-            src="/logo-icon.svg"
-            alt="CRCSA"
-            width={36}
-            height={36}
-            priority
-            className="h-9 w-9 object-contain opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0"
-          />
-          {/* Full logo: centered absolute, fades in on expand */}
-          <Image
-            src="/logo-full-dark.svg"
-            alt="Cruz Roja Colombiana Seccional Antioquia"
-            width={240}
-            height={64}
-            priority
-            className="absolute h-16 w-60 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
-          />
+        {/* Logo area — badge blanco contenido alrededor del logo */}
+        <div className="relative flex h-24 shrink-0 items-start justify-center px-1.5 pt-2">
+          <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-300 ease-in-out group-hover/sidebar:h-16 group-hover/sidebar:w-28">
+            {/* Icon: centered, fades out on expand */}
+            <Image
+              src="/logo-icon.svg"
+              alt="CRCSA"
+              width={28}
+              height={28}
+              priority
+              className="h-7 w-7 object-contain opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0"
+            />
+            {/* Full logo: centered absolute, fades in on expand */}
+            <Image
+              src="/logo-full.svg"
+              alt="Cruz Roja Colombiana Seccional Antioquia"
+              width={224}
+              height={72}
+              priority
+              className="absolute h-14 w-24 object-contain opacity-0 transition-opacity duration-300 group-hover/sidebar:opacity-100"
+            />
+          </div>
         </div>
-
-        {/* Divider */}
-        <div className="mx-3 border-t" style={{ borderColor: 'var(--sidebar-border)' }} />
 
         {/* Nav items */}
         <nav className="flex flex-1 flex-col gap-1 p-2 pt-3">

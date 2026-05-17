@@ -4,7 +4,7 @@ import { useActionState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { signIn } from '@/features/auth/actions/auth-actions'
 import type { LoginState } from '@/features/auth/actions/auth-types'
 
@@ -14,9 +14,12 @@ export function LoginForm() {
   const [state, formAction, isPending] = useActionState(signIn, initialState)
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-xl shadow-slate-900/5">
       <CardHeader>
-        <CardTitle className="text-center text-lg">Iniciar sesion</CardTitle>
+        <CardTitle className="text-xl">Iniciar sesión</CardTitle>
+        <CardDescription className="text-sm text-muted-foreground">
+          Ingresá con tu cuenta institucional
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-4">
@@ -29,6 +32,7 @@ export function LoginForm() {
               placeholder="usuario@crantioquia.org.co"
               required
               autoComplete="email"
+              aria-invalid={state.error ? true : undefined}
             />
           </div>
           <div className="space-y-2">
@@ -39,6 +43,7 @@ export function LoginForm() {
               type="password"
               required
               autoComplete="current-password"
+              aria-invalid={state.error ? true : undefined}
             />
           </div>
           {state.error && (
@@ -46,7 +51,7 @@ export function LoginForm() {
               {state.error}
             </p>
           )}
-          <Button type="submit" className="w-full" disabled={isPending}>
+          <Button type="submit" className="login-shimmer h-10 w-full text-sm" disabled={isPending}>
             {isPending ? 'Ingresando...' : 'Ingresar'}
           </Button>
         </form>
