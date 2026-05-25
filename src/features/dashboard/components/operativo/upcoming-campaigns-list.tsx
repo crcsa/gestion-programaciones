@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { MyUpcomingCampaign } from '../../lib/operativo-queries'
@@ -28,11 +29,22 @@ export function UpcomingCampaignsList({ campaigns, showCoordinator = false }: Pr
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">
-                    {c.code} — {c.municipality}
+                    {c.isCoordinator ? (
+                      <Link
+                        href={`/campanas/${c.campaignId}`}
+                        className="text-primary underline-offset-4 hover:underline"
+                      >
+                        {c.code}
+                      </Link>
+                    ) : (
+                      c.code
+                    )}{' '}
+                    — {c.municipality}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {c.campaignDate}
                     {c.startTime ? ` · ${c.startTime}` : ''}
+                    {c.isCoordinator ? ' · registra ejecución desde el detalle' : ''}
                   </p>
                 </div>
                 {showCoordinator && c.isCoordinator && (

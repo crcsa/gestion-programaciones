@@ -266,6 +266,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
                     campaignId={campaign.id}
                     campaignDate={campaign.campaignDate}
                     initialEvents={timelineEvents}
+                    canFinalize={canSchedule}
                   />
                 </div>
               </section>

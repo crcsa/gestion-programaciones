@@ -22,12 +22,16 @@ interface TimelineExecutionFormProps {
   campaignId: string
   campaignDate: string
   existingEvents: CampaignTimelineEvent[]
+  /** Solo admin/admin_area puede finalizar (homologa horas + marca ejecutada).
+   *  El coordinador operativo registra las horas; un admin cierra. */
+  canFinalize?: boolean
 }
 
 export function TimelineExecutionForm({
   campaignId,
   campaignDate,
   existingEvents,
+  canFinalize = false,
 }: TimelineExecutionFormProps) {
   const router = useRouter()
   const [events, setEvents] = useState<CampaignTimelineEvent[]>(existingEvents)
@@ -219,10 +223,16 @@ export function TimelineExecutionForm({
         })}
       </div>
 
-      {allRegistered && (
+      {allRegistered && canFinalize && (
         <Button onClick={finalize} disabled={busy === 'finalize'} className="w-full">
           {busy === 'finalize' ? 'Calculando...' : 'Finalizar y calcular horas'}
         </Button>
+      )}
+      {allRegistered && !canFinalize && (
+        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          Todas las horas quedaron registradas. Un administrador de banco de sangre finalizará
+          y homologará las horas a todo el personal.
+        </p>
       )}
     </div>
   )

@@ -19,12 +19,14 @@ interface TimelineExecutionDialogProps {
   campaignId: string
   campaignDate: string
   initialEvents: CampaignTimelineEvent[]
+  canFinalize?: boolean
 }
 
 export function TimelineExecutionDialog({
   campaignId,
   campaignDate,
   initialEvents,
+  canFinalize = false,
 }: TimelineExecutionDialogProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -75,6 +77,7 @@ export function TimelineExecutionDialog({
             campaignId={campaignId}
             campaignDate={campaignDate}
             existingEvents={events}
+            canFinalize={canFinalize}
           />
         </DialogContent>
       </Dialog>
