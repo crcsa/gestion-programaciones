@@ -59,9 +59,11 @@ export function TimelineProgrammingForm({
     return m
   }, [events])
 
-  const noneScheduled = TIMELINE_EVENT_ORDER.every(
+  // Eventos sin hora programada aún → candidatos a recibir la sugerida.
+  const pendingTypes = TIMELINE_EVENT_ORDER.filter(
     (t) => eventByType.get(t)?.scheduledTime == null,
   )
+  const noneScheduled = pendingTypes.length === TIMELINE_EVENT_ORDER.length
 
   async function refresh() {
     const fresh = await getCampaignTimeline(campaignId)
@@ -69,16 +71,17 @@ export function TimelineProgrammingForm({
   }
 
   async function applyAllSuggestions() {
-    if (!defaults) return
+    if (!defaults || pendingTypes.length === 0) return
     setBusy('apply-all')
     setError(null)
     try {
-      const payload = TIMELINE_EVENT_ORDER.map((t) => ({
+      // Solo rellena los eventos sin hora; no pisa los que ya editaste.
+      const payload = pendingTypes.map((t) => ({
         eventType: t,
         scheduledTime: defaults[t].toISOString(),
       }))
       await scheduleTimelineEventsBatch({ campaignId, events: payload })
-      setInfo('9 horas programadas guardadas')
+      setInfo(`${payload.length} hora(s) programada(s) guardada(s)`)
       await refresh()
       setTimeout(() => setInfo(null), 3000)
     } catch (err) {
@@ -148,7 +151,7 @@ export function TimelineProgrammingForm({
         </div>
       )}
 
-      {defaults && noneScheduled && (
+      {defaults && pendingTypes.length > 0 && (
         <Button
           onClick={applyAllSuggestions}
           disabled={busy === 'apply-all'}
@@ -156,7 +159,11 @@ export function TimelineProgrammingForm({
           className="w-full gap-2"
         >
           <Sparkles className="size-4" />
-          {busy === 'apply-all' ? 'Aplicando...' : 'Aplicar todas las sugerencias'}
+          {busy === 'apply-all'
+            ? 'Aplicando...'
+            : noneScheduled
+              ? 'Aplicar todas las sugerencias'
+              : `Aplicar sugerencias a las ${pendingTypes.length} restantes`}
         </Button>
       )}
 

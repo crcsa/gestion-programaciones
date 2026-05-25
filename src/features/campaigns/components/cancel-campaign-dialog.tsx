@@ -39,6 +39,8 @@ interface CancelCampaignDialogProps {
   campaignId: string
   onConfirm: (reason: string) => Promise<void>
   isLoading?: boolean
+  /** Título personalizado (p.ej. para cancelación en lote). */
+  title?: string
 }
 
 export function CancelCampaignDialog({
@@ -48,6 +50,7 @@ export function CancelCampaignDialog({
   campaignId,
   onConfirm,
   isLoading = false,
+  title,
 }: CancelCampaignDialogProps) {
   const [affectedStaff, setAffectedStaff] = useState<AssignedStaffMember[]>([])
   const [loadingStaff, startLoadingStaff] = useTransition()
@@ -87,14 +90,13 @@ export function CancelCampaignDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Cancelar campaña {campaignCode}</DialogTitle>
+          <DialogTitle>{title ?? `Cancelar campaña ${campaignCode}`}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(handleConfirm)} className="space-y-4">
-          <AffectedStaffSection
-            loading={loadingStaff}
-            staff={affectedStaff}
-          />
+          {campaignId && (
+            <AffectedStaffSection loading={loadingStaff} staff={affectedStaff} />
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="cancel-reason">Motivo de cancelación</Label>

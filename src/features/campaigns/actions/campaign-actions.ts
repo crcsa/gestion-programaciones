@@ -2,7 +2,6 @@
 
 import { eq, ilike, and, or, sql, gte, lte, desc, asc, inArray, type SQL } from 'drizzle-orm'
 import { AppError, ConflictError, NotFoundError, ValidationError } from '@/lib/errors/app-errors'
-import { campaignArea } from '@/features/dashboard/lib/dashboard-queries'
 import type { Area } from '@/types/areas'
 import { rethrowOrLog } from '@/lib/errors/rethrow'
 import { revalidatePath } from 'next/cache'
@@ -66,18 +65,30 @@ export interface CampaignListResult {
 
 // ---- Helpers --------------------------------------------------------------
 
+/**
+ * Scope de campañas para un admin de área operativa (banco_sangre/logística):
+ * ven TODAS las campañas confirmadas/ejecutadas (su universo asignable), no solo
+ * las que ya tienen asignación de su área — de lo contrario no podrían ver una
+ * campaña recién confirmada para asignarle personal/vehículos (huevo-gallina).
+ * Admin global, comercial y admin_area+comercial → sin filtro (ven todo).
+ */
+function assignableCampaignScope(areaScope: Area | null): SQL | undefined {
+  if (areaScope === 'banco_sangre' || areaScope === 'logistica') {
+    return inArray(campaigns.status, ['confirmada', 'ejecutada'])
+  }
+  return undefined
+}
+
 function buildListConditions(
   filters: CampaignListFilters,
   areaScope: Area | null = null,
 ) {
   const parts: SQL[] = [eq(campaigns.isDeleted, false)]
 
-  // Scope por área: admin_area de banco_sangre/logística solo ve campañas de
-  // su área. Admin global y comercial (allowCrossArea) pasan con areaScope=null.
-  if (areaScope) {
-    const areaPredicate = campaignArea(areaScope)
-    if (areaPredicate) parts.push(areaPredicate)
-  }
+  // Scope por área: el admin operativo (banco_sangre/logística) ve las campañas
+  // confirmadas/ejecutadas. Admin global y comercial pasan sin filtro de área.
+  const areaPredicate = assignableCampaignScope(areaScope)
+  if (areaPredicate) parts.push(areaPredicate)
 
   if (filters.search) {
     parts.push(
@@ -146,8 +157,8 @@ export async function getCampaignsList(
     }
 
     // Admin global y comercial (allowCrossArea) → scope global, sin filtro.
-    // admin_area (banco_sangre/logística) → scope acotado a su área, filtra
-    // campañas con asignación activa en esa área (helper `campaignArea`).
+    // admin_area banco_sangre/logística → ven las campañas confirmadas/ejecutadas
+    // (universo asignable) vía `assignableCampaignScope`.
     const areaScope: Area | null = scope.kind === 'global' ? null : scope.area
     const conditions = buildListConditions(filters, areaScope)
 
@@ -374,7 +385,7 @@ export async function getCampaignById(
     // área tiene asignación activa (banco_sangre staff o vehículo logístico).
     // Comercial y admin global pasan con scope global.
     const areaScope: Area | null = scope.kind === 'global' ? null : scope.area
-    const areaPredicate = areaScope ? campaignArea(areaScope) : undefined
+    const areaPredicate = assignableCampaignScope(areaScope)
     const whereParts: SQL[] = [eq(campaigns.id, id), eq(campaigns.isDeleted, false)]
     if (areaPredicate) whereParts.push(areaPredicate)
 
@@ -772,6 +783,69 @@ export async function cancelCampaign(
   }
 }
 
+export interface BulkActionResult {
+  ok: number
+  skipped: number
+  errors: { id: string; reason: string }[]
+}
+
+/**
+ * Confirma varias campañas tentativa en lote. Reutiliza `confirmCampaign` por id
+ * (misma validación/permiso/auditoría); las que no estén en 'tentativa' se cuentan
+ * como `skipped`. Permiso: el mismo de confirmar (comercial / admin global).
+ */
+export async function bulkConfirmCampaigns(ids: string[]): Promise<BulkActionResult> {
+  await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    areas: ['comercial'],
+    allowCrossArea: true,
+  })
+
+  const result: BulkActionResult = { ok: 0, skipped: 0, errors: [] }
+  for (const id of ids) {
+    try {
+      await confirmCampaign(id)
+      result.ok++
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof NotFoundError) {
+        result.skipped++
+      } else {
+        result.errors.push({ id, reason: error instanceof Error ? error.message : 'Error' })
+      }
+    }
+  }
+  revalidatePath('/campanas')
+  return result
+}
+
+/** Cancela varias campañas en lote con un mismo motivo. */
+export async function bulkCancelCampaigns(
+  ids: string[],
+  reason: string,
+): Promise<BulkActionResult> {
+  await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    areas: ['comercial'],
+    allowCrossArea: true,
+  })
+
+  const result: BulkActionResult = { ok: 0, skipped: 0, errors: [] }
+  for (const id of ids) {
+    try {
+      await cancelCampaign(id, reason)
+      result.ok++
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof NotFoundError) {
+        result.skipped++
+      } else {
+        result.errors.push({ id, reason: error instanceof Error ? error.message : 'Error' })
+      }
+    }
+  }
+  revalidatePath('/campanas')
+  return result
+}
+
 export async function deleteCampaign(id: string): Promise<void> {
   const { userId } = await requireAccess({
     roles: ['admin', 'admin_area', 'comercial'],
@@ -820,7 +894,10 @@ export interface CommercialStaffMember {
 export async function getAssignedStaffForCommercial(
   campaignId: string,
 ): Promise<CommercialStaffMember[]> {
-  await requireAccess({ roles: ['admin', 'comercial'] })
+  // Lectura abierta a cualquier rol que pueda ver el detalle de campaña
+  // (admin global, admin_area, comercial, operativo asignado). Antes excluía a
+  // admin_area+comercial, que sí ve la vista comercial → PermissionError.
+  await requireAccess({ roles: ['admin', 'admin_area', 'comercial', 'operativo'] })
 
   try {
     const rows = await db

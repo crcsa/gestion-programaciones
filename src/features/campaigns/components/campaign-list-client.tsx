@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { CampaignFilters } from './campaign-filters'
 import { CampaignTable } from './campaign-table'
@@ -25,6 +25,8 @@ import {
   confirmCampaign,
   cancelCampaign,
   deleteCampaign,
+  bulkConfirmCampaigns,
+  bulkCancelCampaigns,
 } from '@/features/campaigns/actions/campaign-actions'
 import type {
   CampaignListFilters as ActionFilters,
@@ -75,6 +77,12 @@ export function CampaignListClient({
   const [deletingCampaign, setDeletingCampaign] = useState<CampaignListItem | null>(null)
   const [isDeleteLoading, setIsDeleteLoading] = useState(false)
 
+  // Selección múltiple (solo campañas tentativa).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkCancelOpen, setBulkCancelOpen] = useState(false)
+  const [isBulkLoading, setIsBulkLoading] = useState(false)
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
+
   const fetchData = useCallback(
     async (nextFilters: ActionFilters, nextPage: number) => {
       setIsLoading(true)
@@ -83,6 +91,7 @@ export function CampaignListClient({
         setError(null)
         setData(result.data)
         setTotal(result.total)
+        setSelectedIds(new Set()) // la selección no cruza recargas/páginas
       } catch {
         setError('Error al cargar las campañas. Intente de nuevo.')
       } finally {
@@ -92,8 +101,75 @@ export function CampaignListClient({
     []
   )
 
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleSelectAll = useCallback((ids: string[]) => {
+    setSelectedIds((prev) => {
+      const allSelected = ids.length > 0 && ids.every((id) => prev.has(id))
+      if (allSelected) {
+        const next = new Set(prev)
+        ids.forEach((id) => next.delete(id))
+        return next
+      }
+      return new Set([...prev, ...ids])
+    })
+  }, [])
+
+  const handleBulkConfirm = useCallback(async () => {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    setIsBulkLoading(true)
+    try {
+      const r = await bulkConfirmCampaigns(ids)
+      toast.success(
+        `${r.ok} campaña(s) confirmada(s)` +
+          (r.skipped ? ` · ${r.skipped} omitida(s)` : '') +
+          (r.errors.length ? ` · ${r.errors.length} con error` : ''),
+      )
+      await fetchData(filters, page)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al confirmar en lote')
+    } finally {
+      setIsBulkLoading(false)
+    }
+  }, [selectedIds, fetchData, filters, page])
+
+  const handleBulkCancelConfirm = useCallback(async (reason: string) => {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    setIsBulkLoading(true)
+    try {
+      const r = await bulkCancelCampaigns(ids, reason)
+      toast.success(
+        `${r.ok} campaña(s) cancelada(s)` +
+          (r.skipped ? ` · ${r.skipped} omitida(s)` : '') +
+          (r.errors.length ? ` · ${r.errors.length} con error` : ''),
+      )
+      setBulkCancelOpen(false)
+      await fetchData(filters, page)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al cancelar en lote')
+    } finally {
+      setIsBulkLoading(false)
+    }
+  }, [selectedIds, fetchData, filters, page])
+
+  // Saltar solo el fetch del montaje inicial (ya tenemos initialData = página 1
+  // sin filtros). En cualquier cambio posterior de página/filtros sí recargamos,
+  // incluido volver a la página 1.
+  const didMountRef = useRef(false)
   useEffect(() => {
-    if (page === 1 && Object.keys(filters).length === 0) return
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
+    }
     fetchData(filters, page)
   }, [filters, page, fetchData])
 
@@ -257,6 +333,30 @@ export function CampaignListClient({
 
       <CampaignFilters onFiltersChange={handleFiltersChange} />
 
+      {canManageCampaigns && selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 px-4 py-2.5">
+          <span className="text-sm font-medium">
+            {selectedIds.size} campaña(s) tentativa(s) seleccionada(s)
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <Button size="sm" onClick={handleBulkConfirm} disabled={isBulkLoading}>
+              {isBulkLoading ? 'Procesando...' : 'Confirmar seleccionadas'}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setBulkCancelOpen(true)}
+              disabled={isBulkLoading}
+            >
+              Cancelar seleccionadas
+            </Button>
+            <Button size="sm" variant="ghost" onClick={clearSelection} disabled={isBulkLoading}>
+              Limpiar
+            </Button>
+          </div>
+        </div>
+      )}
+
       {error !== null && (
         <p className="text-sm text-destructive">{error}</p>
       )}
@@ -277,6 +377,9 @@ export function CampaignListClient({
           onConfirm={canManageCampaigns && !isConfirming ? handleConfirm : undefined}
           onCancel={canManageCampaigns ? handleCancelClick : undefined}
           onDelete={canManageCampaigns ? handleDeleteClick : undefined}
+          selectedIds={canManageCampaigns ? selectedIds : undefined}
+          onToggleSelect={canManageCampaigns ? toggleSelect : undefined}
+          onToggleSelectAll={canManageCampaigns ? toggleSelectAll : undefined}
         />
       )}
 
@@ -311,6 +414,16 @@ export function CampaignListClient({
         campaignCode={deletingCampaign?.code ?? ''}
         onConfirm={handleDeleteConfirm}
         isLoading={isDeleteLoading}
+      />
+
+      <CancelCampaignDialog
+        open={bulkCancelOpen}
+        onOpenChange={setBulkCancelOpen}
+        campaignCode=""
+        campaignId=""
+        title={`Cancelar ${selectedIds.size} campaña(s) seleccionada(s)`}
+        onConfirm={handleBulkCancelConfirm}
+        isLoading={isBulkLoading}
       />
     </div>
   )
