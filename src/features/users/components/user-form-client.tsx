@@ -140,7 +140,9 @@ export function UserFormClient({ unlinkedStaff, callerRole, callerArea }: UserFo
             }}
           >
             <SelectTrigger id="role" aria-invalid={!!errors.role} className="w-full">
-              <SelectValue placeholder="Seleccionar rol" />
+              <SelectValue placeholder="Seleccionar rol">
+                {role ? ROLE_LABELS[role as Role] : undefined}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {allowedRoles.map((r) => (
@@ -171,7 +173,9 @@ export function UserFormClient({ unlinkedStaff, callerRole, callerArea }: UserFo
                 onValueChange={(v) => setValue('area', v as Area, { shouldValidate: true })}
               >
                 <SelectTrigger id="area" aria-invalid={!!errors.area} className="w-full">
-                  <SelectValue placeholder="Seleccionar área" />
+                  <SelectValue placeholder="Seleccionar área">
+                    {area ? AREA_LABELS[area as Area] : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {VALID_AREAS.map((a) => (
