@@ -883,7 +883,10 @@ export interface CommercialStaffMember {
 export async function getAssignedStaffForCommercial(
   campaignId: string,
 ): Promise<CommercialStaffMember[]> {
-  await requireAccess({ roles: ['admin', 'comercial'] })
+  // Lectura abierta a cualquier rol que pueda ver el detalle de campaña
+  // (admin global, admin_area, comercial, operativo asignado). Antes excluía a
+  // admin_area+comercial, que sí ve la vista comercial → PermissionError.
+  await requireAccess({ roles: ['admin', 'admin_area', 'comercial', 'operativo'] })
 
   try {
     const rows = await db
