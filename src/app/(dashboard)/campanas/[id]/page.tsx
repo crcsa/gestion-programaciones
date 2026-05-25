@@ -23,6 +23,7 @@ import { TimelineProgrammingForm } from '@/features/hours/components/timeline-pr
 import { TimelineExecutionDialog } from '@/features/hours/components/timeline-execution-dialog'
 import { TimelineReadOnlyView } from '@/features/hours/components/timeline-readonly-view'
 import { CampaignCommercialView } from '@/features/campaigns/components/campaign-commercial-view'
+import { CampaignLocationCard } from '@/features/campaigns/components/campaign-location-card'
 import { CampaignBreadcrumbLabel } from '@/features/campaigns/components/campaign-breadcrumb-label'
 import { Button } from '@/components/ui/button'
 import {
@@ -200,6 +201,9 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
           </div>
         )}
       </div>
+
+      {/* Ubicación — mapa OpenStreetMap (solo si la campaña tiene dirección) */}
+      <CampaignLocationCard location={campaign.location} companyName={campaign.companyName} />
 
       {/* Logistics — vehículos y conductores */}
       {isAssignable && (

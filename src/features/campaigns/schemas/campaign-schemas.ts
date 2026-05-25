@@ -26,6 +26,7 @@ export const createCampaignSchema = z
       { error: 'Modalidad no valida' },
     ),
     municipality: z.string().min(2, 'El municipio debe tener al menos 2 caracteres'),
+    address: z.string().max(300).optional(),
     expectedDonations: z.number().int().min(1).optional(),
     trainingAreaId: z.uuid().optional(),
     observations: z.string().optional(),
