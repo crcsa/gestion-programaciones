@@ -8,7 +8,7 @@ const areaEnum = z.enum(VALID_AREAS as readonly [Area, ...Area[]])
 // Requisitos mínimos: 8 caracteres, al menos un dígito y una letra. Suficiente
 // para descartar contraseñas triviales tipo "12345678" sin volverlo inviable
 // dictar por canal seguro.
-const passwordSchema = z
+export const passwordSchema = z
   .string()
   .min(8, 'Mínimo 8 caracteres')
   .regex(/\d/, 'Debe incluir al menos un número')
