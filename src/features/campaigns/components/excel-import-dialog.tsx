@@ -14,68 +14,7 @@ import {
 import { importCampaignsFromExcel } from '@/features/campaigns/actions/campaign-actions'
 import type { ImportExcelRow } from '@/features/campaigns/schemas/campaign-schemas'
 import type { ImportResult } from '@/features/campaigns/actions/campaign-actions'
-
-// ---- Column mapping -------------------------------------------------------
-
-const SIZE_MAP: Record<string, ImportExcelRow['size']> = {
-  s: 'S', 's+': 'S_plus', 'splus': 'S_plus', 'm': 'M', 'l': 'L',
-}
-
-const MODALITY_MAP: Record<string, ImportExcelRow['modality']> = {
-  corporativa: 'corporativa', presencial: 'corporativa',
-  carpa: 'carpa',
-  'unidad movil': 'unidad_movil', 'unidad móvil': 'unidad_movil', movil: 'unidad_movil', móvil: 'unidad_movil', unidad_movil: 'unidad_movil',
-  municipal: 'municipal', institucional: 'municipal',
-  combinada: 'combinada', mixta: 'combinada', virtual: 'combinada',
-}
-
-function normalize(v: unknown): string {
-  return String(v ?? '').trim().toLowerCase()
-}
-
-function parseExcelDate(v: unknown): string {
-  if (typeof v === 'number') {
-    // Excel serial date
-    const date = XLSX.SSF.parse_date_code(v)
-    const y = date.y
-    const m = String(date.m).padStart(2, '0')
-    const d = String(date.d).padStart(2, '0')
-    return `${y}-${m}-${d}`
-  }
-  const s = String(v ?? '').trim()
-  // Try DD/MM/YYYY
-  const ddmm = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (ddmm) return `${ddmm[3]}-${ddmm[2].padStart(2, '0')}-${ddmm[1].padStart(2, '0')}`
-  // Try YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  return s
-}
-
-/** Map a raw Excel row (any header format) to ImportExcelRow */
-function mapRow(raw: Record<string, unknown>): ImportExcelRow {
-  const key = (candidates: string[]): unknown => {
-    for (const c of candidates) {
-      for (const k of Object.keys(raw)) {
-        if (normalize(k) === c) return raw[k]
-      }
-    }
-    return undefined
-  }
-
-  const sizeRaw = normalize(key(['mix', 'tamaño', 'tamano', 'size']))
-  const modalityRaw = normalize(key(['modalidad', 'modality', 'tipo']))
-
-  return {
-    code: String(key(['código', 'codigo', 'code', 'id']) ?? '').trim(),
-    companyName: String(key(['empresa', 'nombre empresa', 'nombre de la empresa', 'company', 'companyname']) ?? '').trim(),
-    municipality: String(key(['municipio', 'municipality', 'ciudad']) ?? '').trim(),
-    campaignDate: parseExcelDate(key(['fecha', 'date', 'campaigndate', 'campaign date'])),
-    size: SIZE_MAP[sizeRaw] ?? 'S',
-    modality: MODALITY_MAP[modalityRaw] ?? 'corporativa',
-    expectedDonations: Number(key(['donaciones', 'meta', 'expecteddonations', 'expected donations'])) || undefined,
-    observations: String(key(['observaciones', 'observations', 'notas', 'notes']) ?? '').trim() || undefined,
-  }
-}
+import { parseCrmWorkbook } from '@/features/campaigns/lib/crm-excel-parser'
 
 // ---- Component ------------------------------------------------------------
 
@@ -116,15 +55,14 @@ export function ExcelImportDialog({ onSuccess }: ExcelImportDialogProps) {
       try {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: 'array' })
-        const sheet = workbook.Sheets[workbook.SheetNames[0]]
-        const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet)
+        const rows = parseCrmWorkbook(workbook)
 
-        if (rawRows.length === 0) {
-          setParseError('El archivo no contiene datos.')
+        if (rows.length === 0) {
+          setParseError('El archivo no contiene campañas reconocibles. Verifica que sea el export del CRM.')
           return
         }
 
-        setParsedRows(rawRows.map(mapRow))
+        setParsedRows(rows)
         setStep('preview')
       } catch {
         setParseError('No se pudo leer el archivo. Asegúrese de que es un Excel válido.')
@@ -175,7 +113,8 @@ export function ExcelImportDialog({ onSuccess }: ExcelImportDialogProps) {
               <div className="border-2 border-dashed border-border rounded-lg p-8 text-center space-y-3">
                 <FileSpreadsheet className="h-10 w-10 mx-auto text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  Columnas requeridas: <strong>Código, Empresa, Municipio, Fecha, Mix, Modalidad</strong>
+                  Compatible con el export del CRM (Donación Sangre Empresarial). Reconoce:{' '}
+                  <strong>Codigo de actividad, Empresa, Municipio, Fecha/hora, Mix, Modalidad, Contacto, Ubicación</strong>.
                 </p>
                 <Button onClick={() => fileRef.current?.click()}>
                   Seleccionar archivo
@@ -208,7 +147,7 @@ export function ExcelImportDialog({ onSuccess }: ExcelImportDialogProps) {
                 <table className="w-full">
                   <thead className="bg-muted sticky top-0">
                     <tr>
-                      {['Código', 'Empresa', 'Municipio', 'Fecha', 'Mix', 'Modalidad'].map((h) => (
+                      {['Código', 'Empresa', 'Municipio', 'Fecha', 'Hora', 'Mix', 'Modalidad'].map((h) => (
                         <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
                       ))}
                     </tr>
@@ -219,7 +158,8 @@ export function ExcelImportDialog({ onSuccess }: ExcelImportDialogProps) {
                         <td className="px-3 py-1.5 font-mono">{row.code || <span className="text-destructive">—</span>}</td>
                         <td className="px-3 py-1.5">{row.companyName || <span className="text-destructive">—</span>}</td>
                         <td className="px-3 py-1.5">{row.municipality || <span className="text-destructive">—</span>}</td>
-                        <td className="px-3 py-1.5">{row.campaignDate}</td>
+                        <td className="px-3 py-1.5">{row.campaignDate}{row.endDate ? ` → ${row.endDate}` : ''}</td>
+                        <td className="px-3 py-1.5">{row.startTime ?? '—'}{row.endTime ? `–${row.endTime}` : ''}</td>
                         <td className="px-3 py-1.5">{row.size}</td>
                         <td className="px-3 py-1.5">{row.modality}</td>
                       </tr>

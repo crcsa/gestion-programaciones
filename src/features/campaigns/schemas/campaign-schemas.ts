@@ -86,11 +86,19 @@ export const importExcelRowSchema = z.object({
   code: z.string().min(1),
   companyName: z.string().min(1),
   municipality: z.string().min(1),
-  campaignDate: z.string(),
+  campaignDate: z.string().regex(dateRegex, 'Fecha inválida (YYYY-MM-DD)'),
   size: z.enum(['S', 'S_plus', 'M', 'L']),
   modality: z.enum(['corporativa', 'carpa', 'unidad_movil', 'municipal', 'combinada']),
   expectedDonations: z.number().int().min(1).optional(),
   observations: z.string().optional(),
+  // Campos enriquecidos del export del CRM (todos opcionales → backward-compatible).
+  startTime: z.string().regex(timeRegex, 'Hora inválida (HH:MM)').optional(),
+  endTime: z.string().regex(timeRegex, 'Hora inválida (HH:MM)').optional(),
+  endDate: z.string().regex(dateRegex, 'Fecha inválida (YYYY-MM-DD)').optional(),
+  contactName: z.string().optional(),
+  contactPhone: z.string().optional(),
+  address: z.string().optional(),
+  locationName: z.string().optional(),
 })
 
 export type CampaignDaySchedule = z.infer<typeof campaignDayScheduleSchema>

@@ -8,6 +8,7 @@ vi.mock('@/lib/db', () => ({
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    transaction: vi.fn(),
   },
 }))
 
@@ -121,6 +122,7 @@ type SimpleMockDb = {
   insert: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
   delete: ReturnType<typeof vi.fn>
+  transaction: ReturnType<typeof vi.fn>
 }
 const mockDb = db as unknown as SimpleMockDb
 
@@ -750,6 +752,8 @@ describe('importCampaignsFromExcel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
+    // Cada fila corre en una transacción; el tx delega en los mismos mocks.
+    mockDb.transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(mockDb))
   })
 
   it('importa fila válida con empresa nueva', async () => {
@@ -859,5 +863,40 @@ describe('importCampaignsFromExcel', () => {
     vi.mocked(requireAccess).mockRejectedValueOnce(new Error('Sin permiso'))
 
     await expect(importCampaignsFromExcel([validRow])).rejects.toThrow('Sin permiso')
+  })
+
+  it('crea ubicación, contacto y horario al importar una fila enriquecida del CRM', async () => {
+    const crmRow = {
+      ...validRow,
+      code: 'C11635',
+      startTime: '08:00',
+      endTime: '15:00',
+      contactName: 'Stiven Álvarez',
+      contactPhone: '301 1866134',
+      address: 'Calle 73 # 51d - 14',
+      locationName: 'Orquideorama',
+    }
+
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) return makeChain([])                   // code dup check → none
+      if (selectCall === 2) return makeChain([{ id: 'co-1' }])     // company found
+      if (selectCall === 3) return makeChain([])                   // location lookup → none
+      if (selectCall === 4) return makeChain([])                   // contact lookup → none
+      return makeChain([])
+    })
+    const insertedTables: unknown[] = []
+    mockDb.insert = vi.fn((table: unknown) => {
+      insertedTables.push(table)
+      return makeChain([{ id: 'new-id', code: 'C11635' }])
+    })
+
+    const result = await importCampaignsFromExcel([crmRow])
+
+    expect(result.imported).toBe(1)
+    expect(result.errors).toHaveLength(0)
+    // location + contact + campaign + campaign_days = 4 inserts (company ya existía)
+    expect(mockDb.insert).toHaveBeenCalledTimes(4)
   })
 })
