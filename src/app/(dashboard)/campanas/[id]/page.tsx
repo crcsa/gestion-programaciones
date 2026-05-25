@@ -20,7 +20,7 @@ import {
 } from '@/features/logistics/actions/campaign-vehicle-actions'
 import { getCurrentUserContext } from '@/features/auth/lib/user-context'
 import { TimelineProgrammingForm } from '@/features/hours/components/timeline-programming-form'
-import { TimelineExecutionDialog } from '@/features/hours/components/timeline-execution-dialog'
+import { TimelineExecutionForm } from '@/features/hours/components/timeline-execution-form'
 import { TimelineReadOnlyView } from '@/features/hours/components/timeline-readonly-view'
 import { CampaignCommercialView } from '@/features/campaigns/components/campaign-commercial-view'
 import { CampaignLocationCard } from '@/features/campaigns/components/campaign-location-card'
@@ -254,21 +254,21 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
               </section>
             )}
             {canRegisterActual && (
-              <section className="rounded-lg border border-border p-5">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div>
-                    <h2 className="text-base font-semibold">Registro de ejecución</h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Registra las horas reales cuando inicies la jornada de campo.
-                    </p>
-                  </div>
-                  <TimelineExecutionDialog
-                    campaignId={campaign.id}
-                    campaignDate={campaign.campaignDate}
-                    initialEvents={timelineEvents}
-                    canFinalize={canSchedule}
-                  />
+              <section className="rounded-lg border border-border p-5 space-y-4">
+                <div>
+                  <h2 className="text-base font-semibold">Registro de ejecución</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {canSchedule
+                      ? 'Revisa las horas reales registradas en campo y finaliza para homologar las horas a todo el personal asignado.'
+                      : 'Registra las horas reales cuando inicies la jornada de campo.'}
+                  </p>
                 </div>
+                <TimelineExecutionForm
+                  campaignId={campaign.id}
+                  campaignDate={campaign.campaignDate}
+                  existingEvents={timelineEvents}
+                  canFinalize={canSchedule}
+                />
               </section>
             )}
             {/*
