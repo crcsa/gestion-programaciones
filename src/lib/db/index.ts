@@ -25,9 +25,11 @@ if (!connectionString) {
  * pools sin cerrar en dev.
  *
  * Config del pool:
- * - `max` — En producción 10 (Vercel function puede recibir 10+ requests
- *   concurrentes durante prefetch del sidebar; postgres-js NO tiene timeout
- *   para la espera del pool, así que un pool chico cuelga las requests).
+ * - `max` — En producción 3. El session pooler de Supabase tope ~15 clientes;
+ *   en serverless (Vercel) cada instancia abre su propio pool, así que un `max`
+ *   alto (10) por instancia agota los 15 slots con 2+ instancias → EMAXCONNSESSION.
+ *   Con max=3 caben varias instancias bajo el tope; las queries concurrentes de
+ *   un render hacen breve cola (no cuelgan: statement_timeout=20s las acota).
  *   En dev 5 (HMR conservador). Override via env `POSTGRES_POOL_MAX`.
  * - `idle_timeout: 20` — devuelve conexiones inactivas tras 20s.
  * - `max_lifetime: 60 * 30` — recicla conexiones cada 30 min.
@@ -50,7 +52,7 @@ const g = globalThis as GlobalWithDb
 const poolMax = (() => {
   const fromEnv = Number(process.env.POSTGRES_POOL_MAX)
   if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv
-  return process.env.NODE_ENV === 'production' ? 10 : 5
+  return process.env.NODE_ENV === 'production' ? 3 : 5
 })()
 
 const client =
