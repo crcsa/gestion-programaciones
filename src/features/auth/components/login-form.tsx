@@ -18,7 +18,7 @@ export function LoginForm() {
       <CardHeader>
         <CardTitle className="text-xl">Iniciar sesión</CardTitle>
         <CardDescription className="text-sm text-muted-foreground">
-          Ingresá con tu cuenta institucional
+          Ingresa con tu cuenta institucional
         </CardDescription>
       </CardHeader>
       <CardContent>
