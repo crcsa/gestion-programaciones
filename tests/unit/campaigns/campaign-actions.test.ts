@@ -754,43 +754,62 @@ describe('importCampaignsFromExcel', () => {
     vi.mocked(requireRole).mockResolvedValue({ userId: 'user-123', role: 'admin' })
     // Cada fila corre en una transacción; el tx delega en los mismos mocks.
     mockDb.transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(mockDb))
+    // Defaults seguros: prefetch de empresas + code check vacíos, insert/update OK.
+    mockDb.select = vi.fn(() => makeChain([]))
+    mockDb.insert = vi.fn(() => makeChain([{ id: 'gen-id' }]))
+    mockDb.update = vi.fn(() => makeChain([]))
   })
 
   it('importa fila válida con empresa nueva', async () => {
-    let selectCall = 0
-    mockDb.select = vi.fn(() => {
-      selectCall++
-      if (selectCall === 1) return makeChain([])  // code check → no duplicate
-      if (selectCall === 2) return makeChain([])  // company by name → not found
-      return makeChain([])
-    })
-    mockDb.insert = vi.fn(() => makeChain([{ id: 'new-company-id' }]))
-
+    // prefetch empresas (#1) = [] → empresa no existe → se inserta empresa + campaña.
     const result = await importCampaignsFromExcel([validRow])
 
     expect(result.imported).toBe(1)
     expect(result.skipped).toBe(0)
     expect(result.errors).toHaveLength(0)
+    expect(mockDb.insert).toHaveBeenCalledTimes(2) // empresa + campaña
   })
 
-  it('importa fila válida con empresa existente', async () => {
+  it('importa fila válida con empresa existente (no inserta empresa, rellena info)', async () => {
     let selectCall = 0
     mockDb.select = vi.fn(() => {
       selectCall++
-      if (selectCall === 1) return makeChain([])                      // code check → no dup
-      if (selectCall === 2) return makeChain([{ id: 'existing-co' }]) // company found
-      return makeChain([])
+      // #1 prefetch empresas → ya existe "Empresa Importada"
+      if (selectCall === 1) return makeChain([{ id: 'existing-co', name: 'Empresa Importada' }])
+      return makeChain([]) // #2 code check → no dup
     })
-    mockDb.insert = vi.fn(() => makeChain([]))
 
     const result = await importCampaignsFromExcel([validRow])
 
     expect(result.imported).toBe(1)
-    expect(mockDb.insert).toHaveBeenCalledTimes(1)  // only campaign insert, no company insert
+    expect(mockDb.insert).toHaveBeenCalledTimes(1) // solo campaña, no empresa
+    expect(mockDb.update).toHaveBeenCalled() // fill-if-null de la empresa existente
+  })
+
+  it('deduplica empresa ignorando acentos/mayúsculas (no crea duplicado)', async () => {
+    // prefetch trae "MEDELLÍN S.A." y la fila viene como "medellin s.a." → mismo norm.
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) return makeChain([{ id: 'co-x', name: 'MEDELLÍN S.A.' }])
+      return makeChain([])
+    })
+
+    const result = await importCampaignsFromExcel([
+      { ...validRow, companyName: 'medellin s.a.' },
+    ])
+
+    expect(result.imported).toBe(1)
+    expect(mockDb.insert).toHaveBeenCalledTimes(1) // solo campaña — empresa reutilizada
   })
 
   it('omite fila con código duplicado', async () => {
-    mockDb.select = vi.fn(() => makeChain([{ id: 'existing-campaign' }]))
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      if (selectCall === 1) return makeChain([]) // prefetch empresas
+      return makeChain([{ id: 'existing-campaign' }]) // code check → dup
+    })
 
     const result = await importCampaignsFromExcel([validRow])
 
@@ -810,19 +829,12 @@ describe('importCampaignsFromExcel', () => {
   })
 
   it('registra error cuando hay fallo de DB en la inserción', async () => {
-    let selectCall = 0
-    mockDb.select = vi.fn(() => {
-      selectCall++
-      if (selectCall === 1) return makeChain([])  // code check → no dup
-      if (selectCall === 2) return makeChain([])  // company → not found
-      return makeChain([])
-    })
-    // insert company OK, but campaigns insert throws
+    // empresa nueva → insert empresa OK, luego insert campaña lanza.
     let insertCall = 0
     mockDb.insert = vi.fn(() => {
       insertCall++
-      if (insertCall === 1) return makeChain([{ id: 'new-company' }])  // company OK
-      throw new Error('DB write error')                                 // campaign fails
+      if (insertCall === 1) return makeChain([{ id: 'new-company' }]) // empresa OK
+      throw new Error('DB write error') // campaña falla
     })
 
     const result = await importCampaignsFromExcel([validRow])
@@ -837,20 +849,17 @@ describe('importCampaignsFromExcel', () => {
     const rows = [
       validRow,
       { ...validRow, code: 'IMP-002', companyName: 'Otra Empresa' },
-      { ...validRow, code: '' },  // invalid
+      { ...validRow, code: '' }, // invalid
     ]
 
     let selectCall = 0
     mockDb.select = vi.fn(() => {
       selectCall++
-      // Row 1: code not dup, company not found
-      if (selectCall === 1) return makeChain([])
-      if (selectCall === 2) return makeChain([])
-      // Row 2: code IS dup → skip
-      if (selectCall === 3) return makeChain([{ id: 'dup' }])
+      if (selectCall === 1) return makeChain([]) // prefetch empresas
+      if (selectCall === 2) return makeChain([]) // row1 code check → no dup
+      if (selectCall === 3) return makeChain([{ id: 'dup' }]) // row2 code check → dup
       return makeChain([])
     })
-    mockDb.insert = vi.fn(() => makeChain([{ id: 'nc' }]))
 
     const result = await importCampaignsFromExcel(rows)
 
@@ -880,23 +889,17 @@ describe('importCampaignsFromExcel', () => {
     let selectCall = 0
     mockDb.select = vi.fn(() => {
       selectCall++
-      if (selectCall === 1) return makeChain([])                   // code dup check → none
-      if (selectCall === 2) return makeChain([{ id: 'co-1' }])     // company found
-      if (selectCall === 3) return makeChain([])                   // location lookup → none
-      if (selectCall === 4) return makeChain([])                   // contact lookup → none
+      // #1 prefetch → empresa ya existe; #2 code check; #3 location lookup; #4 contact lookup
+      if (selectCall === 1) return makeChain([{ id: 'co-1', name: 'Empresa Importada' }])
       return makeChain([])
     })
-    const insertedTables: unknown[] = []
-    mockDb.insert = vi.fn((table: unknown) => {
-      insertedTables.push(table)
-      return makeChain([{ id: 'new-id', code: 'C11635' }])
-    })
+    mockDb.insert = vi.fn(() => makeChain([{ id: 'new-id', code: 'C11635' }]))
 
     const result = await importCampaignsFromExcel([crmRow])
 
     expect(result.imported).toBe(1)
     expect(result.errors).toHaveLength(0)
-    // location + contact + campaign + campaign_days = 4 inserts (company ya existía)
+    // location + contact + campaña + campaign_days = 4 inserts (empresa ya existía → update)
     expect(mockDb.insert).toHaveBeenCalledTimes(4)
   })
 })
