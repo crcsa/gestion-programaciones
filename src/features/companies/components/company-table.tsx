@@ -56,6 +56,7 @@ export function CompanyTable({ companies, onEdit, onRefresh }: CompanyTableProps
               <th className="px-4 py-2 text-left font-medium text-muted-foreground">NIT</th>
               <th className="px-4 py-2 text-left font-medium text-muted-foreground">Contacto</th>
               <th className="px-4 py-2 text-left font-medium text-muted-foreground">Municipio</th>
+              <th className="px-4 py-2 text-left font-medium text-muted-foreground">Dirección</th>
               <th className="px-4 py-2 text-center font-medium text-muted-foreground">Estado</th>
               <th className="px-4 py-2 text-right font-medium text-muted-foreground">Acciones</th>
             </tr>
@@ -80,6 +81,7 @@ export function CompanyTable({ companies, onEdit, onRefresh }: CompanyTableProps
                   )}
                 </td>
                 <td className="px-4 py-2 text-muted-foreground">{company.municipality ?? '—'}</td>
+                <td className="px-4 py-2 text-muted-foreground">{company.address ?? '—'}</td>
                 <td className="px-4 py-2 text-center">
                   <Badge variant={company.isActive ? 'default' : 'secondary'}>
                     {company.isActive ? 'Activa' : 'Inactiva'}

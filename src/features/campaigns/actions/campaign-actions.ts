@@ -12,6 +12,7 @@ import { companies } from '@/lib/db/schema/companies'
 import { locations } from '@/lib/db/schema/locations'
 import { companyContacts } from '@/lib/db/schema/company-contacts'
 import { findOrCreateLocation } from '../lib/location-upsert'
+import { normalizeName } from '@/lib/text/normalize-name'
 import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
 import { staffMembers } from '@/lib/db/schema/staff-members'
 import { requireAccess } from '@/features/auth/lib/require-access'
@@ -866,6 +867,13 @@ export async function importCampaignsFromExcel(
 
   const result: ImportResult = { imported: 0, skipped: 0, errors: [] }
 
+  // Prefetch de empresas para dedup robusto (nombre normalizado: sin acentos/
+  // mayúsculas/espacios) y también dentro del mismo archivo. El map se actualiza
+  // al crear empresas nuevas (tras commit de cada fila).
+  const companyRows = await db.select({ id: companies.id, name: companies.name }).from(companies)
+  const companyMap = new Map<string, string>()
+  for (const c of companyRows) companyMap.set(normalizeName(c.name), c.id)
+
   for (let i = 0; i < rows.length; i++) {
     const raw = rows[i]
     const rowNum = i + 2 // Excel row (1 = header)
@@ -896,23 +904,47 @@ export async function importCampaignsFromExcel(
       }
 
       // Cada fila es atómica: empresa + contacto + ubicación + campaña + días.
-      await db.transaction(async (tx) => {
-        // 1. Empresa (find/create por nombre, case-insensitive).
-        let companyId: string | null = null
-        const existingCompany = await tx
-          .select({ id: companies.id })
-          .from(companies)
-          .where(ilike(companies.name, data.companyName))
-          .limit(1)
+      // La transacción retorna la empresa creada (si la hubo) para actualizar el
+      // map tras el commit (evita estado inconsistente si la fila hace rollback).
+      const createdCompany = await db.transaction(async (tx) => {
+        let newCompanyForMap: { norm: string; id: string } | null = null
+        // 1. Empresa: dedup robusto por nombre normalizado (prefetch map).
+        const companyNorm = normalizeName(data.companyName)
+        let companyId: string | null = companyMap.get(companyNorm) ?? null
+        const companyInfo = {
+          municipality: data.municipality || null,
+          address: data.address ?? null,
+          contactName: data.contactName ?? null,
+          contactPhone: data.contactPhone ?? null,
+        }
 
-        if (existingCompany.length > 0) {
-          companyId = existingCompany[0].id
+        if (companyId) {
+          // Rellenar SOLO columnas vacías (COALESCE no pisa lo ya cargado ni lo
+          // editado a mano). Solo si esta fila aporta algún dato nuevo.
+          const hasInfo =
+            companyInfo.municipality ||
+            companyInfo.address ||
+            companyInfo.contactName ||
+            companyInfo.contactPhone
+          if (hasInfo) {
+            await tx
+              .update(companies)
+              .set({
+                municipality: sql`COALESCE(${companies.municipality}, ${companyInfo.municipality})`,
+                address: sql`COALESCE(${companies.address}, ${companyInfo.address})`,
+                contactName: sql`COALESCE(${companies.contactName}, ${companyInfo.contactName})`,
+                contactPhone: sql`COALESCE(${companies.contactPhone}, ${companyInfo.contactPhone})`,
+                updatedAt: new Date(),
+              })
+              .where(eq(companies.id, companyId))
+          }
         } else {
           const [newCompany] = await tx
             .insert(companies)
-            .values({ name: data.companyName, isActive: true })
+            .values({ name: data.companyName, isActive: true, ...companyInfo })
             .returning({ id: companies.id })
           companyId = newCompany?.id ?? null
+          if (companyId) newCompanyForMap = { norm: companyNorm, id: companyId }
         }
 
         // 2. Ubicación (find/create por empresa + nombre, helper compartido).
@@ -927,22 +959,28 @@ export async function importCampaignsFromExcel(
           })
         }
 
-        // 3. Contacto de la empresa (find/create por empresa + nombre).
+        // 3. Contacto de la empresa (dedup robusto por nombre normalizado).
         if (companyId && data.contactName) {
-          const existingContact = await tx
-            .select({ id: companyContacts.id })
+          const contacts = await tx
+            .select({ id: companyContacts.id, fullName: companyContacts.fullName, phone: companyContacts.phone })
             .from(companyContacts)
-            .where(
-              and(eq(companyContacts.companyId, companyId), ilike(companyContacts.fullName, data.contactName)),
-            )
-            .limit(1)
+            .where(eq(companyContacts.companyId, companyId))
 
-          if (existingContact.length === 0) {
+          const contactNorm = normalizeName(data.contactName)
+          const match = contacts.find((c) => normalizeName(c.fullName) === contactNorm)
+
+          if (!match) {
             await tx.insert(companyContacts).values({
               companyId,
               fullName: data.contactName,
               phone: data.contactPhone ?? null,
             })
+          } else if (!match.phone && data.contactPhone) {
+            // Rellenar el teléfono si el contacto existía sin él.
+            await tx
+              .update(companyContacts)
+              .set({ phone: data.contactPhone, updatedAt: new Date() })
+              .where(eq(companyContacts.id, match.id))
           }
         }
 
@@ -1012,7 +1050,14 @@ export async function importCampaignsFromExcel(
             newData: { code: created.code, status: 'tentativa', source: 'excel_import' },
           })
         }
+
+        return newCompanyForMap
       })
+
+      // Tras commit: registrar la empresa nueva en el map para dedup de filas siguientes.
+      if (createdCompany) {
+        companyMap.set(createdCompany.norm, createdCompany.id)
+      }
 
       result.imported++
     } catch (error) {

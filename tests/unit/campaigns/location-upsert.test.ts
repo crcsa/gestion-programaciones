@@ -23,9 +23,9 @@ describe('findOrCreateLocation', () => {
     expect(await findOrCreateLocation(tx, { companyId: 'c', name: '', municipality: 'M' })).toBeNull()
   })
 
-  it('reutiliza la ubicación existente (no inserta)', async () => {
+  it('reutiliza la ubicación existente (match exacto, no inserta)', async () => {
     const tx = {
-      select: vi.fn(() => makeChain([{ id: 'loc-1' }])),
+      select: vi.fn(() => makeChain([{ id: 'loc-1', name: 'Orquideorama' }])),
       insert: vi.fn(),
     } as never
 
@@ -40,10 +40,26 @@ describe('findOrCreateLocation', () => {
     expect((tx as { insert: ReturnType<typeof vi.fn> }).insert).not.toHaveBeenCalled()
   })
 
-  it('crea la ubicación cuando no existe', async () => {
+  it('deduplica ignorando acentos/mayúsculas/espacios', async () => {
+    const tx = {
+      select: vi.fn(() => makeChain([{ id: 'loc-9', name: 'PARQUEADERO  Principal' }])),
+      insert: vi.fn(),
+    } as never
+
+    const id = await findOrCreateLocation(tx, {
+      companyId: 'c1',
+      name: 'parqueadero principal',
+      municipality: 'Bello',
+    })
+
+    expect(id).toBe('loc-9')
+    expect((tx as { insert: ReturnType<typeof vi.fn> }).insert).not.toHaveBeenCalled()
+  })
+
+  it('crea la ubicación cuando no hay match normalizado', async () => {
     const insert = vi.fn(() => makeChain([{ id: 'new-loc' }]))
     const tx = {
-      select: vi.fn(() => makeChain([])),
+      select: vi.fn(() => makeChain([{ id: 'other', name: 'Auditorio' }])),
       insert,
     } as never
 
