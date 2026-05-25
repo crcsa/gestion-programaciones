@@ -96,7 +96,7 @@ export function DashboardToolbar({
 
   return (
     <header
-      className="sticky top-0 z-30 -mx-6 -mt-6 mb-4 flex h-14 items-center gap-3 border-b border-border px-4"
+      className="sticky -top-6 z-30 -mx-6 -mt-6 mb-4 flex h-14 items-center gap-3 border-b border-border px-4"
       style={{ background: 'var(--background)', isolation: 'isolate' }}
     >
       <FilterField label="Periodo">
