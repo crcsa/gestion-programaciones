@@ -169,6 +169,22 @@ export function CampaignForm({
         />
 
         <div className="space-y-1.5">
+          <Label htmlFor="address">Dirección (opcional)</Label>
+          <Input
+            id="address"
+            placeholder="Ej: Calle 73 # 51d - 14"
+            {...register('address')}
+            aria-invalid={!!errors.address}
+          />
+          <p className="text-xs text-muted-foreground">
+            Si la ingresas, la campaña se ubicará en el mapa según la dirección y el municipio.
+          </p>
+          {errors.address && (
+            <p className="text-sm text-destructive">{errors.address.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
           <Label htmlFor="campaignDate">Fecha de inicio</Label>
           <Input
             id="campaignDate"

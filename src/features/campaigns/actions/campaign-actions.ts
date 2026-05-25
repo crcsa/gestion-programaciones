@@ -11,6 +11,7 @@ import { campaigns, campaignDays } from '@/lib/db/schema/campaigns'
 import { companies } from '@/lib/db/schema/companies'
 import { locations } from '@/lib/db/schema/locations'
 import { companyContacts } from '@/lib/db/schema/company-contacts'
+import { findOrCreateLocation } from '../lib/location-upsert'
 import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
 import { staffMembers } from '@/lib/db/schema/staff-members'
 import { requireAccess } from '@/features/auth/lib/require-access'
@@ -319,9 +320,24 @@ export async function getCampaignDays(campaignId: string): Promise<CampaignDay[]
     .orderBy(asc(campaignDays.dayDate))
 }
 
+export interface CampaignLocation {
+  id: string
+  address: string
+  municipality: string
+  referencePoint: string | null
+  latitude: number | null
+  longitude: number | null
+}
+
 export async function getCampaignById(
   id: string,
-): Promise<Campaign & { companyName: string | null; days: CampaignDay[] }> {
+): Promise<
+  Campaign & {
+    companyName: string | null
+    location: CampaignLocation | null
+    days: CampaignDay[]
+  }
+> {
   const { userId, role, scope } = await requireAccess({
     roles: ['admin', 'admin_area', 'comercial', 'operativo'],
     allowCrossArea: true,
@@ -365,9 +381,18 @@ export async function getCampaignById(
       .select({
         campaign: campaigns,
         companyName: companies.name,
+        location: {
+          id: locations.id,
+          address: locations.address,
+          municipality: locations.municipality,
+          referencePoint: locations.referencePoint,
+          latitude: locations.latitude,
+          longitude: locations.longitude,
+        },
       })
       .from(campaigns)
       .leftJoin(companies, eq(campaigns.companyId, companies.id))
+      .leftJoin(locations, eq(campaigns.locationId, locations.id))
       .where(and(...whereParts))
       .limit(1)
 
@@ -377,7 +402,12 @@ export async function getCampaignById(
 
     const days = await getCampaignDays(id)
 
-    return { ...row.campaign, companyName: row.companyName, days }
+    return {
+      ...row.campaign,
+      companyName: row.companyName,
+      location: row.location?.id ? row.location : null,
+      days,
+    }
   } catch (error) {
     rethrowOrLog(error, 'getCampaignById', 'Error al obtener la campaña')
   }
@@ -413,12 +443,24 @@ export async function createCampaign(
     const isMultiDay = !!input.endDate && input.endDate > input.campaignDate
     const effectiveEndDate = input.endDate && input.endDate >= input.campaignDate ? input.endDate : null
 
+    // Si se ingresó dirección y hay empresa, crear/enlazar una ubicación
+    // (mismo helper que el import) para que la campaña salga en el mapa.
+    let locationId = input.locationId ?? null
+    if (!locationId && input.address && input.companyId) {
+      locationId = await findOrCreateLocation(db, {
+        companyId: input.companyId,
+        name: input.address,
+        address: input.address,
+        municipality: input.municipality,
+      })
+    }
+
     const [created] = await db
       .insert(campaigns)
       .values({
         code: input.code,
         companyId: input.companyId ?? null,
-        locationId: input.locationId ?? null,
+        locationId,
         campaignDate: input.campaignDate,
         endDate: effectiveEndDate,
         startTime: input.startTime ?? null,
@@ -873,31 +915,16 @@ export async function importCampaignsFromExcel(
           companyId = newCompany?.id ?? null
         }
 
-        // 2. Ubicación (find/create por empresa + nombre).
+        // 2. Ubicación (find/create por empresa + nombre, helper compartido).
         let locationId: string | null = null
         const locationName = data.locationName || data.address
         if (companyId && locationName) {
-          const existingLocation = await tx
-            .select({ id: locations.id })
-            .from(locations)
-            .where(and(eq(locations.companyId, companyId), ilike(locations.name, locationName)))
-            .limit(1)
-
-          if (existingLocation.length > 0) {
-            locationId = existingLocation[0].id
-          } else {
-            const [newLocation] = await tx
-              .insert(locations)
-              .values({
-                companyId,
-                name: locationName,
-                address: data.address || locationName,
-                municipality: data.municipality,
-                isActive: true,
-              })
-              .returning({ id: locations.id })
-            locationId = newLocation?.id ?? null
-          }
+          locationId = await findOrCreateLocation(tx, {
+            companyId,
+            name: locationName,
+            address: data.address,
+            municipality: data.municipality,
+          })
         }
 
         // 3. Contacto de la empresa (find/create por empresa + nombre).
