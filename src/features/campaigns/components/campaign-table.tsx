@@ -27,6 +27,10 @@ interface CampaignTableProps {
   onConfirm?: (campaign: CampaignListItem) => void
   onCancel?: (campaign: CampaignListItem) => void
   onDelete?: (campaign: CampaignListItem) => void
+  /** Selección múltiple (solo filas tentativa). Si se pasan, se muestra la columna de checkboxes. */
+  selectedIds?: ReadonlySet<string>
+  onToggleSelect?: (id: string) => void
+  onToggleSelectAll?: (ids: string[]) => void
 }
 
 const columnHelper = createColumnHelper<CampaignListItem>()
@@ -40,9 +44,50 @@ export function CampaignTable({
   onConfirm,
   onCancel,
   onDelete,
+  selectedIds,
+  onToggleSelect,
+  onToggleSelectAll,
 }: CampaignTableProps) {
+  const selectionEnabled = !!selectedIds && !!onToggleSelect && !!onToggleSelectAll
+  const selectableIds = useMemo(
+    () => data.filter((c) => c.status === 'tentativa').map((c) => c.id),
+    [data],
+  )
+  const allSelectableSelected =
+    selectableIds.length > 0 && selectableIds.every((id) => selectedIds?.has(id))
+
   const columns = useMemo(
     () => [
+      ...(selectionEnabled
+        ? [
+            columnHelper.display({
+              id: 'select',
+              header: () => (
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary align-middle disabled:opacity-40"
+                  checked={allSelectableSelected}
+                  disabled={selectableIds.length === 0}
+                  aria-label="Seleccionar todas las tentativas"
+                  onChange={() => onToggleSelectAll?.(selectableIds)}
+                />
+              ),
+              cell: (info) => {
+                const c = info.row.original
+                if (c.status !== 'tentativa') return null
+                return (
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary align-middle"
+                    checked={selectedIds?.has(c.id) ?? false}
+                    aria-label={`Seleccionar campaña ${c.code}`}
+                    onChange={() => onToggleSelect?.(c.id)}
+                  />
+                )
+              },
+            }),
+          ]
+        : []),
       columnHelper.accessor('code', {
         header: 'Código',
         cell: (info) => (
@@ -138,7 +183,18 @@ export function CampaignTable({
         },
       }),
     ],
-    [onEdit, onConfirm, onCancel, onDelete]
+    [
+      onEdit,
+      onConfirm,
+      onCancel,
+      onDelete,
+      selectionEnabled,
+      selectableIds,
+      allSelectableSelected,
+      selectedIds,
+      onToggleSelect,
+      onToggleSelectAll,
+    ]
   )
 
   const table = useReactTable({

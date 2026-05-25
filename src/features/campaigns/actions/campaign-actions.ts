@@ -772,6 +772,69 @@ export async function cancelCampaign(
   }
 }
 
+export interface BulkActionResult {
+  ok: number
+  skipped: number
+  errors: { id: string; reason: string }[]
+}
+
+/**
+ * Confirma varias campañas tentativa en lote. Reutiliza `confirmCampaign` por id
+ * (misma validación/permiso/auditoría); las que no estén en 'tentativa' se cuentan
+ * como `skipped`. Permiso: el mismo de confirmar (comercial / admin global).
+ */
+export async function bulkConfirmCampaigns(ids: string[]): Promise<BulkActionResult> {
+  await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    areas: ['comercial'],
+    allowCrossArea: true,
+  })
+
+  const result: BulkActionResult = { ok: 0, skipped: 0, errors: [] }
+  for (const id of ids) {
+    try {
+      await confirmCampaign(id)
+      result.ok++
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof NotFoundError) {
+        result.skipped++
+      } else {
+        result.errors.push({ id, reason: error instanceof Error ? error.message : 'Error' })
+      }
+    }
+  }
+  revalidatePath('/campanas')
+  return result
+}
+
+/** Cancela varias campañas en lote con un mismo motivo. */
+export async function bulkCancelCampaigns(
+  ids: string[],
+  reason: string,
+): Promise<BulkActionResult> {
+  await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+    areas: ['comercial'],
+    allowCrossArea: true,
+  })
+
+  const result: BulkActionResult = { ok: 0, skipped: 0, errors: [] }
+  for (const id of ids) {
+    try {
+      await cancelCampaign(id, reason)
+      result.ok++
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof NotFoundError) {
+        result.skipped++
+      } else {
+        result.errors.push({ id, reason: error instanceof Error ? error.message : 'Error' })
+      }
+    }
+  }
+  revalidatePath('/campanas')
+  return result
+}
+
 export async function deleteCampaign(id: string): Promise<void> {
   const { userId } = await requireAccess({
     roles: ['admin', 'admin_area', 'comercial'],

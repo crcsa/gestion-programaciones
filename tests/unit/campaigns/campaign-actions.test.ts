@@ -86,6 +86,8 @@ import {
   getCampaignById,
   updateCampaign,
   importCampaignsFromExcel,
+  bulkConfirmCampaigns,
+  bulkCancelCampaigns,
 } from '@/features/campaigns/actions/campaign-actions'
 
 // Default admin context — re-aplicado antes de cada test para evitar fugas
@@ -241,6 +243,59 @@ describe('confirmCampaign', () => {
       new PermissionError('No tienes permiso para esta area.'),
     )
     await expect(confirmCampaign('camp-1')).rejects.toThrow('permiso')
+  })
+})
+
+describe('bulkConfirmCampaigns', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('confirma las tentativa y omite las que no lo son', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      // id1 → tentativa (se confirma); id2 → ya confirmada (se omite)
+      if (selectCall === 1) return makeChain([{ id: '1', status: 'tentativa' }])
+      return makeChain([{ id: '2', status: 'confirmada' }])
+    })
+    mockDb.update = vi.fn(() => makeChain([{ id: '1', status: 'confirmada' }]))
+
+    const result = await bulkConfirmCampaigns(['1', '2'])
+
+    expect(result.ok).toBe(1)
+    expect(result.skipped).toBe(1)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it('lanza si requireAccess rechaza', async () => {
+    vi.mocked(requireAccess).mockRejectedValueOnce(new PermissionError('no'))
+    await expect(bulkConfirmCampaigns(['1'])).rejects.toThrow()
+  })
+})
+
+describe('bulkCancelCampaigns', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('cancela cada campaña con el motivo dado', async () => {
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      // #1 estado actual; #2 asignaciones (vacío → sin recalc)
+      if (selectCall === 1) return makeChain([{ id: '1', status: 'tentativa', campaignDate: '2026-05-10' }])
+      return makeChain([])
+    })
+    mockDb.update = vi.fn(() => makeChain([{ id: '1', status: 'cancelada' }]))
+
+    const result = await bulkCancelCampaigns(
+      ['00000000-0000-4000-8000-000000000001'],
+      'Motivo de cancelación válido',
+    )
+
+    expect(result.ok).toBe(1)
+    expect(result.errors).toHaveLength(0)
   })
 })
 
