@@ -80,7 +80,7 @@ export default function CampaignMap({
 
   return (
     <div className="space-y-2">
-      <div className="h-72 w-full overflow-hidden rounded-md border border-border">
+      <div className="relative isolate z-0 h-72 w-full overflow-hidden rounded-md border border-border">
         <MapContainer
           center={[coords.lat, coords.lng]}
           zoom={16}
