@@ -96,7 +96,10 @@ export function Topbar({ userEmail, role }: TopbarProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="flex items-center gap-2 cursor-pointer">
+              <DropdownMenuItem
+                className="flex items-center gap-2 cursor-pointer"
+                onClick={() => router.push('/mi-perfil')}
+              >
                 <User className="h-4 w-4" />
                 Mi perfil
               </DropdownMenuItem>
