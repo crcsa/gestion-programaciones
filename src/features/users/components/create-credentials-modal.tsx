@@ -129,7 +129,7 @@ export function CreateCredentialsModal({
             <Label htmlFor="cred-role">Rol</Label>
             <Select value={role} onValueChange={(v) => setRole(v as Role)}>
               <SelectTrigger id="cred-role" className="w-full">
-                <SelectValue placeholder="Seleccionar rol" />
+                <SelectValue placeholder="Seleccionar rol">{ROLE_LABELS[role]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {allowedRoles.map((r) => (

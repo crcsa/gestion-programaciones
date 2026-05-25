@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { RoleBadge, AreaBadge } from './role-area-badges'
 import { updateMyProfile, changeMyPassword } from '@/features/users/actions/profile-actions'
 import {
   updateMyProfileSchema,
@@ -17,8 +17,8 @@ import {
   type UpdateMyProfileInput,
   type ChangeMyPasswordInput,
 } from '@/features/users/schemas/profile-schemas'
-import { ROLE_LABELS, type Role } from '@/types/roles'
-import { AREA_LABELS, type Area } from '@/types/areas'
+import { type Role } from '@/types/roles'
+import { type Area } from '@/types/areas'
 
 interface ProfileFormClientProps {
   fullName: string
@@ -96,9 +96,9 @@ export function ProfileFormClient({ fullName, email, role, area }: ProfileFormCl
 
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted-foreground">Rol:</span>
-              <Badge variant="secondary">{ROLE_LABELS[role]}</Badge>
+              <RoleBadge role={role} />
               <span className="ml-2 text-muted-foreground">Área:</span>
-              <Badge variant="outline">{area ? AREA_LABELS[area] : 'Global'}</Badge>
+              <AreaBadge area={area} />
               <span className="text-xs text-muted-foreground">(las gestiona un administrador)</span>
             </div>
 
