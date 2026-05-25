@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { CampaignFilters } from './campaign-filters'
 import { CampaignTable } from './campaign-table'
@@ -161,8 +161,15 @@ export function CampaignListClient({
     }
   }, [selectedIds, fetchData, filters, page])
 
+  // Saltar solo el fetch del montaje inicial (ya tenemos initialData = página 1
+  // sin filtros). En cualquier cambio posterior de página/filtros sí recargamos,
+  // incluido volver a la página 1.
+  const didMountRef = useRef(false)
   useEffect(() => {
-    if (page === 1 && Object.keys(filters).length === 0) return
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
+    }
     fetchData(filters, page)
   }, [filters, page, fetchData])
 
