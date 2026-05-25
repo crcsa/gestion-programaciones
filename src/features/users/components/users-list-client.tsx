@@ -6,6 +6,9 @@ import Link from 'next/link'
 import { KeyRound, Link2, Link2Off, UserX, UserCheck, UserPlus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { IconButton } from '@/components/ui/icon-button'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -306,71 +309,64 @@ export function UsersListClient({
                     )}
                   </TableCell>
                   <TableCell>
-                    {profile.isActive ? (
-                      <Badge variant="default">Activo</Badge>
-                    ) : (
-                      <Badge variant="outline">Inactivo</Badge>
-                    )}
+                    <StatusBadge isActive={profile.isActive} />
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
+                    <TooltipProvider>
+                    <div className="inline-flex items-center justify-end gap-0.5">
+                      <IconButton
+                        label="Cambiar contraseña"
                         onClick={() => setResetTarget({ profileId: profile.id, email: profile.email })}
-                        title="Cambiar contraseña"
                       >
-                        <KeyRound className="size-3.5" />
-                      </Button>
+                        <KeyRound className="h-4 w-4" />
+                      </IconButton>
                       {staffMember ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
+                        <IconButton
+                          label="Desvincular personal"
                           disabled={busyId === staffMember.id}
                           onClick={() => handleUnlink(staffMember.id)}
-                          title="Desvincular personal"
                         >
-                          <Link2Off className="size-3.5" />
-                        </Button>
+                          <Link2Off className="h-4 w-4" />
+                        </IconButton>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={unlinkedStaff.length === 0}
-                          onClick={() => setLinkTarget({ profileId: profile.id, email: profile.email })}
-                          title={
+                        <IconButton
+                          label={
                             unlinkedStaff.length === 0
                               ? 'No hay colaboradores sin acceso disponibles'
                               : 'Vincular personal'
                           }
+                          disabled={unlinkedStaff.length === 0}
+                          onClick={() => setLinkTarget({ profileId: profile.id, email: profile.email })}
                         >
-                          <Link2 className="size-3.5" />
-                        </Button>
+                          <Link2 className="h-4 w-4" />
+                        </IconButton>
                       )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
+                      <IconButton
+                        label={profile.isActive ? 'Desactivar' : 'Activar'}
                         disabled={busyId === profile.id}
                         onClick={() => handleToggleActive(profile.id, profile.isActive)}
-                        title={profile.isActive ? 'Desactivar' : 'Activar'}
+                        className={
+                          profile.isActive
+                            ? 'hover:bg-destructive/10 hover:text-destructive'
+                            : 'hover:bg-green-100 hover:text-green-700 dark:hover:bg-green-900/30 dark:hover:text-green-400'
+                        }
                       >
                         {profile.isActive ? (
-                          <UserX className="size-3.5" />
+                          <UserX className="h-4 w-4" />
                         ) : (
-                          <UserCheck className="size-3.5" />
+                          <UserCheck className="h-4 w-4" />
                         )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
+                      </IconButton>
+                      <IconButton
+                        label="Eliminar usuario"
                         disabled={busyId === profile.id}
                         onClick={() => handleDelete(profile.id, profile.email)}
-                        title="Eliminar usuario"
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="hover:bg-destructive/10 hover:text-destructive"
                       >
-                        <Trash2 className="size-3.5" />
-                      </Button>
+                        <Trash2 className="h-4 w-4" />
+                      </IconButton>
                     </div>
+                    </TooltipProvider>
                   </TableCell>
                 </TableRow>
               ))

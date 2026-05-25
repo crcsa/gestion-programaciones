@@ -7,12 +7,12 @@ import {
   flexRender,
   createColumnHelper,
 } from '@tanstack/react-table'
-import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Eye, Pencil, CheckCircle2, XCircle, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { IconButton } from '@/components/ui/icon-button'
 import { CampaignStatusBadge } from './campaign-status-badge'
 import { CampaignSizeBadge } from './campaign-size-badge'
 import { CAMPAIGN_MODALITY_LABELS, PAGE_LIMIT } from '@/features/campaigns/lib/constants'
@@ -30,36 +30,6 @@ interface CampaignTableProps {
 }
 
 const columnHelper = createColumnHelper<CampaignListItem>()
-
-function IconButton({
-  label,
-  onClick,
-  className,
-  children,
-}: {
-  label: string
-  onClick?: () => void
-  className?: string
-  children: React.ReactNode
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            onClick={onClick}
-            aria-label={label}
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted ${className ?? ''}`}
-          />
-        }
-      >
-        {children}
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  )
-}
 
 export function CampaignTable({
   data,
@@ -123,27 +93,12 @@ export function CampaignTable({
           return (
             <TooltipProvider>
               <div className="flex items-center gap-0.5">
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Link
-                        href={`/campanas/${campaign.id}`}
-                        aria-label="Ver detalle"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      />
-                    }
-                  >
-                    <Eye className="h-4 w-4" />
-                  </TooltipTrigger>
-                  <TooltipContent>Ver detalle</TooltipContent>
-                </Tooltip>
+                <IconButton label="Ver detalle" href={`/campanas/${campaign.id}`}>
+                  <Eye className="h-4 w-4" />
+                </IconButton>
 
                 {isTentativa && onEdit && (
-                  <IconButton
-                    label="Editar"
-                    onClick={() => onEdit(campaign)}
-                    className="hover:text-foreground"
-                  >
+                  <IconButton label="Editar" onClick={() => onEdit(campaign)}>
                     <Pencil className="h-4 w-4" />
                   </IconButton>
                 )}
