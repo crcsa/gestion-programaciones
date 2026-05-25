@@ -1,8 +1,10 @@
 'use client'
 
-import Link from 'next/link'
+import { Pencil, Power, PowerOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { IconButton } from '@/components/ui/icon-button'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { Vehicle } from '@/lib/db/schema/vehicles'
 
 interface VehicleTableProps {
@@ -56,31 +58,33 @@ export function VehicleTable({
                 <td className="px-3 py-2">{v.year ?? '—'}</td>
                 <td className="px-3 py-2">{v.capacity ?? '—'}</td>
                 <td className="px-3 py-2">
-                  {v.isActive ? (
-                    <Badge variant="default">Activo</Badge>
-                  ) : (
-                    <Badge variant="secondary">Inactivo</Badge>
-                  )}
+                  <StatusBadge isActive={v.isActive} />
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Link
-                      href={`/vehiculos/${v.id}/editar`}
-                      className="text-sm underline-offset-2 hover:underline"
-                    >
-                      Editar
-                    </Link>
-                    {onToggleStatus && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onToggleStatus(v)}
-                      >
-                        {v.isActive ? 'Desactivar' : 'Activar'}
-                      </Button>
-                    )}
-                  </div>
+                  <TooltipProvider>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <IconButton label="Editar" href={`/vehiculos/${v.id}/editar`}>
+                        <Pencil className="h-4 w-4" />
+                      </IconButton>
+                      {onToggleStatus && (
+                        <IconButton
+                          label={v.isActive ? 'Desactivar' : 'Activar'}
+                          onClick={() => onToggleStatus(v)}
+                          className={
+                            v.isActive
+                              ? 'hover:bg-destructive/10 hover:text-destructive'
+                              : 'hover:bg-green-100 hover:text-green-700 dark:hover:bg-green-900/30 dark:hover:text-green-400'
+                          }
+                        >
+                          {v.isActive ? (
+                            <PowerOff className="h-4 w-4" />
+                          ) : (
+                            <Power className="h-4 w-4" />
+                          )}
+                        </IconButton>
+                      )}
+                    </div>
+                  </TooltipProvider>
                 </td>
               </tr>
             ))}

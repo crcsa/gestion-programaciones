@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Pencil, Power, PowerOff } from 'lucide-react'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { IconButton } from '@/components/ui/icon-button'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { activateCompany, deactivateCompany } from '../actions/company-actions'
 import type { Company } from '@/lib/db/schema/companies'
 
@@ -83,32 +85,36 @@ export function CompanyTable({ companies, onEdit, onRefresh }: CompanyTableProps
                 <td className="px-4 py-2 text-muted-foreground">{company.municipality ?? '—'}</td>
                 <td className="px-4 py-2 text-muted-foreground">{company.address ?? '—'}</td>
                 <td className="px-4 py-2 text-center">
-                  <Badge variant={company.isActive ? 'default' : 'secondary'}>
-                    {company.isActive ? 'Activa' : 'Inactiva'}
-                  </Badge>
+                  <StatusBadge
+                    isActive={company.isActive}
+                    activeLabel="Activa"
+                    inactiveLabel="Inactiva"
+                  />
                 </td>
                 <td className="px-4 py-2">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onEdit(company)}
-                    >
-                      Editar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={actionId === company.id}
-                      onClick={() => handleToggleActive(company)}
-                    >
-                      {actionId === company.id
-                        ? '...'
-                        : company.isActive
-                          ? 'Desactivar'
-                          : 'Activar'}
-                    </Button>
-                  </div>
+                  <TooltipProvider>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <IconButton label="Editar" onClick={() => onEdit(company)}>
+                        <Pencil className="h-4 w-4" />
+                      </IconButton>
+                      <IconButton
+                        label={company.isActive ? 'Desactivar' : 'Activar'}
+                        disabled={actionId === company.id}
+                        onClick={() => handleToggleActive(company)}
+                        className={
+                          company.isActive
+                            ? 'hover:bg-destructive/10 hover:text-destructive'
+                            : 'hover:bg-green-100 hover:text-green-700 dark:hover:bg-green-900/30 dark:hover:text-green-400'
+                        }
+                      >
+                        {company.isActive ? (
+                          <PowerOff className="h-4 w-4" />
+                        ) : (
+                          <Power className="h-4 w-4" />
+                        )}
+                      </IconButton>
+                    </div>
+                  </TooltipProvider>
                 </td>
               </tr>
             ))}

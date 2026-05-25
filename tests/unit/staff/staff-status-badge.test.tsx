@@ -19,10 +19,10 @@ describe('StaffStatusBadge', () => {
     expect(badge.className).toContain('green')
   })
 
-  it('applies gray styling when inactive', () => {
+  it('applies red styling when inactive', () => {
     const { container } = render(<StaffStatusBadge isActive={false} />)
     const badge = container.firstChild as HTMLElement
-    expect(badge.className).toContain('gray')
+    expect(badge.className).toContain('red')
   })
 
   it('does not show "Activo" when inactive', () => {
