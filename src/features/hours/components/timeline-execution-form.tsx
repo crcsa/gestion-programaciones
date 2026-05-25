@@ -39,6 +39,31 @@ export function TimelineExecutionForm({
   const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  // Eventos ya registrados que el usuario está re-editando (admin corrige horas).
+  const [editingTypes, setEditingTypes] = useState<Set<string>>(new Set())
+
+  function clearEventState(eventType: TimelineEventType) {
+    setDrafts((prev) => {
+      const { [eventType]: _, ...rest } = prev
+      void _
+      return rest
+    })
+    setEditingTypes((prev) => {
+      if (!prev.has(eventType)) return prev
+      const next = new Set(prev)
+      next.delete(eventType)
+      return next
+    })
+  }
+
+  function startEditing(eventType: TimelineEventType) {
+    const actual = eventByType.get(eventType)?.eventTime
+    setDrafts((prev) => ({
+      ...prev,
+      [eventType]: actual ? toTimeInput(new Date(actual)) : prev[eventType] ?? '',
+    }))
+    setEditingTypes((prev) => new Set(prev).add(eventType))
+  }
 
   const eventByType = useMemo(() => {
     const m = new Map<TimelineEventType, CampaignTimelineEvent>()
@@ -76,12 +101,8 @@ export function TimelineExecutionForm({
         eventType,
         actualTime: new Date().toISOString(),
       })
-      // Limpia draft para que la fila pase a "registrado".
-      setDrafts((prev) => {
-        const { [eventType]: _, ...rest } = prev
-        void _
-        return rest
-      })
+      // Limpia draft/edición para que la fila pase a "registrado".
+      clearEventState(eventType)
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al registrar la hora actual')
@@ -101,11 +122,7 @@ export function TimelineExecutionForm({
     try {
       const iso = combineDateAndTime(campaignDate, time).toISOString()
       await registerActualTime({ campaignId, eventType, actualTime: iso })
-      setDrafts((prev) => {
-        const { [eventType]: _, ...rest } = prev
-        void _
-        return rest
-      })
+      clearEventState(eventType)
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al registrar la hora real')
@@ -157,6 +174,8 @@ export function TimelineExecutionForm({
           const scheduled = event?.scheduledTime ?? null
           const actual = event?.eventTime ?? null
           const draftTime = getDraftTime(eventType)
+          const isEditing = editingTypes.has(eventType)
+          const showInput = !actual || isEditing
 
           return (
             <div
@@ -177,15 +196,24 @@ export function TimelineExecutionForm({
                     </p>
                   )}
                 </div>
-                {actual && (
-                  <div className="inline-flex shrink-0 items-center gap-1 text-xs text-green-700 dark:text-green-400">
-                    <CheckCircle2 className="size-4 shrink-0" />
-                    <span className="font-mono whitespace-nowrap">{formatTime(actual)}</span>
+                {actual && !isEditing && (
+                  <div className="inline-flex shrink-0 items-center gap-2">
+                    <span className="inline-flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
+                      <CheckCircle2 className="size-4 shrink-0" />
+                      <span className="font-mono whitespace-nowrap">{formatTime(actual)}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => startEditing(eventType)}
+                      className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    >
+                      Editar
+                    </button>
                   </div>
                 )}
               </div>
 
-              {!actual && (
+              {showInput && (
                 <div className="flex items-center gap-1.5 pl-7">
                   <Label htmlFor={`time-${eventType}`} className="sr-only">
                     Hora
@@ -203,8 +231,8 @@ export function TimelineExecutionForm({
                     className="h-9 w-9 shrink-0 p-0"
                     disabled={busy === `now-${eventType}`}
                     onClick={() => registerNow(eventType)}
-                    title="Registrar con la hora actual"
-                    aria-label="Registrar con la hora actual"
+                    title="Usar la hora actual"
+                    aria-label="Usar la hora actual"
                   >
                     <Clock className="size-4" />
                   </Button>
@@ -214,8 +242,18 @@ export function TimelineExecutionForm({
                     disabled={busy === `manual-${eventType}` || !draftTime}
                     onClick={() => registerManual(eventType)}
                   >
-                    Registrar
+                    {isEditing ? 'Guardar' : 'Registrar'}
                   </Button>
+                  {isEditing && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 shrink-0 px-2 text-xs"
+                      onClick={() => clearEventState(eventType)}
+                    >
+                      Cancelar
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
