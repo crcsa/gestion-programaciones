@@ -48,7 +48,7 @@ describe('ensureLocationGeocoded', () => {
   it('geocodifica y persiste cuando faltan coords', async () => {
     mockDb.select = vi.fn(() => makeChain([{ id: 'l1', address: 'Calle 73', municipality: 'Medellín', department: 'Antioquia', latitude: null, longitude: null }]))
     mockDb.update = vi.fn(() => makeChain([]))
-    vi.mocked(geocodeAddress).mockResolvedValue({ lat: 6.1, lng: -75.6, displayName: 'x' })
+    vi.mocked(geocodeAddress).mockResolvedValue({ lat: 6.1, lng: -75.6, displayName: 'x', approximate: false })
 
     const result = await ensureLocationGeocoded('l1')
 

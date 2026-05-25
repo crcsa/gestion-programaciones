@@ -20,7 +20,10 @@ import { db } from '../src/lib/db'
 import { locations } from '../src/lib/db/schema/locations'
 import { geocodeAddress } from '../src/lib/geocoding/nominatim'
 
-const THROTTLE_MS = 1100
+// Cada ubicación puede disparar 2 requests (dirección exacta + fallback a
+// municipio). Para no exceder ~1 req/seg de la política de Nominatim público,
+// esperamos ~2.2s entre ubicaciones.
+const THROTTLE_MS = 2200
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
