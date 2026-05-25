@@ -9,6 +9,8 @@ import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import { campaigns, campaignDays } from '@/lib/db/schema/campaigns'
 import { companies } from '@/lib/db/schema/companies'
+import { locations } from '@/lib/db/schema/locations'
+import { companyContacts } from '@/lib/db/schema/company-contacts'
 import { campaignAssignments } from '@/lib/db/schema/campaign-assignments'
 import { staffMembers } from '@/lib/db/schema/staff-members'
 import { requireAccess } from '@/features/auth/lib/require-access'
@@ -271,17 +273,22 @@ function buildDailySchedulesForRange(
   endTime: string,
 ): CampaignDaySchedule[] {
   const result: CampaignDaySchedule[] = []
-  const s = new Date(`${startDate}T00:00:00`)
-  const e = new Date(`${endDate}T00:00:00`)
-  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-    const dayDate = d.toISOString().slice(0, 10)
-    const isLast = dayDate === endDate
+  // Construimos las fechas en UTC e incrementamos por componentes UTC para
+  // evitar el corrimiento de día que produce `new Date('YYYY-MM-DDT00:00:00')`
+  // (hora local) + `toISOString()` (UTC) en zonas con offset negativo (Colombia).
+  const [sy, sm, sd] = startDate.split('-').map(Number)
+  const [ey, em, ed] = endDate.split('-').map(Number)
+  const cursor = new Date(Date.UTC(sy, sm - 1, sd))
+  const end = new Date(Date.UTC(ey, em - 1, ed))
+  while (cursor <= end) {
+    const dayDate = cursor.toISOString().slice(0, 10)
     result.push({
       dayDate,
       startTime,
       endTime,
-      isOvernight: !isLast, // todos los días excepto el último marcan pernocta
+      isOvernight: dayDate !== endDate, // todos los días excepto el último marcan pernocta
     })
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
   return result
 }
@@ -809,7 +816,7 @@ export interface ImportResult {
 export async function importCampaignsFromExcel(
   rows: ImportExcelRow[],
 ): Promise<ImportResult> {
-  await requireAccess({
+  const { userId } = await requireAccess({
     roles: ['admin', 'admin_area', 'comercial'],
     areas: ['comercial'],
     allowCrossArea: true,
@@ -846,42 +853,153 @@ export async function importCampaignsFromExcel(
         continue
       }
 
-      // Find or create company by name (case-insensitive)
-      let companyId: string | null = null
-      const existingCompany = await db
-        .select({ id: companies.id })
-        .from(companies)
-        .where(ilike(companies.name, data.companyName))
-        .limit(1)
+      // Cada fila es atómica: empresa + contacto + ubicación + campaña + días.
+      await db.transaction(async (tx) => {
+        // 1. Empresa (find/create por nombre, case-insensitive).
+        let companyId: string | null = null
+        const existingCompany = await tx
+          .select({ id: companies.id })
+          .from(companies)
+          .where(ilike(companies.name, data.companyName))
+          .limit(1)
 
-      if (existingCompany.length > 0) {
-        companyId = existingCompany[0].id
-      } else {
-        const [newCompany] = await db
-          .insert(companies)
-          .values({ name: data.companyName, isActive: true })
-          .returning({ id: companies.id })
-        companyId = newCompany?.id ?? null
-      }
+        if (existingCompany.length > 0) {
+          companyId = existingCompany[0].id
+        } else {
+          const [newCompany] = await tx
+            .insert(companies)
+            .values({ name: data.companyName, isActive: true })
+            .returning({ id: companies.id })
+          companyId = newCompany?.id ?? null
+        }
 
-      await db.insert(campaigns).values({
-        code: data.code,
-        companyId,
-        municipality: data.municipality,
-        campaignDate: data.campaignDate,
-        size: data.size,
-        modality: data.modality,
-        expectedDonations: data.expectedDonations ?? null,
-        observations: data.observations ?? null,
-        status: 'tentativa',
+        // 2. Ubicación (find/create por empresa + nombre).
+        let locationId: string | null = null
+        const locationName = data.locationName || data.address
+        if (companyId && locationName) {
+          const existingLocation = await tx
+            .select({ id: locations.id })
+            .from(locations)
+            .where(and(eq(locations.companyId, companyId), ilike(locations.name, locationName)))
+            .limit(1)
+
+          if (existingLocation.length > 0) {
+            locationId = existingLocation[0].id
+          } else {
+            const [newLocation] = await tx
+              .insert(locations)
+              .values({
+                companyId,
+                name: locationName,
+                address: data.address || locationName,
+                municipality: data.municipality,
+                isActive: true,
+              })
+              .returning({ id: locations.id })
+            locationId = newLocation?.id ?? null
+          }
+        }
+
+        // 3. Contacto de la empresa (find/create por empresa + nombre).
+        if (companyId && data.contactName) {
+          const existingContact = await tx
+            .select({ id: companyContacts.id })
+            .from(companyContacts)
+            .where(
+              and(eq(companyContacts.companyId, companyId), ilike(companyContacts.fullName, data.contactName)),
+            )
+            .limit(1)
+
+          if (existingContact.length === 0) {
+            await tx.insert(companyContacts).values({
+              companyId,
+              fullName: data.contactName,
+              phone: data.contactPhone ?? null,
+            })
+          }
+        }
+
+        // 4. Campaña.
+        const isMultiDay = !!data.endDate && data.endDate > data.campaignDate
+        const effectiveEndDate =
+          data.endDate && data.endDate >= data.campaignDate ? data.endDate : null
+
+        const [created] = await tx
+          .insert(campaigns)
+          .values({
+            code: data.code,
+            companyId,
+            locationId,
+            municipality: data.municipality,
+            campaignDate: data.campaignDate,
+            endDate: effectiveEndDate,
+            startTime: data.startTime ?? null,
+            endTime: data.endTime ?? null,
+            size: data.size,
+            modality: data.modality,
+            expectedDonations: data.expectedDonations ?? null,
+            observations: data.observations ?? null,
+            status: 'tentativa',
+            createdById: userId,
+          })
+          .returning({ id: campaigns.id, code: campaigns.code })
+
+        // 5. Horario por día (espejo de createCampaign).
+        let schedules: CampaignDaySchedule[] | undefined
+        if (isMultiDay && data.startTime && data.endTime && data.endDate) {
+          schedules = buildDailySchedulesForRange(
+            data.campaignDate,
+            data.endDate,
+            data.startTime,
+            data.endTime,
+          )
+        } else if (data.startTime && data.endTime) {
+          schedules = [
+            {
+              dayDate: data.campaignDate,
+              startTime: data.startTime,
+              endTime: data.endTime,
+              isOvernight: false,
+            },
+          ]
+        }
+
+        if (created && schedules && schedules.length > 0) {
+          await tx.insert(campaignDays).values(
+            schedules.map((s) => ({
+              campaignId: created.id,
+              dayDate: s.dayDate,
+              startTime: s.startTime,
+              endTime: s.endTime,
+              isOvernight: s.isOvernight ?? false,
+            })),
+          )
+        }
+
+        if (created) {
+          await logAudit({
+            profileId: userId,
+            action: 'create',
+            tableName: 'campaigns',
+            recordId: created.id,
+            newData: { code: created.code, status: 'tentativa', source: 'excel_import' },
+          })
+        }
       })
 
       result.imported++
     } catch (error) {
       console.error('[importCampaignsFromExcel] row', rowNum, error)
-      const reason = error instanceof AppError
-        ? error.message
-        : 'Error al guardar en la base de datos (revisa los logs del servidor).'
+      const cause = (error as { cause?: { code?: string } })?.cause
+      let reason: string
+      if (error instanceof AppError) {
+        reason = error.message
+      } else if (cause?.code === '23505') {
+        // Violación de UNIQUE (ej. code duplicado dentro del mismo archivo).
+        reason = 'Ya existe una campaña con ese código.'
+      } else {
+        reason = 'Error al guardar en la base de datos (revisa los logs del servidor).'
+      }
       result.errors.push({
         row: rowNum,
         code: data.code,
