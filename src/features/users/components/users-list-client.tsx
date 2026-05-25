@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { KeyRound, Link2, Link2Off, UserX, UserCheck, UserPlus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { RoleBadge, AreaBadge } from './role-area-badges'
 import { IconButton } from '@/components/ui/icon-button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
@@ -36,7 +36,7 @@ import {
   deleteUser,
 } from '../actions/user-actions'
 import { ROLE_LABELS, VALID_ROLES, type Role } from '@/types/roles'
-import { AREA_LABELS, type Area } from '@/types/areas'
+import { type Area } from '@/types/areas'
 import type { UserRow } from '../actions/user-actions'
 import type { StaffMember } from '@/lib/db/schema/staff-members'
 
@@ -289,14 +289,10 @@ export function UsersListClient({
                   <TableCell className="font-medium">{profile.fullName}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{profile.email}</TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{ROLE_LABELS[profile.role]}</Badge>
+                    <RoleBadge role={profile.role} />
                   </TableCell>
                   <TableCell>
-                    {profile.area ? (
-                      <Badge variant="outline">{AREA_LABELS[profile.area]}</Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Global</span>
-                    )}
+                    <AreaBadge area={profile.area} />
                   </TableCell>
                   <TableCell className="text-sm">
                     {staffMember ? (
