@@ -268,6 +268,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
                   campaignDate={campaign.campaignDate}
                   existingEvents={timelineEvents}
                   canFinalize={canSchedule}
+                  isFinalized={campaign.status === 'ejecutada'}
                 />
               </section>
             )}
