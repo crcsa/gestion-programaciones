@@ -22,12 +22,19 @@ interface TimelineExecutionFormProps {
   campaignId: string
   campaignDate: string
   existingEvents: CampaignTimelineEvent[]
+  /** Solo admin/admin_area puede finalizar (homologa horas + marca ejecutada).
+   *  El coordinador operativo registra las horas; un admin cierra. */
+  canFinalize?: boolean
+  /** La campaña ya está ejecutada (finalizada) → registro en solo lectura. */
+  isFinalized?: boolean
 }
 
 export function TimelineExecutionForm({
   campaignId,
   campaignDate,
   existingEvents,
+  canFinalize = false,
+  isFinalized = false,
 }: TimelineExecutionFormProps) {
   const router = useRouter()
   const [events, setEvents] = useState<CampaignTimelineEvent[]>(existingEvents)
@@ -35,6 +42,33 @@ export function TimelineExecutionForm({
   const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  // Eventos ya registrados que el usuario está re-editando (admin corrige horas).
+  const [editingTypes, setEditingTypes] = useState<Set<string>>(new Set())
+  // Se vuelve true al finalizar (o si la campaña ya venía ejecutada) → cierra el registro.
+  const [finalized, setFinalized] = useState(isFinalized)
+
+  function clearEventState(eventType: TimelineEventType) {
+    setDrafts((prev) => {
+      const { [eventType]: _, ...rest } = prev
+      void _
+      return rest
+    })
+    setEditingTypes((prev) => {
+      if (!prev.has(eventType)) return prev
+      const next = new Set(prev)
+      next.delete(eventType)
+      return next
+    })
+  }
+
+  function startEditing(eventType: TimelineEventType) {
+    const actual = eventByType.get(eventType)?.eventTime
+    setDrafts((prev) => ({
+      ...prev,
+      [eventType]: actual ? toTimeInput(new Date(actual)) : prev[eventType] ?? '',
+    }))
+    setEditingTypes((prev) => new Set(prev).add(eventType))
+  }
 
   const eventByType = useMemo(() => {
     const m = new Map<TimelineEventType, CampaignTimelineEvent>()
@@ -72,12 +106,8 @@ export function TimelineExecutionForm({
         eventType,
         actualTime: new Date().toISOString(),
       })
-      // Limpia draft para que la fila pase a "registrado".
-      setDrafts((prev) => {
-        const { [eventType]: _, ...rest } = prev
-        void _
-        return rest
-      })
+      // Limpia draft/edición para que la fila pase a "registrado".
+      clearEventState(eventType)
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al registrar la hora actual')
@@ -97,11 +127,7 @@ export function TimelineExecutionForm({
     try {
       const iso = combineDateAndTime(campaignDate, time).toISOString()
       await registerActualTime({ campaignId, eventType, actualTime: iso })
-      setDrafts((prev) => {
-        const { [eventType]: _, ...rest } = prev
-        void _
-        return rest
-      })
+      clearEventState(eventType)
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al registrar la hora real')
@@ -115,6 +141,7 @@ export function TimelineExecutionForm({
     setError(null)
     try {
       await finalizeCampaignHours(campaignId)
+      setFinalized(true)
       setInfo('Horas calculadas y campaña marcada como ejecutada')
       router.refresh()
     } catch (err) {
@@ -126,15 +153,21 @@ export function TimelineExecutionForm({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          Pulsa <strong className="text-foreground">Ahora</strong> para sello automático o
-          ingresa fecha y hora manualmente.
-        </p>
-        <div className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
-          {registeredCount} / {TIMELINE_EVENT_ORDER.length} registradas
+      {finalized ? (
+        <div className="rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
+          Campaña ejecutada · las horas ya se calcularon y homologaron a todo el personal.
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Pulsa <strong className="text-foreground">Ahora</strong> para sello automático o
+            ingresa fecha y hora manualmente.
+          </p>
+          <div className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+            {registeredCount} / {TIMELINE_EVENT_ORDER.length} registradas
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -153,6 +186,8 @@ export function TimelineExecutionForm({
           const scheduled = event?.scheduledTime ?? null
           const actual = event?.eventTime ?? null
           const draftTime = getDraftTime(eventType)
+          const isEditing = editingTypes.has(eventType)
+          const showInput = !finalized && (!actual || isEditing)
 
           return (
             <div
@@ -173,15 +208,26 @@ export function TimelineExecutionForm({
                     </p>
                   )}
                 </div>
-                {actual && (
-                  <div className="inline-flex shrink-0 items-center gap-1 text-xs text-green-700 dark:text-green-400">
-                    <CheckCircle2 className="size-4 shrink-0" />
-                    <span className="font-mono whitespace-nowrap">{formatTime(actual)}</span>
+                {actual && !isEditing && (
+                  <div className="inline-flex shrink-0 items-center gap-2">
+                    <span className="inline-flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
+                      <CheckCircle2 className="size-4 shrink-0" />
+                      <span className="font-mono whitespace-nowrap">{formatTime(actual)}</span>
+                    </span>
+                    {!finalized && (
+                      <button
+                        type="button"
+                        onClick={() => startEditing(eventType)}
+                        className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                      >
+                        Editar
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
 
-              {!actual && (
+              {showInput && (
                 <div className="flex items-center gap-1.5 pl-7">
                   <Label htmlFor={`time-${eventType}`} className="sr-only">
                     Hora
@@ -199,8 +245,8 @@ export function TimelineExecutionForm({
                     className="h-9 w-9 shrink-0 p-0"
                     disabled={busy === `now-${eventType}`}
                     onClick={() => registerNow(eventType)}
-                    title="Registrar con la hora actual"
-                    aria-label="Registrar con la hora actual"
+                    title="Usar la hora actual"
+                    aria-label="Usar la hora actual"
                   >
                     <Clock className="size-4" />
                   </Button>
@@ -210,8 +256,18 @@ export function TimelineExecutionForm({
                     disabled={busy === `manual-${eventType}` || !draftTime}
                     onClick={() => registerManual(eventType)}
                   >
-                    Registrar
+                    {isEditing ? 'Guardar' : 'Registrar'}
                   </Button>
+                  {isEditing && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 shrink-0 px-2 text-xs"
+                      onClick={() => clearEventState(eventType)}
+                    >
+                      Cancelar
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -219,10 +275,16 @@ export function TimelineExecutionForm({
         })}
       </div>
 
-      {allRegistered && (
+      {!finalized && allRegistered && canFinalize && (
         <Button onClick={finalize} disabled={busy === 'finalize'} className="w-full">
           {busy === 'finalize' ? 'Calculando...' : 'Finalizar y calcular horas'}
         </Button>
+      )}
+      {!finalized && allRegistered && !canFinalize && (
+        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          Todas las horas quedaron registradas. Un administrador de banco de sangre finalizará
+          y homologará las horas a todo el personal.
+        </p>
       )}
     </div>
   )

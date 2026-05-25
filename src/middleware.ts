@@ -59,6 +59,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  // El detalle de campaña (/campanas/<id>) se protege a nivel de página
+  // (`getCampaignById` valida rol, asignación y área). Lo permitimos aquí para
+  // que el operativo coordinador pueda entrar a su campaña asignada — la lista
+  // (/campanas) y las rutas de crear/editar siguen gobernadas por NAV_ITEMS.
+  const isCampaignDetail =
+    /^\/campanas\/[^/]+$/.test(pathname) && pathname !== '/campanas/nueva'
+  if (isCampaignDetail) {
+    return supabaseResponse
+  }
+
   // Match contra NAV_ITEMS para derivar los guards.
   const item = matchNavItem(pathname)
   if (!item) {
