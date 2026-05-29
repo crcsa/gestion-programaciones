@@ -137,12 +137,16 @@ export function LogisticsAssignmentPanel({
                   <SelectContent>
                     {availableDrivers.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
-                        {d.lastName}, {d.firstName} — C.C. {d.cedula}
-                        {d.busyElsewhere && (
-                          <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
-                            Ya en otra campaña ese día
+                        <span className="flex flex-col">
+                          <span>
+                            {d.lastName}, {d.firstName} — C.C. {d.cedula}
                           </span>
-                        )}
+                          {d.busyElsewhere && (
+                            <span className="text-xs text-amber-600 dark:text-amber-400">
+                              Ya en otra campaña ese día
+                            </span>
+                          )}
+                        </span>
                       </SelectItem>
                     ))}
                     {/* Permite ver el conductor actual aunque no esté en la lista
@@ -212,14 +216,18 @@ export function LogisticsAssignmentPanel({
                 <SelectContent>
                   {availableVehicles.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
-                      {v.plate}
-                      {v.mobileNumber ? ` · Móvil ${v.mobileNumber}` : ''}
-                      {v.model ? ` · ${v.model}` : ''}
-                      {v.busyElsewhere && (
-                        <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
-                          Ya en otra campaña ese día
+                      <span className="flex flex-col">
+                        <span>
+                          {v.plate}
+                          {v.mobileNumber ? ` · Móvil ${v.mobileNumber}` : ''}
+                          {v.model ? ` · ${v.model}` : ''}
                         </span>
-                      )}
+                        {v.busyElsewhere && (
+                          <span className="text-xs text-amber-600 dark:text-amber-400">
+                            Ya en otra campaña ese día
+                          </span>
+                        )}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -247,12 +255,16 @@ export function LogisticsAssignmentPanel({
                 <SelectContent>
                   {availableDrivers.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
-                      {d.lastName}, {d.firstName} — C.C. {d.cedula}
-                      {d.busyElsewhere && (
-                        <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
-                          Ya en otra campaña ese día
+                      <span className="flex flex-col">
+                        <span>
+                          {d.lastName}, {d.firstName} — C.C. {d.cedula}
                         </span>
-                      )}
+                        {d.busyElsewhere && (
+                          <span className="text-xs text-amber-600 dark:text-amber-400">
+                            Ya en otra campaña ese día
+                          </span>
+                        )}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
