@@ -1,17 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import { ChevronLeft, ChevronRight, Building2, Droplets } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
 import { SedeDaySchedulerModal } from './sede-day-scheduler-modal'
-import { SEDE_MODALITY_LABELS, type SedeModality } from '@/features/sede/lib/shift-defaults'
+import { SedeModalityPickerDialog } from './sede-modality-picker-dialog'
+import { type SedeModality } from '@/features/sede/lib/shift-defaults'
 import {
   getMonthlyShiftCounts,
   getSedeShiftsForDate,
@@ -261,47 +255,11 @@ export function MonthlyShiftsOverview({
         </div>
       )}
 
-      <Dialog open={!!pickerDate} onOpenChange={(o) => !o && setPickerDate(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>¿Qué vas a programar?</DialogTitle>
-            <DialogDescription>
-              Elige la modalidad de turnos para este día. Cada modalidad se programa por
-              separado y no afecta a la otra.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-auto flex-col items-start gap-1 p-4 text-left"
-              onClick={() => pickerDate && handlePickModality(pickerDate, 'sede')}
-            >
-              <span className="flex items-center gap-2 font-medium">
-                <Building2 className="size-4" />
-                {SEDE_MODALITY_LABELS.sede}
-              </span>
-              <span className="text-xs font-normal text-muted-foreground">
-                Diurno completo, noche o posturno.
-              </span>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-auto flex-col items-start gap-1 p-4 text-left"
-              onClick={() => pickerDate && handlePickModality(pickerDate, 'servicios')}
-            >
-              <span className="flex items-center gap-2 font-medium text-rose-600 dark:text-rose-400">
-                <Droplets className="size-4" />
-                {SEDE_MODALITY_LABELS.servicios}
-              </span>
-              <span className="text-xs font-normal text-muted-foreground">
-                07:00–17:00, 9h efectivas.
-              </span>
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SedeModalityPickerDialog
+        open={!!pickerDate}
+        onOpenChange={(o) => !o && setPickerDate(null)}
+        onPick={(modality) => pickerDate && handlePickModality(pickerDate, modality)}
+      />
 
       {modalState && (
         <SedeDaySchedulerModal
