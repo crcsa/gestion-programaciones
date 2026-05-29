@@ -374,6 +374,7 @@ export function SedeShiftsClient({
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
                   <SelectItem value="diurno_completo">Diurno Completo</SelectItem>
+                  <SelectItem value="servicios_transfusionales">Servicios transfusionales</SelectItem>
                   <SelectItem value="noche">Noche</SelectItem>
                   <SelectItem value="posturno">Posturno</SelectItem>
                 </SelectContent>

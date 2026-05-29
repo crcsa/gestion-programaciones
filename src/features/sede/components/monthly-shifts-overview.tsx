@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, useTransition } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SedeDaySchedulerModal } from './sede-day-scheduler-modal'
+import { SedeModalityPickerDialog } from './sede-modality-picker-dialog'
+import { type SedeModality } from '@/features/sede/lib/shift-defaults'
 import {
   getMonthlyShiftCounts,
   getSedeShiftsForDate,
@@ -58,9 +60,12 @@ export function MonthlyShiftsOverview({
     counts: DayShiftCount[]
     error: string | null
   } | null>(null)
-  const [modalState, setModalState] = useState<{ date: string; existing: SedeShiftRow[] } | null>(
-    null,
-  )
+  const [modalState, setModalState] = useState<{
+    date: string
+    existing: SedeShiftRow[]
+    modality: SedeModality
+  } | null>(null)
+  const [pickerDate, setPickerDate] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
   const isInitialMonth = year === initialYear && month === initialMonth
@@ -130,12 +135,17 @@ export function MonthlyShiftsOverview({
     }
   }
 
-  async function handleDayClick(date: string) {
+  function handleDayClick(date: string) {
+    setPickerDate(date)
+  }
+
+  async function handlePickModality(date: string, modality: SedeModality) {
+    setPickerDate(null)
     try {
       const existing = await getSedeShiftsForDate(date)
-      setModalState({ date, existing })
+      setModalState({ date, existing, modality })
     } catch {
-      setModalState({ date, existing: [] })
+      setModalState({ date, existing: [], modality })
     }
   }
 
@@ -245,6 +255,12 @@ export function MonthlyShiftsOverview({
         </div>
       )}
 
+      <SedeModalityPickerDialog
+        open={!!pickerDate}
+        onOpenChange={(o) => !o && setPickerDate(null)}
+        onPick={(modality) => pickerDate && handlePickModality(pickerDate, modality)}
+      />
+
       {modalState && (
         <SedeDaySchedulerModal
           open={!!modalState}
@@ -252,6 +268,7 @@ export function MonthlyShiftsOverview({
           shiftDate={modalState.date}
           existing={modalState.existing}
           staffList={staffList}
+          modality={modalState.modality}
           onSaved={handleSaved}
         />
       )}

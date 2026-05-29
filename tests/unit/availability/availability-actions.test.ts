@@ -44,7 +44,7 @@ vi.mock('@/lib/db/schema/staff-availability', () => ({
 
 vi.mock('@/lib/db/schema/sede-shifts', () => ({
   sedeShifts: {
-    id: 'id', staffId: 'staff_id', shiftDate: 'shift_date',
+    id: 'id', staffId: 'staff_id', shiftDate: 'shift_date', shiftType: 'shift_type',
   },
 }))
 
@@ -159,7 +159,7 @@ describe('getWeeklyAvailabilityGrid', () => {
       selectCount++
       if (selectCount === 1) return makeChain(mockStaff)
       if (selectCount === 2) return makeChain([])  // no overrides
-      if (selectCount === 3) return makeChain([{ staffId, shiftDate: '2026-03-16' }])
+      if (selectCount === 3) return makeChain([{ staffId, shiftDate: '2026-03-16', shiftType: 'diurno_completo' }])
       if (selectCount === 4) return makeChain([])  // no campaign assignments
       if (selectCount === 5) return makeChain([])  // no driver assignments
       return makeChain([])
@@ -168,6 +168,24 @@ describe('getWeeklyAvailabilityGrid', () => {
     const result = await getWeeklyAvailabilityGrid({ weekStart: '2026-03-16' })
     const monday = result[0]?.days['2026-03-16']
     expect(monday?.status).toBe('en_sede')
+  })
+
+  it('assigns servicios_transfusionales when shift is of that type', async () => {
+    const mockStaff = [{ id: staffId, firstName: 'Ana', lastName: 'López', staffProfile: 'tecnico' }]
+    let selectCount = 0
+    mockDb.select = vi.fn(() => {
+      selectCount++
+      if (selectCount === 1) return makeChain(mockStaff)
+      if (selectCount === 2) return makeChain([])  // no overrides
+      if (selectCount === 3) return makeChain([{ staffId, shiftDate: '2026-03-16', shiftType: 'servicios_transfusionales' }])
+      if (selectCount === 4) return makeChain([])  // no campaign assignments
+      if (selectCount === 5) return makeChain([])  // no driver assignments
+      return makeChain([])
+    })
+
+    const result = await getWeeklyAvailabilityGrid({ weekStart: '2026-03-16' })
+    const monday = result[0]?.days['2026-03-16']
+    expect(monday?.status).toBe('servicios_transfusionales')
   })
 
   it('override takes priority over campaign', async () => {

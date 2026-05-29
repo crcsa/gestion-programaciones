@@ -26,6 +26,9 @@ import type {
 } from '@/features/sede/schemas/sede-shift-schemas'
 import {
   SEDE_SHIFT_DEFAULTS,
+  SHIFT_TYPES_BY_MODALITY,
+  SEDE_MODALITY_LABELS,
+  MODALITY_BY_SHIFT_TYPE,
   effectiveShiftHours,
   MIN_EFFECTIVE_HOURS_DIURNO,
   type ShiftType,
@@ -40,7 +43,7 @@ export interface SedeShiftRow {
   lastName: string
   staffProfile: string
   shiftDate: string
-  shiftType: 'diurno_completo' | 'noche' | 'posturno'
+  shiftType: 'diurno_completo' | 'noche' | 'posturno' | 'servicios_transfusionales'
   startTime: string
   endTime: string
   totalHours: number
@@ -273,12 +276,13 @@ export async function updateSedeShift(id: string, data: UpdateSedeShiftInput): P
     const finalOvernight = parsed.isOvernight ?? existing.isOvernight
     const finalShiftType = (parsed.shiftType ?? existing.shiftType) as ShiftType
 
-    // Re-validar min 8h efectivas si el resultado quedaría como diurno_completo.
-    if (finalShiftType === 'diurno_completo') {
-      const eff = effectiveShiftHours(finalStart, finalEnd, finalOvernight, 'diurno_completo')
+    // Re-validar min 8h efectivas si el resultado quedaría como un turno diurno
+    // (diurno_completo o servicios_transfusionales — ambos descuentan almuerzo).
+    if (finalShiftType === 'diurno_completo' || finalShiftType === 'servicios_transfusionales') {
+      const eff = effectiveShiftHours(finalStart, finalEnd, finalOvernight, finalShiftType)
       if (eff < MIN_EFFECTIVE_HOURS_DIURNO) {
         throw new ValidationError(
-          'Diurno completo debe tener al menos 8h efectivas (descontando 1h de almuerzo).',
+          'Los turnos diurnos deben tener al menos 8h efectivas (descontando 1h de almuerzo).',
         )
       }
     }
@@ -341,7 +345,8 @@ export async function bulkUpsertDaySedeShifts(
   if (!safe.success) {
     throw new ValidationError(`Datos de programación inválidos: ${safe.error.issues[0]?.message ?? ''}`)
   }
-  const { shiftDate, assignments } = safe.data
+  const { shiftDate, modality, assignments } = safe.data
+  const modalityTypes = SHIFT_TYPES_BY_MODALITY[modality]
 
   // Detección temprana de duplicados de staff en el payload
   const seen = new Set<string>()
@@ -350,6 +355,11 @@ export async function bulkUpsertDaySedeShifts(
       throw new ValidationError('Hay colaboradores duplicados en la programación del día')
     }
     seen.add(a.staffId)
+    // Defensa profunda: el tipo de cada turno debe pertenecer a la modalidad
+    // que se está programando (la UI lo garantiza, pero blindamos el server).
+    if (!modalityTypes.includes(a.shiftType as ShiftType)) {
+      throw new ValidationError('El tipo de turno no corresponde a la modalidad seleccionada')
+    }
   }
 
   const cfg = await loadValidationRuntimeConfig()
@@ -365,7 +375,11 @@ export async function bulkUpsertDaySedeShifts(
     // aunque el caller no tocó conscientemente a ese staff).
     const ownerScope: Area | null = scope.kind === 'global' ? null : scope.area
     const existing = await db
-      .select({ id: sedeShifts.id, staffId: sedeShifts.staffId })
+      .select({
+        id: sedeShifts.id,
+        staffId: sedeShifts.staffId,
+        shiftType: sedeShifts.shiftType,
+      })
       .from(sedeShifts)
       .leftJoin(staffMembers, eq(sedeShifts.staffId, staffMembers.id))
       .where(
@@ -376,8 +390,32 @@ export async function bulkUpsertDaySedeShifts(
       )
 
     const incomingIds = new Set(assignments.map((a) => a.staffId))
-    const toRemove = existing.filter((e) => !incomingIds.has(e.staffId))
+
+    // El guardado afecta SOLO la modalidad seleccionada. Los turnos de esa
+    // modalidad que ya no vienen en el payload se eliminan; los de la OTRA
+    // modalidad ese día no se tocan.
+    const sameModalityExisting = existing.filter((e) =>
+      modalityTypes.includes(e.shiftType as ShiftType),
+    )
+    const toRemove = sameModalityExisting.filter((e) => !incomingIds.has(e.staffId))
     const removedStaffIds = toRemove.map((e) => e.staffId)
+
+    // Un colaborador tiene a lo sumo un turno por día. Si alguien del payload
+    // ya tiene un turno de la OTRA modalidad ese día, bloqueamos: el upsert
+    // (onConflict staffId+shiftDate) sobrescribiría ese turno, violando la
+    // separación entre modalidades. El admin debe quitarlo primero.
+    const conflicting = existing.filter(
+      (e) => incomingIds.has(e.staffId) && !modalityTypes.includes(e.shiftType as ShiftType),
+    )
+    if (conflicting.length > 0) {
+      const otherLabels = Array.from(
+        new Set(conflicting.map((e) => SEDE_MODALITY_LABELS[MODALITY_BY_SHIFT_TYPE[e.shiftType as ShiftType]])),
+      ).join(', ')
+      throw new ValidationError(
+        `Hay colaboradores que ya tienen un turno de ${otherLabels} ese día. ` +
+          'Quítalo desde esa modalidad antes de programarlos aquí (un turno por persona por día).',
+      )
+    }
 
     // Verificación de área para admins no globales: cada staffId del payload
     // (creación/upsert) debe pertenecer al área del caller. `removedStaffIds`
@@ -541,7 +579,7 @@ export async function getMonthlyShiftCounts(
       const entry = byDate.get(r.shiftDate)
       if (!entry) continue
       entry.count += r.count
-      if (r.shiftType === 'diurno_completo') entry.types.diurno += r.count
+      if (r.shiftType === 'diurno_completo' || r.shiftType === 'servicios_transfusionales') entry.types.diurno += r.count
       else if (r.shiftType === 'noche') entry.types.noche += r.count
       else if (r.shiftType === 'posturno') entry.types.posturno += r.count
     }

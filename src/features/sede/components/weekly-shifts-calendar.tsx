@@ -3,8 +3,13 @@
 import { useMemo, useState, useTransition } from 'react'
 import { CalendarPlus } from 'lucide-react'
 import { SedeDaySchedulerModal } from './sede-day-scheduler-modal'
+import { SedeModalityPickerDialog } from './sede-modality-picker-dialog'
 import { getSedeShiftsForDate } from '@/features/sede/actions/sede-shift-actions'
-import { SHIFT_TYPE_SHORT_LABELS, type ShiftType } from '@/features/sede/lib/shift-defaults'
+import {
+  SHIFT_TYPE_SHORT_LABELS,
+  type ShiftType,
+  type SedeModality,
+} from '@/features/sede/lib/shift-defaults'
 import type {
   SedeShiftRow,
   StaffListItem,
@@ -41,7 +46,10 @@ export function WeeklyShiftsCalendar({
   const [modalState, setModalState] = useState<{
     date: string
     existing: SedeShiftRow[]
+    modality: SedeModality
   } | null>(null)
+  // Día elegido a la espera de que se seleccione la modalidad a programar.
+  const [pickerDate, setPickerDate] = useState<string | null>(null)
   const [loadingDate, setLoadingDate] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
@@ -61,15 +69,22 @@ export function WeeklyShiftsCalendar({
     return map
   }, [shifts])
 
-  async function handleDayClick(date: string) {
+  // Click en un día → primero pedimos la modalidad a programar.
+  function handleDayClick(date: string) {
+    setPickerDate(date)
+  }
+
+  // Modalidad elegida → cargamos los turnos del día y abrimos el scheduler.
+  async function handlePickModality(date: string, modality: SedeModality) {
+    setPickerDate(null)
     setLoadingDate(date)
     try {
       // Re-fetch fresco para evitar mostrar datos stale
       const existing = await getSedeShiftsForDate(date)
-      setModalState({ date, existing })
+      setModalState({ date, existing, modality })
     } catch {
       // Fallback al snapshot inicial
-      setModalState({ date, existing: shiftsByDate.get(date) ?? [] })
+      setModalState({ date, existing: shiftsByDate.get(date) ?? [], modality })
     } finally {
       setLoadingDate(null)
     }
@@ -129,6 +144,11 @@ export function WeeklyShiftsCalendar({
                   {typeCounts.posturno ? (
                     <span>· {typeCounts.posturno} {SHIFT_TYPE_SHORT_LABELS.posturno}</span>
                   ) : null}
+                  {typeCounts.servicios_transfusionales ? (
+                    <span className="text-rose-600 dark:text-rose-400">
+                      · {typeCounts.servicios_transfusionales} {SHIFT_TYPE_SHORT_LABELS.servicios_transfusionales}
+                    </span>
+                  ) : null}
                 </div>
               )}
 
@@ -154,6 +174,13 @@ export function WeeklyShiftsCalendar({
         })}
       </div>
 
+      {/* Paso 1: elegir la modalidad a programar para el día */}
+      <SedeModalityPickerDialog
+        open={!!pickerDate}
+        onOpenChange={(o) => !o && setPickerDate(null)}
+        onPick={(modality) => pickerDate && handlePickModality(pickerDate, modality)}
+      />
+
       {modalState && (
         <SedeDaySchedulerModal
           open={!!modalState}
@@ -161,6 +188,7 @@ export function WeeklyShiftsCalendar({
           shiftDate={modalState.date}
           existing={modalState.existing}
           staffList={staffList}
+          modality={modalState.modality}
           onSaved={handleSaved}
         />
       )}

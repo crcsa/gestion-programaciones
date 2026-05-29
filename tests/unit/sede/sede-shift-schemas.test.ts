@@ -75,6 +75,29 @@ describe('createSedeShiftSchema — mínimo 8h efectivas en diurno_completo', ()
     })
     expect(r.success).toBe(true)
   })
+
+  it('servicios_transfusionales 07:00-17:00 (9h efectivas) pasa', () => {
+    const r = createSedeShiftSchema.safeParse({
+      ...baseInput,
+      shiftType: 'servicios_transfusionales',
+      startTime: '07:00',
+      endTime: '17:00',
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('servicios_transfusionales 07:00-14:00 (6h efectivas) bloquea', () => {
+    const r = createSedeShiftSchema.safeParse({
+      ...baseInput,
+      shiftType: 'servicios_transfusionales',
+      startTime: '07:00',
+      endTime: '14:00',
+    })
+    expect(r.success).toBe(false)
+    if (!r.success) {
+      expect(r.error.issues[0].message).toMatch(/8h efectivas/)
+    }
+  })
 })
 
 describe('dayAssignmentItemSchema — bulk con tiempos opcionales', () => {
@@ -110,5 +133,24 @@ describe('dayAssignmentItemSchema — bulk con tiempos opcionales', () => {
       isOvernight: false,
     })
     expect(r.success).toBe(true)
+  })
+
+  it('servicios_transfusionales sin tiempos custom usa defaults (9h) y pasa', () => {
+    const r = dayAssignmentItemSchema.safeParse({
+      ...base,
+      shiftType: 'servicios_transfusionales',
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('servicios_transfusionales con custom 07:00-14:00 bloquea', () => {
+    const r = dayAssignmentItemSchema.safeParse({
+      ...base,
+      shiftType: 'servicios_transfusionales',
+      startTime: '07:00',
+      endTime: '14:00',
+      isOvernight: false,
+    })
+    expect(r.success).toBe(false)
   })
 })

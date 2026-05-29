@@ -1,6 +1,7 @@
 export type AvailabilityCellStatus =
   | 'libre'
   | 'en_sede'
+  | 'servicios_transfusionales'
   | 'en_campana'
   | 'vacaciones'
   | 'incapacidad'

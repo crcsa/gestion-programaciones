@@ -13,7 +13,7 @@ export const staffProfileEnum = pgEnum('staff_profile', ['bacteriologo', 'tecnic
 
 export const contractTypeEnum = pgEnum('contract_type', ['indefinido', 'fijo', 'prestacion_servicios', 'aprendizaje'])
 
-export const shiftTypeEnum = pgEnum('shift_type', ['diurno_completo', 'noche', 'posturno'])
+export const shiftTypeEnum = pgEnum('shift_type', ['diurno_completo', 'noche', 'posturno', 'servicios_transfusionales'])
 
 export const campaignStatusEnum = pgEnum('campaign_status', ['tentativa', 'confirmada', 'cancelada', 'ejecutada'])
 

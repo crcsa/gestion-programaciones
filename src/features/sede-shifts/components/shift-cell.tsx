@@ -104,8 +104,8 @@ export function ShiftCell({
       <span
         className="text-xs text-muted-foreground"
         title={
-          shift.shiftType === 'diurno_completo'
-            ? 'Horas efectivas (descuenta 1h de almuerzo en Diurno completo)'
+          shift.shiftType === 'diurno_completo' || shift.shiftType === 'servicios_transfusionales'
+            ? 'Horas efectivas (descuenta 1h de almuerzo en turnos diurnos)'
             : 'Horas efectivas del turno'
         }
       >

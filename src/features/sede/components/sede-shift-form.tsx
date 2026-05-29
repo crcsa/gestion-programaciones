@@ -29,6 +29,7 @@ const SHIFT_TYPE_OPTIONS = [
   { value: 'diurno_completo', label: 'Diurno completo', startTime: '07:00', endTime: '17:00' },
   { value: 'noche', label: 'Noche', startTime: '19:00', endTime: '07:00' },
   { value: 'posturno', label: 'Posturno', startTime: '07:00', endTime: '13:00' },
+  { value: 'servicios_transfusionales', label: 'Servicios transfusionales', startTime: '07:00', endTime: '17:00' },
 ] as const
 
 const STAFF_PROFILE_LABELS: Record<string, string> = {

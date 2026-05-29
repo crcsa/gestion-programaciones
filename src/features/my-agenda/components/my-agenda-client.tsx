@@ -61,6 +61,7 @@ const SHIFT_TYPE_LABELS: Record<string, string> = {
   diurno_completo: 'Diurno completo',
   noche: 'Noche',
   posturno: 'Posturno',
+  servicios_transfusionales: 'Servicios transfusionales',
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -179,8 +180,8 @@ function SedeShiftsSection({ shifts }: { shifts: MyAgendaData['sedeShiftsThisWee
                 <TableCell
                   className="text-right font-medium"
                   title={
-                    shift.shiftType === 'diurno_completo'
-                      ? 'Horas efectivas (descuenta 1h de almuerzo en Diurno completo)'
+                    shift.shiftType === 'diurno_completo' || shift.shiftType === 'servicios_transfusionales'
+                      ? 'Horas efectivas (descuenta 1h de almuerzo en turnos diurnos)'
                       : 'Horas efectivas del turno'
                   }
                 >

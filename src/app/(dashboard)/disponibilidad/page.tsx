@@ -75,6 +75,7 @@ export default async function DisponibilidadPage({ searchParams }: Disponibilida
           <div className="flex flex-wrap gap-4 text-xs">
             <LegendItem color="bg-background border border-border" label="Libre" />
             <LegendItem color="bg-blue-100 dark:bg-blue-900/40" label="En sede" />
+            <LegendItem color="bg-rose-100 dark:bg-rose-900/40" label="Servicios transfusionales" />
             <LegendItem color="bg-green-100 dark:bg-green-900/40" label="En campaña" />
             <LegendItem color="bg-orange-100 dark:bg-orange-900/40" label="Vacaciones" />
             <LegendItem color="bg-red-100 dark:bg-red-900/40" label="Incapacidad" />

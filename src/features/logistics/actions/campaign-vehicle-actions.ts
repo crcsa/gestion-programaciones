@@ -1,6 +1,6 @@
 'use server'
 
-import { and, eq, gte, inArray, lte, ne, notInArray } from 'drizzle-orm'
+import { and, eq, gte, inArray, lte, ne } from 'drizzle-orm'
 import { NotFoundError, ValidationError } from '@/lib/errors/app-errors'
 import { rethrowOrLog } from '@/lib/errors/rethrow'
 import { dateRangeOverlapSql } from '@/lib/date/date-range-overlap'
@@ -98,6 +98,7 @@ export interface AvailableVehicleRow {
   mobileNumber: string | null
   model: string | null
   capacity: number | null
+  busyElsewhere: boolean
 }
 
 async function getCampaignDateRange(
@@ -126,10 +127,22 @@ export async function getAvailableVehicles(
   const range = await getCampaignDateRange(campaignId)
   if (!range) return []
 
-  // Vehículos ocupados: ya asignados activamente a una campaña (la actual o
-  // cualquier otra) cuyo rango se solapa con el rango de la campaña actual.
-  // Incluimos la campaña actual para que un vehículo ya asignado a ella NO
-  // reaparezca como disponible en el dropdown.
+  // Vehículos ya activos en la campaña ACTUAL: se excluyen del pool para que no
+  // reaparezcan como "disponibles" (ya están asignados aquí).
+  const inThisCampaign = await db
+    .selectDistinct({ vehicleId: campaignVehicles.vehicleId })
+    .from(campaignVehicles)
+    .where(
+      and(
+        eq(campaignVehicles.isActive, true),
+        eq(campaignVehicles.campaignId, campaignId),
+      ),
+    )
+  const inThisCampaignIds = new Set(inThisCampaign.map((r) => r.vehicleId))
+
+  // Vehículos ocupados en OTRAS campañas cuyo rango se solapa. NO se excluyen:
+  // un vehículo puede llevar personal a varias campañas el mismo día. Solo se
+  // marcan con `busyElsewhere` para mostrar un aviso informativo en el selector.
   const overlapping = await db
     .selectDistinct({ vehicleId: campaignVehicles.vehicleId })
     .from(campaignVehicles)
@@ -137,13 +150,13 @@ export async function getAvailableVehicles(
     .where(
       and(
         eq(campaignVehicles.isActive, true),
+        ne(campaignVehicles.campaignId, campaignId),
         dateRangeOverlapSql(campaigns.campaignDate, campaigns.endDate, range),
       ),
     )
+  const busyElsewhereIds = new Set(overlapping.map((r) => r.vehicleId))
 
-  const busyIds = overlapping.map((r) => r.vehicleId)
-
-  return await db
+  const rows = await db
     .select({
       id: vehicles.id,
       plate: vehicles.plate,
@@ -152,12 +165,12 @@ export async function getAvailableVehicles(
       capacity: vehicles.capacity,
     })
     .from(vehicles)
-    .where(
-      busyIds.length > 0
-        ? and(eq(vehicles.isActive, true), notInArray(vehicles.id, busyIds))
-        : eq(vehicles.isActive, true),
-    )
+    .where(eq(vehicles.isActive, true))
     .orderBy(vehicles.plate)
+
+  return rows
+    .filter((v) => !inThisCampaignIds.has(v.id))
+    .map((v) => ({ ...v, busyElsewhere: busyElsewhereIds.has(v.id) }))
 }
 
 export interface AvailableDriverRow {
@@ -165,6 +178,7 @@ export interface AvailableDriverRow {
   firstName: string
   lastName: string
   cedula: string
+  busyElsewhere: boolean
 }
 
 export async function getAvailableDrivers(
@@ -196,10 +210,9 @@ export async function getAvailableDrivers(
   if (drivers.length === 0) return []
   const driverIds = drivers.map((d) => d.id)
 
-  // Conductores ya asignados como driver en alguna campaña (incluyendo la
-  // actual) cuyo rango se solapa. El panel reinyecta al conductor actual del
-  // row al editar, así que excluirlos del pool no rompe la edición — solo
-  // evita re-asignar el mismo conductor a dos vehículos de la misma campaña.
+  // Conductores ocupados en OTRAS fuentes con rango/fecha solapada. NO se
+  // excluyen: un conductor puede mover personal a varias campañas el mismo día.
+  // Solo se marcan con `busyElsewhere` para el aviso informativo del selector.
   const otherCampaignDrivers = await db
     .selectDistinct({ driverStaffId: campaignVehicles.driverStaffId })
     .from(campaignVehicles)
@@ -207,6 +220,7 @@ export async function getAvailableDrivers(
     .where(
       and(
         eq(campaignVehicles.isActive, true),
+        ne(campaignVehicles.campaignId, campaignId),
         inArray(campaignVehicles.driverStaffId, driverIds),
         dateRangeOverlapSql(campaigns.campaignDate, campaigns.endDate, range),
       ),
@@ -245,7 +259,7 @@ export async function getAvailableDrivers(
   for (const r of sedeBusy) busy.add(r.staffId)
   for (const r of campaignBusy) busy.add(r.staffId)
 
-  return drivers.filter((d) => !busy.has(d.id))
+  return drivers.map((d) => ({ ...d, busyElsewhere: busy.has(d.id) }))
 }
 
 export async function assignVehicle(input: AssignVehicleInput): Promise<void> {

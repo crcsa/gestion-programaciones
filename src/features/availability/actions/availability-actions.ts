@@ -104,7 +104,11 @@ export async function getWeeklyAvailabilityGrid(
 
     // Batch fetch sede shifts for the week
     const shifts = await db
-      .select({ staffId: sedeShifts.staffId, shiftDate: sedeShifts.shiftDate })
+      .select({
+        staffId: sedeShifts.staffId,
+        shiftDate: sedeShifts.shiftDate,
+        shiftType: sedeShifts.shiftType,
+      })
       .from(sedeShifts)
       .where(
         and(
@@ -113,11 +117,16 @@ export async function getWeeklyAvailabilityGrid(
         ),
       )
 
-    const shiftMap = shifts.reduce<Record<string, Set<string>>>((acc, row) => {
-      const existing = acc[row.staffId] ?? new Set<string>()
-      existing.add(row.shiftDate)
-      return { ...acc, [row.staffId]: existing }
-    }, {})
+    // Mapa por (staffId, shiftDate) → shiftType. Necesitamos el tipo para
+    // pintar `servicios_transfusionales` con su propio color; el resto de
+    // turnos sede se agrupan como `en_sede`.
+    const shiftMap = shifts.reduce<Record<string, Record<string, string>>>(
+      (acc, row) => ({
+        ...acc,
+        [row.staffId]: { ...(acc[row.staffId] ?? {}), [row.shiftDate]: row.shiftType },
+      }),
+      {},
+    )
 
     // Batch fetch campaign assignments expandidos por día. Para campañas
     // multi-día usamos campaign_days (1 fila por día) en vez de
@@ -181,7 +190,7 @@ export async function getWeeklyAvailabilityGrid(
         (acc, date) => {
           const override = overrideMap[staff.id]?.[date]
           const hasCampaign = campaignMap[staff.id]?.[date]
-          const hasShift = shiftMap[staff.id]?.has(date)
+          const shiftType = shiftMap[staff.id]?.[date]
 
           let cellData: AvailabilityCellData
 
@@ -189,8 +198,13 @@ export async function getWeeklyAvailabilityGrid(
             cellData = { status: override as AvailabilityCellStatus }
           } else if (hasCampaign) {
             cellData = { status: 'en_campana', referenceCode: hasCampaign }
-          } else if (hasShift) {
-            cellData = { status: 'en_sede' }
+          } else if (shiftType) {
+            cellData = {
+              status:
+                shiftType === 'servicios_transfusionales'
+                  ? 'servicios_transfusionales'
+                  : 'en_sede',
+            }
           } else {
             cellData = { status: 'libre' }
           }

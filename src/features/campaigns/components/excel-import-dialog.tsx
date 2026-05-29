@@ -98,7 +98,7 @@ export function ExcelImportDialog({ onSuccess }: ExcelImportDialogProps) {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Importar campañas desde Excel</DialogTitle>
           </DialogHeader>
@@ -138,30 +138,30 @@ export function ExcelImportDialog({ onSuccess }: ExcelImportDialogProps) {
           )}
 
           {step === 'preview' && (
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-4">
               <p className="text-sm text-muted-foreground">
                 Se encontraron <strong>{parsedRows.length}</strong> fila(s). Revisa la vista previa antes de importar.
               </p>
 
               <div className="max-h-64 overflow-auto rounded-md border border-border text-xs">
-                <table className="w-full">
+                <table className="w-full border-collapse">
                   <thead className="bg-muted sticky top-0">
                     <tr>
                       {['Código', 'Empresa', 'Municipio', 'Fecha', 'Hora', 'Mix', 'Modalidad'].map((h) => (
-                        <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
+                        <th key={h} className="whitespace-nowrap px-3 py-2 text-left font-medium">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {parsedRows.slice(0, 50).map((row, i) => (
                       <tr key={i} className="border-t border-border">
-                        <td className="px-3 py-1.5 font-mono">{row.code || <span className="text-destructive">—</span>}</td>
+                        <td className="whitespace-nowrap px-3 py-1.5 font-mono">{row.code || <span className="text-destructive">—</span>}</td>
                         <td className="px-3 py-1.5">{row.companyName || <span className="text-destructive">—</span>}</td>
                         <td className="px-3 py-1.5">{row.municipality || <span className="text-destructive">—</span>}</td>
-                        <td className="px-3 py-1.5">{row.campaignDate}{row.endDate ? ` → ${row.endDate}` : ''}</td>
-                        <td className="px-3 py-1.5">{row.startTime ?? '—'}{row.endTime ? `–${row.endTime}` : ''}</td>
+                        <td className="whitespace-nowrap px-3 py-1.5">{row.campaignDate}{row.endDate ? ` → ${row.endDate}` : ''}</td>
+                        <td className="whitespace-nowrap px-3 py-1.5">{row.startTime ?? '—'}{row.endTime ? `–${row.endTime}` : ''}</td>
                         <td className="px-3 py-1.5">{row.size}</td>
-                        <td className="px-3 py-1.5">{row.modality}</td>
+                        <td className="whitespace-nowrap px-3 py-1.5">{row.modality}</td>
                       </tr>
                     ))}
                   </tbody>

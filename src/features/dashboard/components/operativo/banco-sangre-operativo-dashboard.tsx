@@ -22,6 +22,7 @@ const SHIFT_TYPE_LABELS: Record<string, string> = {
   diurno_completo: 'Diurno completo',
   noche: 'Noche',
   posturno: 'Posturno',
+  servicios_transfusionales: 'Servicios transfusionales',
 }
 
 interface Props {
@@ -123,8 +124,8 @@ export async function BancoSangreOperativoDashboard({ staffId }: Props) {
                     <Badge
                       variant="secondary"
                       title={
-                        shift.shiftType === 'diurno_completo'
-                          ? 'Horas efectivas (descuenta 1h de almuerzo en Diurno completo)'
+                        shift.shiftType === 'diurno_completo' || shift.shiftType === 'servicios_transfusionales'
+                          ? 'Horas efectivas (descuenta 1h de almuerzo en turnos diurnos)'
                           : 'Horas efectivas del turno'
                       }
                     >

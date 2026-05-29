@@ -1,4 +1,4 @@
-export type ShiftType = 'diurno_completo' | 'noche' | 'posturno'
+export type ShiftType = 'diurno_completo' | 'noche' | 'posturno' | 'servicios_transfusionales'
 
 export interface ShiftDefaults {
   startTime: string // 'HH:mm'
@@ -9,21 +9,56 @@ export interface ShiftDefaults {
 // Horarios base por tipo de turno. Se aplican cuando el bulk action no
 // recibe overrides explícitos. Ajustables si la operación de sede cambia.
 export const SEDE_SHIFT_DEFAULTS: Record<ShiftType, ShiftDefaults> = {
-  diurno_completo: { startTime: '07:00', endTime: '17:00', isOvernight: false },
-  noche:           { startTime: '18:00', endTime: '06:00', isOvernight: true },
-  posturno:        { startTime: '14:00', endTime: '22:00', isOvernight: false },
+  diurno_completo:           { startTime: '07:00', endTime: '17:00', isOvernight: false },
+  noche:                     { startTime: '18:00', endTime: '06:00', isOvernight: true },
+  posturno:                  { startTime: '14:00', endTime: '22:00', isOvernight: false },
+  servicios_transfusionales: { startTime: '07:00', endTime: '17:00', isOvernight: false },
 }
 
 export const SHIFT_TYPE_LABELS: Record<ShiftType, string> = {
   diurno_completo: 'Diurno Completo',
   noche: 'Noche',
   posturno: 'Posturno',
+  servicios_transfusionales: 'Servicios transfusionales',
 }
 
 export const SHIFT_TYPE_SHORT_LABELS: Record<ShiftType, string> = {
   diurno_completo: 'Diurno',
   noche: 'Noche',
   posturno: 'Posturno',
+  servicios_transfusionales: 'Serv. transf.',
+}
+
+/**
+ * Modalidad de programación de turnos en sede. Banco de sangre gestiona dos
+ * flujos separados: la sede regular (diurno/noche/posturno) y servicios
+ * transfusionales. Cada flujo se programa por separado para un mismo día (un
+ * colaborador tiene a lo sumo un turno por día, de cualquiera de las dos).
+ */
+export type SedeModality = 'sede' | 'servicios'
+
+export const SEDE_MODALITY_LABELS: Record<SedeModality, string> = {
+  sede: 'Sede regular',
+  servicios: 'Servicios transfusionales',
+}
+
+/** Tipos de turno que pertenecen a cada modalidad. Fuente única de verdad. */
+export const SHIFT_TYPES_BY_MODALITY: Record<SedeModality, ShiftType[]> = {
+  sede: ['diurno_completo', 'noche', 'posturno'],
+  servicios: ['servicios_transfusionales'],
+}
+
+export const MODALITY_BY_SHIFT_TYPE: Record<ShiftType, SedeModality> = {
+  diurno_completo: 'sede',
+  noche: 'sede',
+  posturno: 'sede',
+  servicios_transfusionales: 'servicios',
+}
+
+/** Tipo de turno por defecto al iniciar una programación de cada modalidad. */
+export const DEFAULT_SHIFT_TYPE_BY_MODALITY: Record<SedeModality, ShiftType> = {
+  sede: 'diurno_completo',
+  servicios: 'servicios_transfusionales',
 }
 
 /**
@@ -40,6 +75,7 @@ export const LUNCH_BREAK_HOURS_BY_TYPE: Record<ShiftType, number> = {
   diurno_completo: 1,
   noche: 0,
   posturno: 0,
+  servicios_transfusionales: 1,
 }
 
 /**
