@@ -6,20 +6,30 @@ import {
   type ShiftType,
 } from '@/features/sede/lib/shift-defaults'
 
+// Tipos de turno diurno que descuentan 1h de almuerzo y exigen el mínimo de
+// 8h efectivas. `servicios_transfusionales` se comporta exactamente como
+// `diurno_completo` (07:00–17:00, 9h efectivas, no pernocta).
+const MIN_HOURS_SHIFT_TYPES = ['diurno_completo', 'servicios_transfusionales'] as const
+
+function requiresMinEffectiveHours(shiftType: string): boolean {
+  return (MIN_HOURS_SHIFT_TYPES as readonly string[]).includes(shiftType)
+}
+
 /**
- * Refine compartido: turnos `diurno_completo` deben tener al menos 8h
- * efectivas (después de descontar 1h de almuerzo). Bloquear desde Zod nos da
- * un error temprano consistente create/update/bulk; el server action es
- * defensa profunda.
+ * Refine compartido: turnos diurnos (`diurno_completo` /
+ * `servicios_transfusionales`) deben tener al menos 8h efectivas (después de
+ * descontar 1h de almuerzo). Bloquear desde Zod nos da un error temprano
+ * consistente create/update/bulk; el server action es defensa profunda.
  */
 function diurnoMinHoursIssue(
   startTime: string,
   endTime: string,
   isOvernight: boolean,
+  shiftType: ShiftType,
 ): string | null {
-  const eff = effectiveShiftHours(startTime, endTime, isOvernight, 'diurno_completo')
+  const eff = effectiveShiftHours(startTime, endTime, isOvernight, shiftType)
   if (eff < MIN_EFFECTIVE_HOURS_DIURNO) {
-    return `Diurno completo debe tener al menos ${MIN_EFFECTIVE_HOURS_DIURNO}h efectivas (descontando 1h de almuerzo). Actualmente: ${eff}h.`
+    return `El turno debe tener al menos ${MIN_EFFECTIVE_HOURS_DIURNO}h efectivas (descontando 1h de almuerzo). Actualmente: ${eff}h.`
   }
   return null
 }
@@ -28,7 +38,7 @@ export const createSedeShiftSchema = z
   .object({
     staffId: z.string().uuid({ message: 'ID de colaborador no válido' }),
     shiftDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
-    shiftType: z.enum(['diurno_completo', 'noche', 'posturno'], {
+    shiftType: z.enum(['diurno_completo', 'noche', 'posturno', 'servicios_transfusionales'], {
       message: 'Tipo de turno inválido',
     }),
     startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:mm requerido'),
@@ -48,15 +58,15 @@ export const createSedeShiftSchema = z
     path: ['extraHours'],
   })
   .superRefine((d, ctx) => {
-    if (d.shiftType !== 'diurno_completo') return
-    const msg = diurnoMinHoursIssue(d.startTime, d.endTime, d.isOvernight)
+    if (!requiresMinEffectiveHours(d.shiftType)) return
+    const msg = diurnoMinHoursIssue(d.startTime, d.endTime, d.isOvernight, d.shiftType)
     if (msg) ctx.addIssue({ code: 'custom', message: msg, path: ['endTime'] })
   })
 
 export const updateSedeShiftSchema = z
   .object({
     shiftType: z
-      .enum(['diurno_completo', 'noche', 'posturno'], { message: 'Tipo de turno inválido' })
+      .enum(['diurno_completo', 'noche', 'posturno', 'servicios_transfusionales'], { message: 'Tipo de turno inválido' })
       .optional(),
     startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:mm requerido').optional(),
     endTime: z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:mm requerido').optional(),
@@ -83,7 +93,7 @@ export const updateSedeShiftSchema = z
 export const dayAssignmentItemSchema = z
   .object({
     staffId: z.string().uuid({ message: 'ID de colaborador no válido' }),
-    shiftType: z.enum(['diurno_completo', 'noche', 'posturno'], {
+    shiftType: z.enum(['diurno_completo', 'noche', 'posturno', 'servicios_transfusionales'], {
       message: 'Tipo de turno inválido',
     }),
     startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:mm requerido').optional(),
@@ -102,14 +112,14 @@ export const dayAssignmentItemSchema = z
     path: ['extraHours'],
   })
   .superRefine((d, ctx) => {
-    if (d.shiftType !== 'diurno_completo') return
+    if (!requiresMinEffectiveHours(d.shiftType)) return
     // En bulk los campos son opcionales: si no vienen, usamos los defaults del
     // tipo (07:00–17:00) — eso siempre cumple 8h. Solo evaluamos cuando el
     // caller envió tiempos custom.
     const start = d.startTime ?? SEDE_SHIFT_DEFAULTS[d.shiftType as ShiftType].startTime
     const end = d.endTime ?? SEDE_SHIFT_DEFAULTS[d.shiftType as ShiftType].endTime
     const overnight = d.isOvernight ?? SEDE_SHIFT_DEFAULTS[d.shiftType as ShiftType].isOvernight
-    const msg = diurnoMinHoursIssue(start, end, overnight)
+    const msg = diurnoMinHoursIssue(start, end, overnight, d.shiftType as ShiftType)
     if (msg) ctx.addIssue({ code: 'custom', message: msg, path: ['endTime'] })
   })
 

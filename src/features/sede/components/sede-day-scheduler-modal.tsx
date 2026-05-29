@@ -242,8 +242,8 @@ export function SedeDaySchedulerModal({
         const startTime = r.customTimes ? r.startTime : defaults.startTime
         const endTime = r.customTimes ? r.endTime : defaults.endTime
         const isOvernight = r.customTimes ? r.isOvernight : defaults.isOvernight
-        if (r.shiftType === 'diurno_completo') {
-          const eff = effectiveShiftHours(startTime, endTime, isOvernight, 'diurno_completo')
+        if (r.shiftType === 'diurno_completo' || r.shiftType === 'servicios_transfusionales') {
+          const eff = effectiveShiftHours(startTime, endTime, isOvernight, r.shiftType)
           if (eff < MIN_EFFECTIVE_HOURS_DIURNO) {
             tooShort.push(`${s.lastName}, ${s.firstName} (${eff}h efectivas)`)
             continue
@@ -262,7 +262,7 @@ export function SedeDaySchedulerModal({
 
       if (tooShort.length > 0) {
         setError(
-          `Diurno completo requiere al menos ${MIN_EFFECTIVE_HOURS_DIURNO}h efectivas ` +
+          `Los turnos diurnos requieren al menos ${MIN_EFFECTIVE_HOURS_DIURNO}h efectivas ` +
             `(descontando 1h de almuerzo). Ajusta a:\n• ${tooShort.join('\n• ')}`,
         )
         setBusy(false)
@@ -427,6 +427,7 @@ export function SedeDaySchedulerModal({
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="diurno_completo">{SHIFT_TYPE_LABELS.diurno_completo}</SelectItem>
+                              <SelectItem value="servicios_transfusionales">{SHIFT_TYPE_LABELS.servicios_transfusionales}</SelectItem>
                               <SelectItem value="noche">{SHIFT_TYPE_LABELS.noche}</SelectItem>
                               <SelectItem value="posturno">{SHIFT_TYPE_LABELS.posturno}</SelectItem>
                             </SelectContent>
@@ -547,8 +548,10 @@ export function SedeDaySchedulerModal({
  * en rojo para que el admin vea el bloqueo antes de pulsar Guardar.
  */
 function ShiftEffectiveBadge({ row }: { row: RowState }) {
+  const isDiurnoLike =
+    row.shiftType === 'diurno_completo' || row.shiftType === 'servicios_transfusionales'
   const eff = effectiveShiftHours(row.startTime, row.endTime, row.isOvernight, row.shiftType)
-  const tooShort = row.shiftType === 'diurno_completo' && eff < MIN_EFFECTIVE_HOURS_DIURNO
+  const tooShort = isDiurnoLike && eff < MIN_EFFECTIVE_HOURS_DIURNO
   const cls = tooShort
     ? 'text-destructive border-destructive/40 bg-destructive/10'
     : 'text-muted-foreground border-border bg-muted/40'
@@ -556,8 +559,8 @@ function ShiftEffectiveBadge({ row }: { row: RowState }) {
     <span
       className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-mono ${cls}`}
       title={
-        row.shiftType === 'diurno_completo'
-          ? 'Horas efectivas (descuenta 1h de almuerzo en Diurno completo)'
+        isDiurnoLike
+          ? 'Horas efectivas (descuenta 1h de almuerzo en turnos diurnos)'
           : 'Horas efectivas del turno'
       }
     >

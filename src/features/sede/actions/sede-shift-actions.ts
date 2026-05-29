@@ -40,7 +40,7 @@ export interface SedeShiftRow {
   lastName: string
   staffProfile: string
   shiftDate: string
-  shiftType: 'diurno_completo' | 'noche' | 'posturno'
+  shiftType: 'diurno_completo' | 'noche' | 'posturno' | 'servicios_transfusionales'
   startTime: string
   endTime: string
   totalHours: number
@@ -273,12 +273,13 @@ export async function updateSedeShift(id: string, data: UpdateSedeShiftInput): P
     const finalOvernight = parsed.isOvernight ?? existing.isOvernight
     const finalShiftType = (parsed.shiftType ?? existing.shiftType) as ShiftType
 
-    // Re-validar min 8h efectivas si el resultado quedaría como diurno_completo.
-    if (finalShiftType === 'diurno_completo') {
-      const eff = effectiveShiftHours(finalStart, finalEnd, finalOvernight, 'diurno_completo')
+    // Re-validar min 8h efectivas si el resultado quedaría como un turno diurno
+    // (diurno_completo o servicios_transfusionales — ambos descuentan almuerzo).
+    if (finalShiftType === 'diurno_completo' || finalShiftType === 'servicios_transfusionales') {
+      const eff = effectiveShiftHours(finalStart, finalEnd, finalOvernight, finalShiftType)
       if (eff < MIN_EFFECTIVE_HOURS_DIURNO) {
         throw new ValidationError(
-          'Diurno completo debe tener al menos 8h efectivas (descontando 1h de almuerzo).',
+          'Los turnos diurnos deben tener al menos 8h efectivas (descontando 1h de almuerzo).',
         )
       }
     }
@@ -541,7 +542,7 @@ export async function getMonthlyShiftCounts(
       const entry = byDate.get(r.shiftDate)
       if (!entry) continue
       entry.count += r.count
-      if (r.shiftType === 'diurno_completo') entry.types.diurno += r.count
+      if (r.shiftType === 'diurno_completo' || r.shiftType === 'servicios_transfusionales') entry.types.diurno += r.count
       else if (r.shiftType === 'noche') entry.types.noche += r.count
       else if (r.shiftType === 'posturno') entry.types.posturno += r.count
     }

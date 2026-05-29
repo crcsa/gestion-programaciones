@@ -18,6 +18,7 @@ const SHIFT_TYPE_LABELS: Record<string, string> = {
   diurno_completo: 'Diurno completo',
   noche: 'Noche',
   posturno: 'Posturno',
+  servicios_transfusionales: 'Servicios transfusionales',
 }
 
 const PROFILE_LABELS: Record<string, string> = {
@@ -85,8 +86,8 @@ export function SedeShiftTable({ rows, onEdit, onDelete }: SedeShiftTableProps) 
             <TableCell>{row.endTime}</TableCell>
             <TableCell
               title={
-                row.shiftType === 'diurno_completo'
-                  ? 'Horas efectivas (descuenta 1h de almuerzo en Diurno completo)'
+                row.shiftType === 'diurno_completo' || row.shiftType === 'servicios_transfusionales'
+                  ? 'Horas efectivas (descuenta 1h de almuerzo en turnos diurnos)'
                   : 'Horas efectivas del turno'
               }
             >

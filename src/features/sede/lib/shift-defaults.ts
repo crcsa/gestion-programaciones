@@ -1,4 +1,4 @@
-export type ShiftType = 'diurno_completo' | 'noche' | 'posturno'
+export type ShiftType = 'diurno_completo' | 'noche' | 'posturno' | 'servicios_transfusionales'
 
 export interface ShiftDefaults {
   startTime: string // 'HH:mm'
@@ -9,21 +9,24 @@ export interface ShiftDefaults {
 // Horarios base por tipo de turno. Se aplican cuando el bulk action no
 // recibe overrides explícitos. Ajustables si la operación de sede cambia.
 export const SEDE_SHIFT_DEFAULTS: Record<ShiftType, ShiftDefaults> = {
-  diurno_completo: { startTime: '07:00', endTime: '17:00', isOvernight: false },
-  noche:           { startTime: '18:00', endTime: '06:00', isOvernight: true },
-  posturno:        { startTime: '14:00', endTime: '22:00', isOvernight: false },
+  diurno_completo:           { startTime: '07:00', endTime: '17:00', isOvernight: false },
+  noche:                     { startTime: '18:00', endTime: '06:00', isOvernight: true },
+  posturno:                  { startTime: '14:00', endTime: '22:00', isOvernight: false },
+  servicios_transfusionales: { startTime: '07:00', endTime: '17:00', isOvernight: false },
 }
 
 export const SHIFT_TYPE_LABELS: Record<ShiftType, string> = {
   diurno_completo: 'Diurno Completo',
   noche: 'Noche',
   posturno: 'Posturno',
+  servicios_transfusionales: 'Servicios transfusionales',
 }
 
 export const SHIFT_TYPE_SHORT_LABELS: Record<ShiftType, string> = {
   diurno_completo: 'Diurno',
   noche: 'Noche',
   posturno: 'Posturno',
+  servicios_transfusionales: 'Serv. transf.',
 }
 
 /**
@@ -40,6 +43,7 @@ export const LUNCH_BREAK_HOURS_BY_TYPE: Record<ShiftType, number> = {
   diurno_completo: 1,
   noche: 0,
   posturno: 0,
+  servicios_transfusionales: 1,
 }
 
 /**
