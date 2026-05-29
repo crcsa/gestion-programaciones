@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Calendar, Sparkles, Save, Pencil } from 'lucide-react'
+import { Calendar, Sparkles, Save, Pencil, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,6 +18,7 @@ import {
   computeTimelineDefaults,
   getNormalDayHours,
 } from '../lib/timeline-defaults'
+import { getTimelineScheduleWarnings } from '../lib/timeline-schedule-warnings'
 import type { CampaignTimelineEvent } from '@/lib/db/schema/campaign-timeline'
 
 interface TimelineProgrammingFormProps {
@@ -25,6 +26,7 @@ interface TimelineProgrammingFormProps {
   campaignDate: string
   startTime: string | null
   endTime: string | null
+  isOvernight?: boolean
   existingEvents: CampaignTimelineEvent[]
 }
 
@@ -33,6 +35,7 @@ export function TimelineProgrammingForm({
   campaignDate,
   startTime,
   endTime,
+  isOvernight = false,
   existingEvents,
 }: TimelineProgrammingFormProps) {
   const [events, setEvents] = useState<CampaignTimelineEvent[]>(existingEvents)
@@ -58,6 +61,22 @@ export function TimelineProgrammingForm({
     for (const e of events) m.set(e.eventType as TimelineEventType, e)
     return m
   }, [events])
+
+  // Advertencias NO bloqueantes: eventos fuera de la ventana del día o cuya
+  // programación abarca más horas de las planificadas. `scheduledTime` es un
+  // timestamp; lo normalizamos a 'HH:mm' para el comparador puro.
+  const scheduleWarnings = useMemo(() => {
+    if (!startTime || !endTime) return []
+    return getTimelineScheduleWarnings({
+      dayStart: startTime,
+      dayEnd: endTime,
+      isOvernight,
+      events: events.map((e) => ({
+        eventType: e.eventType,
+        scheduledTime: e.scheduledTime ? toTimeInput(e.scheduledTime) : null,
+      })),
+    })
+  }, [events, startTime, endTime, isOvernight])
 
   // Eventos sin hora programada aún → candidatos a recibir la sugerida.
   const pendingTypes = TIMELINE_EVENT_ORDER.filter(
@@ -148,6 +167,16 @@ export function TimelineProgrammingForm({
       {info && (
         <div className="rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
           {info}
+        </div>
+      )}
+      {scheduleWarnings.length > 0 && (
+        <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+          <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+          <ul className="space-y-0.5">
+            {scheduleWarnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
         </div>
       )}
 
