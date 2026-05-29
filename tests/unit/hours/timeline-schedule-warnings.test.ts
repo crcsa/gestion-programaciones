@@ -1,60 +1,84 @@
 import { describe, it, expect } from 'vitest'
 import { getTimelineScheduleWarnings } from '@/features/hours/lib/timeline-schedule-warnings'
 
-const DAY = { dayStart: '07:00', dayEnd: '17:00', isOvernight: false }
+// Día Martes–Viernes: 9.5h totales planificadas.
+const PLANNED_TUE_FRI = 9.5
 
 describe('getTimelineScheduleWarnings', () => {
-  it('returns no warnings when all events fall within the day window', () => {
+  it('no advierte cuando todos los eventos caen dentro de 07:00–17:00 y dentro del lapso', () => {
     const result = getTimelineScheduleWarnings({
-      ...DAY,
+      plannedHours: PLANNED_TUE_FRI,
       events: [
-        { eventType: 'inicio', scheduledTime: '07:30' },
+        { eventType: 'inicio', scheduledTime: '08:00' },
         { eventType: 'fin', scheduledTime: '16:30' },
       ],
     })
     expect(result).toEqual([])
   })
 
-  it('warns when an event is scheduled before dayStart', () => {
+  it('advierte cuando un evento es anterior a las 07:00', () => {
     const result = getTimelineScheduleWarnings({
-      ...DAY,
+      plannedHours: PLANNED_TUE_FRI,
       events: [
-        { eventType: 'inicio', scheduledTime: '06:00' },
+        { eventType: 'salida', scheduledTime: '06:00' },
         { eventType: 'fin', scheduledTime: '15:00' },
       ],
     })
-    expect(result.some((w) => w.includes('fuera del horario del día'))).toBe(true)
-    expect(result[0]).toContain('07:00–17:00')
+    expect(result.some((w) => w.includes('fuera del horario laboral'))).toBe(true)
+    expect(result.find((w) => w.includes('fuera del horario laboral'))).toContain('07:00–17:00')
   })
 
-  it('warns when an event is scheduled after dayEnd', () => {
+  it('advierte cuando un evento es posterior a las 17:00', () => {
     const result = getTimelineScheduleWarnings({
-      ...DAY,
+      plannedHours: PLANNED_TUE_FRI,
       events: [
         { eventType: 'inicio', scheduledTime: '08:00' },
-        { eventType: 'fin', scheduledTime: '18:00' },
+        { eventType: 'fin', scheduledTime: '19:00' },
       ],
     })
-    expect(result.some((w) => w.includes('fuera del horario del día'))).toBe(true)
+    expect(result.some((w) => w.includes('fuera del horario laboral'))).toBe(true)
   })
 
-  it('warns when the span exceeds the planned day hours', () => {
-    // Día planificado de 8h (08:00–16:00). El span de eventos abarca 10h.
+  it('advierte cuando el lapso supera las horas planificadas del día', () => {
+    // 07:00 → 19:00 = 12h, supera las 9.5h planificadas (Mar–Vie).
     const result = getTimelineScheduleWarnings({
-      dayStart: '08:00',
-      dayEnd: '16:00',
-      isOvernight: false,
+      plannedHours: PLANNED_TUE_FRI,
+      events: [
+        { eventType: 'salida', scheduledTime: '07:00' },
+        { eventType: 'fin', scheduledTime: '19:00' },
+      ],
+    })
+    expect(result.some((w) => w.includes('supera las 9.5 h planificadas'))).toBe(true)
+    expect(result.some((w) => w.includes('abarca 12 h'))).toBe(true)
+  })
+
+  it('usa las horas del día (Lunes 8.5h) como referencia del lapso', () => {
+    // 07:00 → 16:00 = 9h, supera las 8.5h planificadas del lunes.
+    const result = getTimelineScheduleWarnings({
+      plannedHours: 8.5,
+      events: [
+        { eventType: 'salida', scheduledTime: '07:00' },
+        { eventType: 'fin', scheduledTime: '16:00' },
+      ],
+    })
+    expect(result.some((w) => w.includes('supera las 8.5 h planificadas'))).toBe(true)
+  })
+
+  it('no evalúa el lapso cuando no hay regla canónica del día (plannedHours = 0)', () => {
+    // Sábado/Domingo: plannedHours 0 → no se compara el lapso, pero sí el horario.
+    const result = getTimelineScheduleWarnings({
+      plannedHours: 0,
       events: [
         { eventType: 'inicio', scheduledTime: '08:00' },
-        { eventType: 'extra', scheduledTime: '18:00' },
+        { eventType: 'fin', scheduledTime: '16:00' },
       ],
     })
-    expect(result.some((w) => w.includes('supera las 8 h planificadas'))).toBe(true)
+    expect(result).toEqual([])
   })
 
-  it('ignores events with null scheduledTime', () => {
+  it('ignora eventos sin hora programada', () => {
     const result = getTimelineScheduleWarnings({
-      ...DAY,
+      plannedHours: PLANNED_TUE_FRI,
       events: [
         { eventType: 'inicio', scheduledTime: '08:00' },
         { eventType: 'pendiente', scheduledTime: null },
@@ -63,38 +87,9 @@ describe('getTimelineScheduleWarnings', () => {
     expect(result).toEqual([])
   })
 
-  it('handles an overnight day without false positives for valid events', () => {
-    // Día pernocta: 20:00 → 06:00 del día siguiente (10h).
+  it('no advierte cuando no hay eventos programados', () => {
     const result = getTimelineScheduleWarnings({
-      dayStart: '20:00',
-      dayEnd: '06:00',
-      isOvernight: true,
-      events: [
-        { eventType: 'inicio', scheduledTime: '20:30' },
-        { eventType: 'media', scheduledTime: '23:00' },
-        { eventType: 'fin', scheduledTime: '05:30' },
-      ],
-    })
-    expect(result).toEqual([])
-  })
-
-  it('warns for an event truly outside an overnight window', () => {
-    // Día pernocta 20:00 → 06:00 (10h). 10:00 cae fuera (14h tras el inicio).
-    const result = getTimelineScheduleWarnings({
-      dayStart: '20:00',
-      dayEnd: '06:00',
-      isOvernight: true,
-      events: [
-        { eventType: 'inicio', scheduledTime: '20:00' },
-        { eventType: 'tarde', scheduledTime: '10:00' },
-      ],
-    })
-    expect(result.some((w) => w.includes('fuera del horario del día'))).toBe(true)
-  })
-
-  it('returns no warnings when there are no scheduled events at all', () => {
-    const result = getTimelineScheduleWarnings({
-      ...DAY,
+      plannedHours: PLANNED_TUE_FRI,
       events: [
         { eventType: 'a', scheduledTime: null },
         { eventType: 'b', scheduledTime: null },

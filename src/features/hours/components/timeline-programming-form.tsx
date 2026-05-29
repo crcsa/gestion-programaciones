@@ -26,7 +26,6 @@ interface TimelineProgrammingFormProps {
   campaignDate: string
   startTime: string | null
   endTime: string | null
-  isOvernight?: boolean
   existingEvents: CampaignTimelineEvent[]
 }
 
@@ -35,7 +34,6 @@ export function TimelineProgrammingForm({
   campaignDate,
   startTime,
   endTime,
-  isOvernight = false,
   existingEvents,
 }: TimelineProgrammingFormProps) {
   const [events, setEvents] = useState<CampaignTimelineEvent[]>(existingEvents)
@@ -62,21 +60,19 @@ export function TimelineProgrammingForm({
     return m
   }, [events])
 
-  // Advertencias NO bloqueantes: eventos fuera de la ventana del día o cuya
-  // programación abarca más horas de las planificadas. `scheduledTime` es un
-  // timestamp; lo normalizamos a 'HH:mm' para el comparador puro.
+  // Advertencias NO bloqueantes: eventos fuera de la jornada laboral fija
+  // (07:00–17:00) o cuyo lapso supera las horas TOTALES planificadas del día
+  // de la semana (Lun 8.5h, Mar–Vie 9.5h). `scheduledTime` es un timestamp; lo
+  // normalizamos a 'HH:mm' para el comparador puro.
   const scheduleWarnings = useMemo(() => {
-    if (!startTime || !endTime) return []
     return getTimelineScheduleWarnings({
-      dayStart: startTime,
-      dayEnd: endTime,
-      isOvernight,
+      plannedHours: normalDay.total,
       events: events.map((e) => ({
         eventType: e.eventType,
         scheduledTime: e.scheduledTime ? toTimeInput(e.scheduledTime) : null,
       })),
     })
-  }, [events, startTime, endTime, isOvernight])
+  }, [events, normalDay.total])
 
   // Eventos sin hora programada aún → candidatos a recibir la sugerida.
   const pendingTypes = TIMELINE_EVENT_ORDER.filter(

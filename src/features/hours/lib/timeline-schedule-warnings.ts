@@ -1,17 +1,26 @@
 /**
  * Validación NO bloqueante de la línea de tiempo programada de un día de campaña.
  *
- * Compara las horas programadas de cada evento (`scheduledTime`) contra la
- * ventana horaria del día de campaña (`dayStart`–`dayEnd`, con convención de
- * pernocta cuando `isOvernight`). Devuelve mensajes de advertencia en español
- * (Colombia); un array vacío significa que no hay nada que advertir.
+ * Dos reglas, ambas contra referencias FIJAS del régimen de campañas (no contra
+ * el horario específico de la campaña):
  *
- * Función PURA: sin efectos secundarios, sin mutación, determinista.
+ *  1. Fuera de horario: los eventos deben caer dentro de la jornada laboral
+ *     estándar 07:00–17:00. Cualquier evento antes de las 07:00 o después de
+ *     las 17:00 dispara la advertencia.
+ *  2. Horas planificadas: el lapso entre el primer y el último evento no debería
+ *     superar las horas TOTALES planificadas para ese día de la semana
+ *     (Lunes 8.5h, Martes–Viernes 9.5h — ver `getNormalDayHours`). Este total
+ *     coincide con el lapso canónico salida_sede→fin de un día normal.
+ *
+ * Devuelve mensajes de advertencia en español (Colombia); array vacío = nada
+ * que advertir. Función PURA: sin efectos secundarios, sin mutación.
  */
 
 const MINUTES_PER_HOUR = 60
-const HOURS_PER_DAY = 24
-const MINUTES_PER_DAY = HOURS_PER_DAY * MINUTES_PER_HOUR
+
+/** Jornada laboral estándar para campañas (referencia fija de la operación). */
+export const WORKDAY_START = '07:00'
+export const WORKDAY_END = '17:00'
 
 export interface TimelineScheduleEvent {
   eventType?: string
@@ -19,10 +28,9 @@ export interface TimelineScheduleEvent {
 }
 
 export interface TimelineScheduleInput {
-  dayStart: string
-  dayEnd: string
-  isOvernight: boolean
   events: TimelineScheduleEvent[]
+  /** Horas TOTALES planificadas del día según el día de la semana (0 = sin regla). */
+  plannedHours: number
 }
 
 /** Convierte 'HH:mm' a minutos desde medianoche; null si el formato es inválido. */
@@ -35,52 +43,39 @@ function toMinutes(value: string): number | null {
   return h * MINUTES_PER_HOUR + m
 }
 
-/** Minutos planificados del día respetando la convención de pernocta. */
-function plannedSpanMinutes(startMins: number, endMins: number, isOvernight: boolean): number {
-  let span = endMins - startMins
-  if (span < 0 || isOvernight) span += MINUTES_PER_DAY
-  return span
-}
-
-/** Posición de un evento dentro de la ventana (0 = inicio del día). */
-function offsetFromStart(eventMins: number, startMins: number): number {
-  let offset = eventMins - startMins
-  if (offset < 0) offset += MINUTES_PER_DAY
-  return offset
-}
-
 function formatHours(minutes: number): string {
   const hours = minutes / MINUTES_PER_HOUR
   return Number.isInteger(hours) ? String(hours) : hours.toFixed(1)
 }
 
 export function getTimelineScheduleWarnings(input: TimelineScheduleInput): string[] {
-  const startMins = toMinutes(input.dayStart)
-  const endMins = toMinutes(input.dayEnd)
-  if (startMins === null || endMins === null) return []
+  const dayStart = toMinutes(WORKDAY_START) as number
+  const dayEnd = toMinutes(WORKDAY_END) as number
 
-  const offsets = input.events
+  const times = input.events
     .map((e) => (e.scheduledTime ? toMinutes(e.scheduledTime) : null))
     .filter((m): m is number => m !== null)
-    .map((m) => offsetFromStart(m, startMins))
 
-  if (offsets.length === 0) return []
+  if (times.length === 0) return []
 
-  const span = plannedSpanMinutes(startMins, endMins, input.isOvernight)
   const warnings: string[] = []
 
-  const outsideWindow = offsets.some((offset) => offset > span)
-  if (outsideWindow) {
+  const outsideWorkday = times.some((m) => m < dayStart || m > dayEnd)
+  if (outsideWorkday) {
     warnings.push(
-      `Hay eventos programados fuera del horario del día (${input.dayStart}–${input.dayEnd}).`,
+      `Hay eventos programados fuera del horario laboral (${WORKDAY_START}–${WORKDAY_END}).`,
     )
   }
 
-  const eventSpan = Math.max(...offsets) - Math.min(...offsets)
-  if (eventSpan > span) {
-    warnings.push(
-      `La programación abarca ${formatHours(eventSpan)} h, supera las ${formatHours(span)} h planificadas del día.`,
-    )
+  // Solo evaluamos el lapso si hay una regla canónica para el día (Lun–Vie).
+  if (input.plannedHours > 0) {
+    const spanMinutes = Math.max(...times) - Math.min(...times)
+    const plannedMinutes = input.plannedHours * MINUTES_PER_HOUR
+    if (spanMinutes > plannedMinutes) {
+      warnings.push(
+        `La programación abarca ${formatHours(spanMinutes)} h, supera las ${formatHours(plannedMinutes)} h planificadas del día.`,
+      )
+    }
   }
 
   return warnings

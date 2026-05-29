@@ -247,18 +247,8 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
                 <TimelineProgrammingForm
                   campaignId={campaign.id}
                   campaignDate={campaign.campaignDate}
-                  startTime={
-                    campaign.days.find((d) => d.dayDate === campaign.campaignDate)?.startTime ??
-                    campaign.startTime
-                  }
-                  endTime={
-                    campaign.days.find((d) => d.dayDate === campaign.campaignDate)?.endTime ??
-                    campaign.endTime
-                  }
-                  isOvernight={
-                    campaign.days.find((d) => d.dayDate === campaign.campaignDate)?.isOvernight ??
-                    false
-                  }
+                  startTime={campaign.startTime}
+                  endTime={campaign.endTime}
                   existingEvents={timelineEvents}
                 />
               </section>
