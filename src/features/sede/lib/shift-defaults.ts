@@ -30,6 +30,38 @@ export const SHIFT_TYPE_SHORT_LABELS: Record<ShiftType, string> = {
 }
 
 /**
+ * Modalidad de programación de turnos en sede. Banco de sangre gestiona dos
+ * flujos separados: la sede regular (diurno/noche/posturno) y servicios
+ * transfusionales. Cada flujo se programa por separado para un mismo día (un
+ * colaborador tiene a lo sumo un turno por día, de cualquiera de las dos).
+ */
+export type SedeModality = 'sede' | 'servicios'
+
+export const SEDE_MODALITY_LABELS: Record<SedeModality, string> = {
+  sede: 'Sede regular',
+  servicios: 'Servicios transfusionales',
+}
+
+/** Tipos de turno que pertenecen a cada modalidad. Fuente única de verdad. */
+export const SHIFT_TYPES_BY_MODALITY: Record<SedeModality, ShiftType[]> = {
+  sede: ['diurno_completo', 'noche', 'posturno'],
+  servicios: ['servicios_transfusionales'],
+}
+
+export const MODALITY_BY_SHIFT_TYPE: Record<ShiftType, SedeModality> = {
+  diurno_completo: 'sede',
+  noche: 'sede',
+  posturno: 'sede',
+  servicios_transfusionales: 'servicios',
+}
+
+/** Tipo de turno por defecto al iniciar una programación de cada modalidad. */
+export const DEFAULT_SHIFT_TYPE_BY_MODALITY: Record<SedeModality, ShiftType> = {
+  sede: 'diurno_completo',
+  servicios: 'servicios_transfusionales',
+}
+
+/**
  * Horas de almuerzo descontadas por tipo de turno. La jornada legal colombiana
  * (44h/semana) exige 1h de almuerzo en jornadas diurnas continuas ≥ 6h.
  * Noche y posturno no tienen almuerzo formal en este modelo.

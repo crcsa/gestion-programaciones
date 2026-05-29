@@ -26,9 +26,13 @@ import { SedeWarningsDialog, type StaffWarningGroup } from './sede-warnings-dial
 import {
   SEDE_SHIFT_DEFAULTS,
   SHIFT_TYPE_LABELS,
+  SEDE_MODALITY_LABELS,
+  MODALITY_BY_SHIFT_TYPE,
+  DEFAULT_SHIFT_TYPE_BY_MODALITY,
   effectiveShiftHours,
   MIN_EFFECTIVE_HOURS_DIURNO,
   type ShiftType,
+  type SedeModality,
 } from '@/features/sede/lib/shift-defaults'
 import { STAFF_PROFILE_LABELS, type StaffProfile } from '@/features/staff/lib/constants'
 import type {
@@ -43,6 +47,7 @@ interface SedeDaySchedulerModalProps {
   shiftDate: string
   existing: SedeShiftRow[]
   staffList: StaffListItem[]
+  modality: SedeModality
   onSaved: () => void
 }
 
@@ -85,21 +90,36 @@ export function SedeDaySchedulerModal({
   shiftDate,
   existing,
   staffList,
+  modality,
   onSaved,
 }: SedeDaySchedulerModalProps) {
-  // Estado inicial: por cada staff de staffList, marcado si tiene shift previo.
-  // Defensa profunda: solo hidratamos rows para staff QUE ESTÁ en staffList
-  // (mismo scope del caller). Si `existing` trae filas para staff de otra
-  // área (no debería tras el filtro server-side), las ignoramos para que el
-  // conteo "X seleccionados" y los upserts no incluyan staff invisible.
+  const fallbackType = DEFAULT_SHIFT_TYPE_BY_MODALITY[modality]
+
+  // Mapa de colaboradores que YA tienen un turno de la OTRA modalidad ese día.
+  // Un turno por persona/día: no se les puede programar aquí sin quitar antes
+  // el de la otra modalidad, así que se muestran deshabilitados con la nota.
+  const otherModalityByStaff = useMemo(() => {
+    const map = new Map<string, SedeModality>()
+    for (const e of existing) {
+      const mod = MODALITY_BY_SHIFT_TYPE[e.shiftType]
+      if (mod !== modality) map.set(e.staffId, mod)
+    }
+    return map
+  }, [existing, modality])
+
+  // Estado inicial: por cada staff de staffList, marcado si tiene shift previo
+  // DE ESTA MODALIDAD. Defensa profunda: solo hidratamos rows para staff QUE
+  // ESTÁ en staffList (mismo scope del caller). Los turnos de la otra modalidad
+  // no se hidratan (se gestionan desde su propio flujo).
   const initialState = useMemo(() => {
     const visibleIds = new Set(staffList.map((s) => s.id))
     const map = new Map<string, RowState>()
     for (const s of staffList) {
-      map.set(s.id, defaultRow())
+      map.set(s.id, defaultRow(fallbackType))
     }
     for (const e of existing) {
       if (!visibleIds.has(e.staffId)) continue
+      if (MODALITY_BY_SHIFT_TYPE[e.shiftType] !== modality) continue
       const def = SEDE_SHIFT_DEFAULTS[e.shiftType]
       const customTimes = e.startTime !== def.startTime || e.endTime !== def.endTime
       map.set(e.staffId, {
@@ -113,7 +133,7 @@ export function SedeDaySchedulerModal({
       })
     }
     return map
-  }, [staffList, existing])
+  }, [staffList, existing, modality, fallbackType])
 
   const [rows, setRows] = useState<Map<string, RowState>>(initialState)
   const [search, setSearch] = useState('')
@@ -155,7 +175,7 @@ export function SedeDaySchedulerModal({
 
   function updateRow(staffId: string, patch: Partial<RowState>) {
     setRows((prev) => {
-      const current = prev.get(staffId) ?? defaultRow()
+      const current = prev.get(staffId) ?? defaultRow(fallbackType)
       const next = new Map(prev)
       next.set(staffId, { ...current, ...patch })
       return next
@@ -164,7 +184,7 @@ export function SedeDaySchedulerModal({
 
   function handleShiftTypeChange(staffId: string, shiftType: ShiftType) {
     setRows((prev) => {
-      const current = prev.get(staffId) ?? defaultRow()
+      const current = prev.get(staffId) ?? defaultRow(fallbackType)
       const next = new Map(prev)
       // Si no tiene customTimes, refrescar a defaults del nuevo tipo.
       if (!current.customTimes) {
@@ -187,7 +207,7 @@ export function SedeDaySchedulerModal({
     setRows((prev) => {
       const next = new Map(prev)
       for (const s of filteredStaff) {
-        const current = next.get(s.id) ?? defaultRow()
+        const current = next.get(s.id) ?? defaultRow(fallbackType)
         if (!current.selected) continue // sólo ajusta a los ya seleccionados
         next.set(s.id, {
           ...current,
@@ -206,7 +226,7 @@ export function SedeDaySchedulerModal({
     setRows((prev) => {
       const next = new Map(prev)
       for (const s of filteredStaff) {
-        const current = next.get(s.id) ?? defaultRow()
+        const current = next.get(s.id) ?? defaultRow(fallbackType)
         next.set(s.id, { ...current, selected: false })
       }
       return next
@@ -237,6 +257,9 @@ export function SedeDaySchedulerModal({
       for (const s of staffList) {
         const r = rows.get(s.id)
         if (!r?.selected) continue
+        // Defensa: nunca enviar staff que ya tiene turno de la otra modalidad
+        // ese día (la UI los deshabilita, pero blindamos por si acaso).
+        if (otherModalityByStaff.has(s.id)) continue
         const staffId = s.id
         const defaults = SEDE_SHIFT_DEFAULTS[r.shiftType]
         const startTime = r.customTimes ? r.startTime : defaults.startTime
@@ -308,7 +331,7 @@ export function SedeDaySchedulerModal({
         }
       }
 
-      const res = await bulkUpsertDaySedeShifts({ shiftDate, assignments })
+      const res = await bulkUpsertDaySedeShifts({ shiftDate, modality, assignments })
       toast.success(
         `Programación guardada: ${res.upserted} turno${res.upserted === 1 ? '' : 's'}${res.removed > 0 ? `, ${res.removed} removido${res.removed === 1 ? '' : 's'}` : ''}`,
       )
@@ -344,10 +367,24 @@ export function SedeDaySchedulerModal({
         style={{ maxWidth: 'min(48rem, calc(100vw - 2rem))', width: '100%' }}
       >
         <DialogHeader>
-          <DialogTitle>Programar turnos — {formatDayHeader(shiftDate)}</DialogTitle>
+          <DialogTitle>
+            {SEDE_MODALITY_LABELS[modality]} — {formatDayHeader(shiftDate)}
+          </DialogTitle>
           <DialogDescription>
-            Marca a los colaboradores que estarán en sede ese día. Por defecto quedan en{' '}
-            <strong>Diurno Completo</strong>; ajusta el tipo o el horario por persona si aplica.
+            {modality === 'servicios' ? (
+              <>
+                Marca a los colaboradores en <strong>Servicios transfusionales</strong> ese día
+                (07:00–17:00, 9h efectivas); ajusta el horario por persona si aplica. Solo afecta
+                esta modalidad: los turnos de sede regular del día no se modifican.
+              </>
+            ) : (
+              <>
+                Marca a los colaboradores que estarán en sede ese día. Por defecto quedan en{' '}
+                <strong>Diurno Completo</strong>; ajusta el tipo o el horario por persona si aplica.
+                Solo afecta esta modalidad: los turnos de servicios transfusionales del día no se
+                modifican.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -359,18 +396,20 @@ export function SedeDaySchedulerModal({
             className="h-9 flex-1 min-w-0"
           />
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={markAllDiurno}
-              className="gap-1"
-              disabled={selectedCount === 0}
-              title="Aplica 'Diurno Completo' a los colaboradores ya seleccionados"
-            >
-              <Sparkles className="size-3.5" />
-              Diurno a seleccionados
-            </Button>
+            {modality === 'sede' && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={markAllDiurno}
+                className="gap-1"
+                disabled={selectedCount === 0}
+                title="Aplica 'Diurno Completo' a los colaboradores ya seleccionados"
+              >
+                <Sparkles className="size-3.5" />
+                Diurno a seleccionados
+              </Button>
+            )}
             <Button type="button" size="sm" variant="ghost" onClick={clearAllVisible} className="gap-1">
               <X className="size-3.5" />
               Desmarcar
@@ -390,21 +429,23 @@ export function SedeDaySchedulerModal({
             </p>
           ) : (
             filteredStaff.map((s) => {
-              const row = rows.get(s.id) ?? defaultRow()
+              const row = rows.get(s.id) ?? defaultRow(fallbackType)
               const isExpanded = expandedStaffId === s.id
+              const blockedBy = otherModalityByStaff.get(s.id)
               return (
                 <div key={s.id} className="p-3 flex flex-col gap-2">
                   <div className="flex items-center gap-3 min-w-0">
                     <input
                       type="checkbox"
                       id={`chk-${s.id}`}
-                      checked={row.selected}
+                      checked={row.selected && !blockedBy}
+                      disabled={!!blockedBy}
                       onChange={(e) => updateRow(s.id, { selected: e.target.checked })}
-                      className="h-4 w-4 rounded border-input shrink-0"
+                      className="h-4 w-4 rounded border-input shrink-0 disabled:opacity-50"
                     />
                     <Label
                       htmlFor={`chk-${s.id}`}
-                      className="flex-1 min-w-0 cursor-pointer text-sm font-normal"
+                      className={`flex-1 min-w-0 text-sm font-normal ${blockedBy ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                     >
                       <span className="font-medium">
                         {s.lastName}, {s.firstName}
@@ -412,27 +453,37 @@ export function SedeDaySchedulerModal({
                       <span className="text-muted-foreground ml-1.5 text-xs">
                         ({STAFF_PROFILE_LABELS[s.staffProfile as StaffProfile] ?? s.staffProfile})
                       </span>
+                      {blockedBy && (
+                        <span className="ml-1.5 text-xs text-amber-600 dark:text-amber-400">
+                          · Ya en {SEDE_MODALITY_LABELS[blockedBy]} ese día
+                        </span>
+                      )}
                     </Label>
-                    {row.selected && (
+                    {row.selected && !blockedBy && (
                       <>
-                        <div className="w-40 shrink-0">
-                          <Select
-                            value={row.shiftType}
-                            onValueChange={(v) =>
-                              handleShiftTypeChange(s.id, (v ?? 'diurno_completo') as ShiftType)
-                            }
-                          >
-                            <SelectTrigger className="h-8 w-full text-xs">
-                              <SelectValue>{SHIFT_TYPE_LABELS[row.shiftType]}</SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="diurno_completo">{SHIFT_TYPE_LABELS.diurno_completo}</SelectItem>
-                              <SelectItem value="servicios_transfusionales">{SHIFT_TYPE_LABELS.servicios_transfusionales}</SelectItem>
-                              <SelectItem value="noche">{SHIFT_TYPE_LABELS.noche}</SelectItem>
-                              <SelectItem value="posturno">{SHIFT_TYPE_LABELS.posturno}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        {modality === 'sede' ? (
+                          <div className="w-40 shrink-0">
+                            <Select
+                              value={row.shiftType}
+                              onValueChange={(v) =>
+                                handleShiftTypeChange(s.id, (v ?? fallbackType) as ShiftType)
+                              }
+                            >
+                              <SelectTrigger className="h-8 w-full text-xs">
+                                <SelectValue>{SHIFT_TYPE_LABELS[row.shiftType]}</SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="diurno_completo">{SHIFT_TYPE_LABELS.diurno_completo}</SelectItem>
+                                <SelectItem value="noche">{SHIFT_TYPE_LABELS.noche}</SelectItem>
+                                <SelectItem value="posturno">{SHIFT_TYPE_LABELS.posturno}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : (
+                          <span className="w-40 shrink-0 text-xs text-muted-foreground">
+                            {SHIFT_TYPE_LABELS.servicios_transfusionales}
+                          </span>
+                        )}
                         <ShiftEffectiveBadge row={row} />
                         <Button
                           type="button"

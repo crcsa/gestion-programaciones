@@ -386,6 +386,7 @@ describe("bulkUpsertDaySedeShifts", () => {
 
     const result = await bulkUpsertDaySedeShifts({
       shiftDate: date,
+      modality: "sede",
       assignments: [
         { staffId: staffA, shiftType: "diurno_completo" },
         { staffId: staffB, shiftType: "noche" },
@@ -406,15 +407,16 @@ describe("bulkUpsertDaySedeShifts", () => {
 
   it("remueve staff que ya no está en el nuevo roster y mantiene los compartidos", async () => {
     mockDb.select = vi.fn(() => makeChain([
-      { id: "shift-a", staffId: staffA },
-      { id: "shift-b", staffId: staffB },
-      { id: "shift-c", staffId: staffC },
+      { id: "shift-a", staffId: staffA, shiftType: "diurno_completo" },
+      { id: "shift-b", staffId: staffB, shiftType: "diurno_completo" },
+      { id: "shift-c", staffId: staffC, shiftType: "diurno_completo" },
     ]))
     mockDb.insert = vi.fn(() => makeChain([]))
     mockDb.delete = vi.fn(() => makeChain([]))
 
     const result = await bulkUpsertDaySedeShifts({
       shiftDate: date,
+      modality: "sede",
       assignments: [
         { staffId: staffB, shiftType: "diurno_completo" },
         { staffId: staffC, shiftType: "diurno_completo" },
@@ -426,6 +428,45 @@ describe("bulkUpsertDaySedeShifts", () => {
     expect(mockDb.delete).toHaveBeenCalledTimes(1)
   })
 
+  it("solo remueve turnos de la modalidad programada (no toca la otra)", async () => {
+    // staffA tiene servicios transfusionales ese día; programamos SEDE con
+    // staffB. El de servicios (staffA) NO debe contarse para remoción.
+    mockDb.select = vi.fn(() => makeChain([
+      { id: "shift-a", staffId: staffA, shiftType: "servicios_transfusionales" },
+      { id: "shift-b", staffId: staffB, shiftType: "diurno_completo" },
+    ]))
+    mockDb.insert = vi.fn(() => makeChain([]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    const result = await bulkUpsertDaySedeShifts({
+      shiftDate: date,
+      modality: "sede",
+      assignments: [{ staffId: staffB, shiftType: "diurno_completo" }],
+    })
+
+    // staffB ya estaba (se mantiene), staffA es de otra modalidad → no se remueve.
+    expect(result.upserted).toBe(1)
+    expect(result.removed).toBe(0)
+    expect(mockDb.delete).not.toHaveBeenCalled()
+  })
+
+  it("bloquea si un colaborador ya tiene turno de la otra modalidad ese día", async () => {
+    // staffA tiene servicios transfusionales; intentamos programarlo en SEDE.
+    mockDb.select = vi.fn(() => makeChain([
+      { id: "shift-a", staffId: staffA, shiftType: "servicios_transfusionales" },
+    ]))
+    mockDb.insert = vi.fn(() => makeChain([]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    await expect(
+      bulkUpsertDaySedeShifts({
+        shiftDate: date,
+        modality: "sede",
+        assignments: [{ staffId: staffA, shiftType: "diurno_completo" }],
+      }),
+    ).rejects.toThrow(/otra modalidad|Servicios transfusionales|un turno por persona/i)
+  })
+
   it("respeta override de start/end y isOvernight cuando se proveen", async () => {
     mockDb.select = vi.fn(() => makeChain([]))
     const insertChain = makeChain([])
@@ -435,6 +476,7 @@ describe("bulkUpsertDaySedeShifts", () => {
 
     await bulkUpsertDaySedeShifts({
       shiftDate: date,
+      modality: "sede",
       assignments: [
         {
           staffId: staffA,
@@ -455,6 +497,7 @@ describe("bulkUpsertDaySedeShifts", () => {
     await expect(
       bulkUpsertDaySedeShifts({
         shiftDate: date,
+        modality: "sede",
         assignments: [
           { staffId: staffA, shiftType: "diurno_completo" },
           { staffId: staffA, shiftType: "noche" },
@@ -467,6 +510,7 @@ describe("bulkUpsertDaySedeShifts", () => {
     await expect(
       bulkUpsertDaySedeShifts({
         shiftDate: "no-date",
+        modality: "sede",
         assignments: [],
       }),
     ).rejects.toThrow(/inválidos/)
@@ -476,7 +520,7 @@ describe("bulkUpsertDaySedeShifts", () => {
     vi.mocked(requireAccess).mockRejectedValueOnce(new Error("No tienes permiso para realizar esta accion."))
 
     await expect(
-      bulkUpsertDaySedeShifts({ shiftDate: date, assignments: [] }),
+      bulkUpsertDaySedeShifts({ shiftDate: date, modality: "sede", assignments: [] }),
     ).rejects.toThrow("permiso")
   })
 })

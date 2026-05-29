@@ -125,6 +125,9 @@ export const dayAssignmentItemSchema = z
 
 export const bulkUpsertDayShiftsSchema = z.object({
   shiftDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
+  // Modalidad que se está programando. El guardado solo afecta turnos de esta
+  // modalidad ese día; los de la otra modalidad no se tocan.
+  modality: z.enum(['sede', 'servicios'], { message: 'Modalidad inválida' }),
   assignments: z.array(dayAssignmentItemSchema).max(200),
 })
 

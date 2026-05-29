@@ -1,10 +1,23 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { CalendarPlus } from 'lucide-react'
+import { CalendarPlus, Building2, Droplets } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { SedeDaySchedulerModal } from './sede-day-scheduler-modal'
 import { getSedeShiftsForDate } from '@/features/sede/actions/sede-shift-actions'
-import { SHIFT_TYPE_SHORT_LABELS, type ShiftType } from '@/features/sede/lib/shift-defaults'
+import {
+  SHIFT_TYPE_SHORT_LABELS,
+  SEDE_MODALITY_LABELS,
+  type ShiftType,
+  type SedeModality,
+} from '@/features/sede/lib/shift-defaults'
 import type {
   SedeShiftRow,
   StaffListItem,
@@ -41,7 +54,10 @@ export function WeeklyShiftsCalendar({
   const [modalState, setModalState] = useState<{
     date: string
     existing: SedeShiftRow[]
+    modality: SedeModality
   } | null>(null)
+  // Día elegido a la espera de que se seleccione la modalidad a programar.
+  const [pickerDate, setPickerDate] = useState<string | null>(null)
   const [loadingDate, setLoadingDate] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
@@ -61,15 +77,22 @@ export function WeeklyShiftsCalendar({
     return map
   }, [shifts])
 
-  async function handleDayClick(date: string) {
+  // Click en un día → primero pedimos la modalidad a programar.
+  function handleDayClick(date: string) {
+    setPickerDate(date)
+  }
+
+  // Modalidad elegida → cargamos los turnos del día y abrimos el scheduler.
+  async function handlePickModality(date: string, modality: SedeModality) {
+    setPickerDate(null)
     setLoadingDate(date)
     try {
       // Re-fetch fresco para evitar mostrar datos stale
       const existing = await getSedeShiftsForDate(date)
-      setModalState({ date, existing })
+      setModalState({ date, existing, modality })
     } catch {
       // Fallback al snapshot inicial
-      setModalState({ date, existing: shiftsByDate.get(date) ?? [] })
+      setModalState({ date, existing: shiftsByDate.get(date) ?? [], modality })
     } finally {
       setLoadingDate(null)
     }
@@ -129,6 +152,11 @@ export function WeeklyShiftsCalendar({
                   {typeCounts.posturno ? (
                     <span>· {typeCounts.posturno} {SHIFT_TYPE_SHORT_LABELS.posturno}</span>
                   ) : null}
+                  {typeCounts.servicios_transfusionales ? (
+                    <span className="text-rose-600 dark:text-rose-400">
+                      · {typeCounts.servicios_transfusionales} {SHIFT_TYPE_SHORT_LABELS.servicios_transfusionales}
+                    </span>
+                  ) : null}
                 </div>
               )}
 
@@ -154,6 +182,49 @@ export function WeeklyShiftsCalendar({
         })}
       </div>
 
+      {/* Paso 1: elegir la modalidad a programar para el día */}
+      <Dialog open={!!pickerDate} onOpenChange={(o) => !o && setPickerDate(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>¿Qué vas a programar?</DialogTitle>
+            <DialogDescription>
+              Elige la modalidad de turnos para este día. Cada modalidad se programa por
+              separado y no afecta a la otra.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto flex-col items-start gap-1 p-4 text-left"
+              onClick={() => pickerDate && handlePickModality(pickerDate, 'sede')}
+            >
+              <span className="flex items-center gap-2 font-medium">
+                <Building2 className="size-4" />
+                {SEDE_MODALITY_LABELS.sede}
+              </span>
+              <span className="text-xs font-normal text-muted-foreground">
+                Diurno completo, noche o posturno.
+              </span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto flex-col items-start gap-1 p-4 text-left"
+              onClick={() => pickerDate && handlePickModality(pickerDate, 'servicios')}
+            >
+              <span className="flex items-center gap-2 font-medium text-rose-600 dark:text-rose-400">
+                <Droplets className="size-4" />
+                {SEDE_MODALITY_LABELS.servicios}
+              </span>
+              <span className="text-xs font-normal text-muted-foreground">
+                07:00–17:00, 9h efectivas.
+              </span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {modalState && (
         <SedeDaySchedulerModal
           open={!!modalState}
@@ -161,6 +232,7 @@ export function WeeklyShiftsCalendar({
           shiftDate={modalState.date}
           existing={modalState.existing}
           staffList={staffList}
+          modality={modalState.modality}
           onSaved={handleSaved}
         />
       )}
