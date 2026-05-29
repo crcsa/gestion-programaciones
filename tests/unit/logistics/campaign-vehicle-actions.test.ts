@@ -102,6 +102,8 @@ import { requireAccess } from '@/features/auth/lib/require-access'
 import { recalcAggregatesForCampaign } from '@/features/hours/lib/aggregate-staff-data'
 import {
   getAssignedVehicles,
+  getAvailableVehicles,
+  getAvailableDrivers,
   assignVehicle,
   removeVehicleAssignment,
   setDriver,
@@ -171,27 +173,102 @@ describe('getAssignedVehicles', () => {
   })
 })
 
-describe('assignVehicle', () => {
+describe('getAvailableVehicles', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('rechaza si vehículo no disponible', async () => {
-    // getAvailableVehicles → encuentra que el vehículo está ocupado
+  it('retorna vehículo de otra campaña solapada marcado busyElsewhere', async () => {
+    const vehicleId = 'v-busy'
     let selectCall = 0
     mockDb.select = vi.fn(() => {
       selectCall++
-      // 1) campaign date range, 2) vehicles list
+      // 1) campaign date range
       if (selectCall === 1) return makeChain([{ campaignDate: '2026-06-01', endDate: null }])
-      if (selectCall === 2) return makeChain([]) // vehicles list (none)
+      // 2) vehicles list
+      return makeChain([
+        { id: vehicleId, plate: 'XYZ-999', mobileNumber: null, model: null, capacity: null },
+        { id: 'v-free', plate: 'AAA-111', mobileNumber: null, model: null, capacity: null },
+      ])
+    })
+    let distinctCall = 0
+    mockDb.selectDistinct = vi.fn(() => {
+      distinctCall++
+      if (distinctCall === 1) return makeChain([]) // inThisCampaign
+      return makeChain([{ vehicleId }]) // overlapping
+    })
+
+    const result = await getAvailableVehicles('camp-1')
+    expect(result).toHaveLength(2)
+    expect(result.find((v) => v.id === vehicleId)?.busyElsewhere).toBe(true)
+    expect(result.find((v) => v.id === 'v-free')?.busyElsewhere).toBe(false)
+  })
+})
+
+describe('getAvailableDrivers', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('retorna conductor solapado marcado busyElsewhere', async () => {
+    const driverId = 's-busy'
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      // 1) campaign date range
+      if (selectCall === 1) return makeChain([{ campaignDate: '2026-06-01', endDate: null }])
+      // 2) drivers list
+      return makeChain([
+        { id: driverId, firstName: 'Ana', lastName: 'Diaz', cedula: '123' },
+        { id: 's-free', firstName: 'Beto', lastName: 'Ruiz', cedula: '456' },
+      ])
+    })
+    let distinctCall = 0
+    mockDb.selectDistinct = vi.fn(() => {
+      distinctCall++
+      // 1) otherCampaignDrivers, 2) sedeBusy, 3) campaignBusy
+      if (distinctCall === 1) return makeChain([{ driverStaffId: driverId }])
       return makeChain([])
     })
-    mockDb.selectDistinct = vi.fn(() => makeChain([]))
+
+    const result = await getAvailableDrivers('camp-1')
+    expect(result).toHaveLength(2)
+    expect(result.find((d) => d.id === driverId)?.busyElsewhere).toBe(true)
+    expect(result.find((d) => d.id === 's-free')?.busyElsewhere).toBe(false)
+  })
+})
+
+describe('assignVehicle', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('asigna aunque el vehículo esté ocupado en otra campaña (busyElsewhere)', async () => {
+    const vehicleId = '00000000-0000-4000-8000-000000000002'
+    let selectCall = 0
+    mockDb.select = vi.fn(() => {
+      selectCall++
+      // 1) campaign date range (getAvailableVehicles)
+      if (selectCall === 1) return makeChain([{ campaignDate: '2026-06-01', endDate: null }])
+      // 2) vehicles list → el vehículo SÍ está en la lista
+      if (selectCall === 2) {
+        return makeChain([
+          { id: vehicleId, plate: 'ABC-123', mobileNumber: null, model: null, capacity: null },
+        ])
+      }
+      // 3) lookup de asignación existente (ninguna) → inserta
+      return makeChain([])
+    })
+    // inThisCampaign → vacío, overlapping → el vehículo (busyElsewhere=true)
+    let distinctCall = 0
+    mockDb.selectDistinct = vi.fn(() => {
+      distinctCall++
+      if (distinctCall === 1) return makeChain([]) // inThisCampaign
+      return makeChain([{ vehicleId }]) // overlapping en otra campaña
+    })
+    mockDb.insert = vi.fn(() => makeChain(undefined))
 
     await expect(
       assignVehicle({
         campaignId: '00000000-0000-4000-8000-000000000001',
-        vehicleId: '00000000-0000-4000-8000-000000000002',
+        vehicleId,
       }),
-    ).rejects.toThrow('no está disponible')
+    ).resolves.toBeUndefined()
+    expect(mockDb.insert).toHaveBeenCalled()
   })
 
   it('rechaza si requireAccess falla', async () => {

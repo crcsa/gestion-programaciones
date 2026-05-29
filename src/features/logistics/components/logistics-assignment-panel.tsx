@@ -138,6 +138,11 @@ export function LogisticsAssignmentPanel({
                     {availableDrivers.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
                         {d.lastName}, {d.firstName} — C.C. {d.cedula}
+                        {d.busyElsewhere && (
+                          <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
+                            Ya en otra campaña ese día
+                          </span>
+                        )}
                       </SelectItem>
                     ))}
                     {/* Permite ver el conductor actual aunque no esté en la lista
@@ -210,6 +215,11 @@ export function LogisticsAssignmentPanel({
                       {v.plate}
                       {v.mobileNumber ? ` · Móvil ${v.mobileNumber}` : ''}
                       {v.model ? ` · ${v.model}` : ''}
+                      {v.busyElsewhere && (
+                        <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
+                          Ya en otra campaña ese día
+                        </span>
+                      )}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -238,6 +248,11 @@ export function LogisticsAssignmentPanel({
                   {availableDrivers.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
                       {d.lastName}, {d.firstName} — C.C. {d.cedula}
+                      {d.busyElsewhere && (
+                        <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
+                          Ya en otra campaña ese día
+                        </span>
+                      )}
                     </SelectItem>
                   ))}
                 </SelectContent>
