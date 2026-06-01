@@ -134,4 +134,7 @@ export const bulkUpsertDayShiftsSchema = z.object({
 export type CreateSedeShiftInput = z.input<typeof createSedeShiftSchema>
 export type UpdateSedeShiftInput = z.input<typeof updateSedeShiftSchema>
 export type DayAssignmentItem = z.input<typeof dayAssignmentItemSchema>
+/** Item ya parseado por zod (output). Lo usan los helpers internos que reciben
+ * el payload tras `safeParse`. */
+export type ParsedDayAssignmentItem = z.output<typeof dayAssignmentItemSchema>
 export type BulkUpsertDayShiftsInput = z.input<typeof bulkUpsertDayShiftsSchema>

@@ -1,6 +1,6 @@
 'use server'
 
-import { eq, and, asc, gte, lte, inArray, sql } from 'drizzle-orm'
+import { eq, and, asc, gte, lte, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import { sedeShifts } from '@/lib/db/schema/sede-shifts'
@@ -25,14 +25,14 @@ import type {
   BulkUpsertDayShiftsInput,
 } from '@/features/sede/schemas/sede-shift-schemas'
 import {
-  SEDE_SHIFT_DEFAULTS,
-  SHIFT_TYPES_BY_MODALITY,
-  SEDE_MODALITY_LABELS,
-  MODALITY_BY_SHIFT_TYPE,
   effectiveShiftHours,
   MIN_EFFECTIVE_HOURS_DIURNO,
   type ShiftType,
 } from '@/features/sede/lib/shift-defaults'
+import {
+  upsertDayShiftsCore,
+  type UpsertDayShiftsResult,
+} from '@/features/sede/lib/upsert-day-shifts-core'
 
 // ---- Types ----------------------------------------------------------------
 
@@ -330,191 +330,57 @@ export async function updateSedeShift(id: string, data: UpdateSedeShiftInput): P
   }
 }
 
-export interface BulkUpsertDayShiftsResult {
-  upserted: number
-  removed: number
-}
+export type BulkUpsertDayShiftsResult = UpsertDayShiftsResult
 
 export async function bulkUpsertDaySedeShifts(
   input: BulkUpsertDayShiftsInput,
 ): Promise<BulkUpsertDayShiftsResult> {
   const ctx = await requireAccess({ roles: ['admin', 'admin_area'] })
-  const { userId, scope } = ctx
 
   const safe = bulkUpsertDayShiftsSchema.safeParse(input)
   if (!safe.success) {
     throw new ValidationError(`Datos de programación inválidos: ${safe.error.issues[0]?.message ?? ''}`)
   }
   const { shiftDate, modality, assignments } = safe.data
-  const modalityTypes = SHIFT_TYPES_BY_MODALITY[modality]
-
-  // Detección temprana de duplicados de staff en el payload
-  const seen = new Set<string>()
-  for (const a of assignments) {
-    if (seen.has(a.staffId)) {
-      throw new ValidationError('Hay colaboradores duplicados en la programación del día')
-    }
-    seen.add(a.staffId)
-    // Defensa profunda: el tipo de cada turno debe pertenecer a la modalidad
-    // que se está programando (la UI lo garantiza, pero blindamos el server).
-    if (!modalityTypes.includes(a.shiftType as ShiftType)) {
-      throw new ValidationError('El tipo de turno no corresponde a la modalidad seleccionada')
-    }
-  }
 
   const cfg = await loadValidationRuntimeConfig()
 
   try {
-    // `existing` se usa para (a) calcular qué turnos hay que borrar (los que
-    // NO vienen en el payload) y (b) saber qué staff fue tocado para el
-    // recálculo de horas. CRÍTICO: para admin_area, debe estar scoped al
-    // área del caller — si no, un admin_area de comercial vería un shift de
-    // banco_sangre que existe en esa fecha, lo marcaría como `toRemove`, e
-    // intentaría borrarlo (con la consecuente verificación de área que
-    // bloquea con "No puedes programar turnos para personal de otra área",
-    // aunque el caller no tocó conscientemente a ese staff).
-    const ownerScope: Area | null = scope.kind === 'global' ? null : scope.area
-    const existing = await db
-      .select({
-        id: sedeShifts.id,
-        staffId: sedeShifts.staffId,
-        shiftType: sedeShifts.shiftType,
-      })
-      .from(sedeShifts)
-      .leftJoin(staffMembers, eq(sedeShifts.staffId, staffMembers.id))
-      .where(
-        and(
-          eq(sedeShifts.shiftDate, shiftDate),
-          ownerScope ? eq(staffMembers.area, ownerScope) : undefined,
-        ),
-      )
+    const recalcQueue = new Set<string>()
+    let result: BulkUpsertDayShiftsResult = { upserted: 0, removed: 0 }
 
-    const incomingIds = new Set(assignments.map((a) => a.staffId))
-
-    // El guardado afecta SOLO la modalidad seleccionada. Los turnos de esa
-    // modalidad que ya no vienen en el payload se eliminan; los de la OTRA
-    // modalidad ese día no se tocan.
-    const sameModalityExisting = existing.filter((e) =>
-      modalityTypes.includes(e.shiftType as ShiftType),
-    )
-    const toRemove = sameModalityExisting.filter((e) => !incomingIds.has(e.staffId))
-    const removedStaffIds = toRemove.map((e) => e.staffId)
-
-    // Un colaborador tiene a lo sumo un turno por día. Si alguien del payload
-    // ya tiene un turno de la OTRA modalidad ese día, bloqueamos: el upsert
-    // (onConflict staffId+shiftDate) sobrescribiría ese turno, violando la
-    // separación entre modalidades. El admin debe quitarlo primero.
-    const conflicting = existing.filter(
-      (e) => incomingIds.has(e.staffId) && !modalityTypes.includes(e.shiftType as ShiftType),
-    )
-    if (conflicting.length > 0) {
-      const otherLabels = Array.from(
-        new Set(conflicting.map((e) => SEDE_MODALITY_LABELS[MODALITY_BY_SHIFT_TYPE[e.shiftType as ShiftType]])),
-      ).join(', ')
-      throw new ValidationError(
-        `Hay colaboradores que ya tienen un turno de ${otherLabels} ese día. ` +
-          'Quítalo desde esa modalidad antes de programarlos aquí (un turno por persona por día).',
-      )
-    }
-
-    // Verificación de área para admins no globales: cada staffId del payload
-    // (creación/upsert) debe pertenecer al área del caller. `removedStaffIds`
-    // ya está scoped por el filtro de `existing`, así que solo validamos los
-    // incomingIds.
-    if (ctx.role !== 'admin') {
-      const incomingArr = Array.from(incomingIds)
-      if (incomingArr.length > 0) {
-        const ownerships = await db
-          .select({ id: staffMembers.id, area: staffMembers.area })
-          .from(staffMembers)
-          .where(inArray(staffMembers.id, incomingArr))
-        const areaById = new Map(ownerships.map((r) => [r.id, r.area]))
-        for (const id of incomingArr) {
-          const area = areaById.get(id)
-          if (!area) throw new NotFoundError('Colaborador no encontrado')
-          if (area !== ctx.area) {
-            throw new ValidationError('No puedes programar turnos para personal de otra área.')
-          }
-        }
-      }
-    }
-
-    let upserted = 0
     await db.transaction(async (tx) => {
-      if (toRemove.length > 0) {
-        // CRÍTICO: borramos POR staffId explícito (los que estaban en
-        // `existing` scoped y no vienen en el payload). El patrón anterior
-        // `notInArray(assignments)` borraba TODOS los shifts del día no
-        // listados, incluidos los de otras áreas — un admin_area de comercial
-        // habría wipeado los turnos de banco_sangre en esa fecha.
-        await tx
-          .delete(sedeShifts)
-          .where(
-            and(
-              eq(sedeShifts.shiftDate, shiftDate),
-              inArray(sedeShifts.staffId, removedStaffIds),
-            ),
-          )
-      }
-
-      for (const a of assignments) {
-        const defaults = SEDE_SHIFT_DEFAULTS[a.shiftType]
-        const startTime = a.startTime ?? defaults.startTime
-        const endTime = a.endTime ?? defaults.endTime
-        const isOvernight = a.isOvernight ?? defaults.isOvernight
-        const totalHours = calcHours(startTime, endTime, isOvernight, cfg.maxShiftHours, a.shiftType)
-        const extraHours = a.extraHours ?? 0
-
-        await tx
-          .insert(sedeShifts)
-          .values({
-            staffId: a.staffId,
-            shiftDate,
-            shiftType: a.shiftType,
-            startTime,
-            endTime,
-            totalHours,
-            isOvernight,
-            extraHours,
-            notes: a.notes ?? null,
-            createdById: userId,
-          })
-          .onConflictDoUpdate({
-            target: [sedeShifts.staffId, sedeShifts.shiftDate],
-            set: {
-              shiftType: a.shiftType,
-              startTime,
-              endTime,
-              totalHours,
-              isOvernight,
-              extraHours,
-              notes: a.notes ?? null,
-              updatedAt: new Date(),
-            },
-          })
-        upserted++
-      }
+      result = await upsertDayShiftsCore({
+        tx,
+        dayDate: shiftDate,
+        modality,
+        assignments,
+        ctx,
+        cfg,
+        recalcQueue,
+      })
     })
 
-    // Recalcula horas para todos los staff tocados (incluidos los removidos).
-    // Fuera de la transacción: si recalc falla no debe revertir los shifts.
-    const touchedIds = new Set<string>([...incomingIds, ...removedStaffIds])
-    await recalcAggregatesForDate(touchedIds, shiftDate, 'bulkUpsertDaySedeShifts')
+    // Recalcula fuera de la transacción: un fallo de recalc no debe revertir
+    // los shifts ya guardados (el cron compensa). El Set asegura que cada
+    // staff se recalcule una sola vez aunque sea tocado por varias acciones.
+    if (recalcQueue.size > 0) {
+      await recalcAggregatesForDate(recalcQueue, shiftDate, 'bulkUpsertDaySedeShifts')
+    }
 
     await logAudit({
-      profileId: userId,
+      profileId: ctx.userId,
       action: 'update',
       tableName: 'sede_shifts',
       recordId: shiftDate,
-      newData: { upserted, removed: removedStaffIds.length },
+      newData: { upserted: result.upserted, removed: result.removed },
     })
 
     revalidatePath('/turnos')
 
-    return { upserted, removed: removedStaffIds.length }
+    return result
   } catch (error) {
     if (error instanceof AppError) throw error
-    // Surface más contexto del error de DB (Drizzle adjunta `cause` con el error de Postgres).
     const cause = (error as { cause?: { message?: string; code?: string } })?.cause
     const detail = cause?.message ?? (error instanceof Error ? error.message : 'desconocido')
     console.error('[bulkUpsertDaySedeShifts] error:', error, 'cause:', cause)
@@ -528,6 +394,7 @@ export async function bulkUpsertDaySedeShifts(
     throw new Error('Error al guardar la programación del día. Revisa los logs para más detalles.')
   }
 }
+
 
 export interface DayShiftCount {
   date: string
