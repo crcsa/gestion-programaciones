@@ -1,9 +1,15 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { CalendarPlus } from 'lucide-react'
+import { CalendarPlus, CalendarRange } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { SedeDaySchedulerModal } from './sede-day-scheduler-modal'
 import { SedeModalityPickerDialog } from './sede-modality-picker-dialog'
+import { SedeRangePickerDialog } from './sede-range-picker-dialog'
+import { SedeRangeSchedulerModal } from './sede-range-scheduler-modal'
+// Feature C — duplicar semana
+import { Copy } from 'lucide-react'
+import { DuplicateWeekDialog } from './duplicate-week-dialog'
 import { getSedeShiftsForDate } from '@/features/sede/actions/sede-shift-actions'
 import {
   SHIFT_TYPE_SHORT_LABELS,
@@ -51,6 +57,16 @@ export function WeeklyShiftsCalendar({
   // Día elegido a la espera de que se seleccione la modalidad a programar.
   const [pickerDate, setPickerDate] = useState<string | null>(null)
   const [loadingDate, setLoadingDate] = useState<string | null>(null)
+  // Estado del flujo de rango (Feature B): primero el picker pide fechas +
+  // modalidad, luego el scheduler edita asignaciones para todos los días.
+  const [rangePickerOpen, setRangePickerOpen] = useState(false)
+  const [rangeState, setRangeState] = useState<{
+    dateFrom: string
+    dateTo: string
+    modality: SedeModality
+  } | null>(null)
+  // Feature C — flujo de duplicar semana (origen → destino → preview)
+  const [duplicateOpen, setDuplicateOpen] = useState(false)
   const [, startTransition] = useTransition()
 
   const days = useMemo(
@@ -98,6 +114,29 @@ export function WeeklyShiftsCalendar({
 
   return (
     <>
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setRangePickerOpen(true)}
+          className="gap-1.5"
+        >
+          <CalendarRange className="size-4" />
+          Asignar rango
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setDuplicateOpen(true)}
+          className="gap-1.5"
+        >
+          <Copy className="size-4" />
+          Duplicar semana
+        </Button>
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-7">
         {days.map((date, i) => {
           const dayShifts = shiftsByDate.get(date) ?? []
@@ -192,6 +231,38 @@ export function WeeklyShiftsCalendar({
           onSaved={handleSaved}
         />
       )}
+
+      {/* Flujo de rango (Feature B): picker → scheduler multi-día */}
+      <SedeRangePickerDialog
+        open={rangePickerOpen}
+        onOpenChange={setRangePickerOpen}
+        weekStart={weekStart}
+        onPick={(data) => {
+          setRangePickerOpen(false)
+          setRangeState(data)
+        }}
+      />
+
+      {rangeState && (
+        <SedeRangeSchedulerModal
+          open={!!rangeState}
+          onOpenChange={(o) => !o && setRangeState(null)}
+          dateFrom={rangeState.dateFrom}
+          dateTo={rangeState.dateTo}
+          modality={rangeState.modality}
+          staffList={staffList}
+          onSaved={handleSaved}
+        />
+      )}
+
+      {/* Feature C — duplicar la programación de cualquier semana pasada */}
+      <DuplicateWeekDialog
+        open={duplicateOpen}
+        onOpenChange={setDuplicateOpen}
+        currentWeekStart={weekStart}
+        staffList={staffList}
+        onSaved={handleSaved}
+      />
     </>
   )
 }

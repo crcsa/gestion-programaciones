@@ -42,6 +42,9 @@ interface SedeDaySchedulerModalProps {
   staffList: StaffListItem[]
   modality: SedeModality
   onSaved: () => void
+  /** Saldo del banco de horas por staffId para el mes del día abierto.
+   *  Pasado por el caller (modal opener). Si está, se muestra badge inline. */
+  bankBalanceByStaff?: Record<string, number>
 }
 
 function formatDayHeader(dateStr: string): string {
@@ -62,6 +65,7 @@ export function SedeDaySchedulerModal({
   staffList,
   modality,
   onSaved,
+  bankBalanceByStaff,
 }: SedeDaySchedulerModalProps) {
   const fallbackType = DEFAULT_SHIFT_TYPE_BY_MODALITY[modality]
 
@@ -296,6 +300,7 @@ export function SedeDaySchedulerModal({
           search={search}
           setSearch={setSearch}
           fallbackType={fallbackType}
+          bankBalanceByStaff={bankBalanceByStaff}
         />
 
         {error && (

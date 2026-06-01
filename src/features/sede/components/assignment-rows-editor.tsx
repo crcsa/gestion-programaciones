@@ -67,6 +67,9 @@ export interface AssignmentRowsEditorProps {
   fallbackType: ShiftType
   /** Si false, oculta el botón "Diurno a seleccionados" (modalidad servicios). */
   showDiurnoQuickAction?: boolean
+  /** Saldo mensual del banco de horas por staffId (record). Si el saldo
+   *  excede |8h|, se muestra un badge al lado del nombre. Opcional. */
+  bankBalanceByStaff?: Record<string, number>
 }
 
 /**
@@ -88,6 +91,7 @@ export function AssignmentRowsEditor({
   setSearch,
   fallbackType,
   showDiurnoQuickAction = true,
+  bankBalanceByStaff,
 }: AssignmentRowsEditorProps) {
   const filteredStaff = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -242,6 +246,7 @@ export function AssignmentRowsEditor({
                         · Ya en {SEDE_MODALITY_LABELS[blockedBy]} ese día
                       </span>
                     )}
+                    <BankBalanceBadge balance={bankBalanceByStaff?.[s.id]} />
                   </Label>
                   {row.selected && !blockedBy && (
                     <>
@@ -355,6 +360,34 @@ export function AssignmentRowsEditor({
       </div>
     </>
   )
+}
+
+/** Badge inline con el saldo mensual del banco de horas del staff.
+ *  Solo se muestra si el saldo supera |8h| (umbral de visibilidad: por debajo
+ *  es ruido). Rojo si debe, ámbar si compensa. */
+function BankBalanceBadge({ balance }: { balance: number | undefined }) {
+  if (balance === undefined) return null
+  if (balance < -8) {
+    return (
+      <span
+        className="ml-1.5 inline-flex items-center rounded-md border border-red-500/40 bg-red-500/10 px-1.5 py-0 text-[10px] font-medium text-red-700 dark:text-red-400 dark:border-red-500/50"
+        title="Saldo deficitario del banco de horas este mes"
+      >
+        Debe {Math.abs(balance)}h este mes
+      </span>
+    )
+  }
+  if (balance > 8) {
+    return (
+      <span
+        className="ml-1.5 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] font-medium text-amber-700 dark:text-amber-400 dark:border-amber-500/50"
+        title="Saldo compensatorio (crédito) del banco de horas este mes"
+      >
+        Compensatorio {balance}h
+      </span>
+    )
+  }
+  return null
 }
 
 function ShiftEffectiveBadge({ row }: { row: RowState }) {

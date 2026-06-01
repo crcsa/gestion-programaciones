@@ -7,6 +7,7 @@ export const CONFIG_KEYS = {
   MAX_OVERNIGHTS_MONTH: 'max_overnights_month',
   MUNICIPAL_CUTOFF_TIME: 'municipal_cutoff_time',
   SEDE_MUNICIPALITY: 'sede_municipality',
+  HOUR_BANK_DEFICIT_THRESHOLD: 'hour_bank_deficit_threshold',
 } as const
 
 export type ConfigKey = (typeof CONFIG_KEYS)[keyof typeof CONFIG_KEYS]
@@ -89,5 +90,14 @@ export const CONFIG_PARAMETERS: ConfigParameterDef[] = [
     description: 'Municipio donde se ubica la sede principal (referencia para validaciones de pernocta).',
     type: 'text',
     defaultValue: 'Medellín',
+  },
+  {
+    key: CONFIG_KEYS.HOUR_BANK_DEFICIT_THRESHOLD,
+    label: 'Umbral de deficit del banco de horas',
+    description: 'Saldo mensual del banco de horas (negativo) a partir del cual se emite alerta. Default -8h.',
+    type: 'integer',
+    min: -40,
+    max: 0,
+    defaultValue: '-8',
   },
 ]

@@ -33,6 +33,26 @@ import {
   upsertDayShiftsCore,
   type UpsertDayShiftsResult,
 } from '@/features/sede/lib/upsert-day-shifts-core'
+// Imports adicionales para las actions de rango (Feature B). Mantener en una
+// línea separada para minimizar conflictos con otros agentes que también
+// extienden este archivo al final.
+import { inArray } from 'drizzle-orm'
+import { bulkUpsertRangeShiftsSchema } from '@/features/sede/schemas/sede-shift-schemas'
+import type { BulkUpsertRangeShiftsInput } from '@/features/sede/schemas/sede-shift-schemas'
+import {
+  MODALITY_BY_SHIFT_TYPE,
+  type SedeModality,
+} from '@/features/sede/lib/shift-defaults'
+// Imports adicionales para Feature C — duplicar semana. Mantenidos en líneas
+// separadas para minimizar conflictos con otros agentes que extiendan este
+// archivo al final.
+import { duplicateWeekSedeShiftsSchema } from '@/features/sede/schemas/sede-shift-schemas'
+import type { DuplicateWeekSedeShiftsInput } from '@/features/sede/schemas/sede-shift-schemas'
+import {
+  weekDaysFromMonday,
+  findCollisions,
+  type DuplicateCollision,
+} from '@/features/sede/lib/week-duplicate-mapping'
 
 // ---- Types ----------------------------------------------------------------
 
@@ -552,3 +572,642 @@ export async function deleteSedeShift(id: string): Promise<void> {
     throw new Error('Error al eliminar el turno')
   }
 }
+
+// ---------------------------------------------------------------------------
+// Feature B — Asignación multi-día por rango contiguo (misma semana ISO L–D)
+// ---------------------------------------------------------------------------
+
+/**
+ * Conflicto detectado por el pre-check de rango: un staff del payload ya
+ * tiene un turno de la OTRA modalidad ese día.
+ */
+export interface RangeConflict {
+  date: string
+  staffId: string
+  existingModality: SedeModality
+}
+
+export interface BulkUpsertRangeShiftsResult {
+  upserted: number
+  removed: number
+  daysProcessed: number
+  /** Vacío si todo fue ok. Reservado para futuras extensiones donde la action
+   *  pueda emitir conflicts no-bloqueantes; hoy el flujo de rango bloquea por
+   *  ValidationError y este array siempre llega vacío al cliente. */
+  conflicts: RangeConflict[]
+}
+
+/**
+ * Convierte un rango ISO inclusivo en la lista de días contiguos.
+ * Asume que el schema ya validó dateFrom ≤ dateTo y misma semana ISO.
+ */
+function expandRangeDays(dateFrom: string, dateTo: string): string[] {
+  const [y, m, d] = dateFrom.split('-').map(Number)
+  const startUTC = Date.UTC(y, m - 1, d)
+  const [y2, m2, d2] = dateTo.split('-').map(Number)
+  const endUTC = Date.UTC(y2, m2 - 1, d2)
+  const out: string[] = []
+  for (let t = startUTC; t <= endUTC; t += 24 * 60 * 60 * 1000) {
+    out.push(new Date(t).toISOString().slice(0, 10))
+  }
+  return out
+}
+
+/**
+ * Pre-check de conflictos para un rango contiguo + un set de staff: devuelve
+ * los días/staffs donde ya existe un turno de la OTRA modalidad. La UI lo usa
+ * antes de mostrar el editor (deshabilitar staff con conflicto en TODOS los
+ * días) y antes de guardar (preguntar al usuario si quiere saltar los días
+ * afectados).
+ *
+ * Scoped por área del caller: admin_area solo ve los conflictos dentro de su
+ * área (consistente con el resto de queries de sede).
+ */
+export async function getRangeConflicts(input: {
+  dateFrom: string
+  dateTo: string
+  modality: SedeModality
+  staffIds: string[]
+}): Promise<RangeConflict[]> {
+  const { scope } = await requireAccess({ roles: ['admin', 'admin_area'] })
+  const areaScope: Area | null = scope.kind === 'global' ? null : scope.area
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(input.dateTo)) {
+    throw new ValidationError('Formato de fecha inválido')
+  }
+  if (input.dateFrom > input.dateTo) {
+    throw new ValidationError('La fecha de inicio debe ser ≤ a la fecha de fin')
+  }
+
+  // Validación de misma semana ISO. Replicamos la lógica del schema para no
+  // pagar el costo de un parseo Zod en este pre-check ligero.
+  const lunes = (iso: string) => {
+    const dt = new Date(`${iso}T00:00:00`)
+    const dow = dt.getDay()
+    const offset = dow === 0 ? -6 : 1 - dow
+    const lun = new Date(dt)
+    lun.setDate(dt.getDate() + offset)
+    return lun.toISOString().slice(0, 10)
+  }
+  if (lunes(input.dateFrom) !== lunes(input.dateTo)) {
+    throw new ValidationError('El rango debe estar dentro de una misma semana (lunes a domingo)')
+  }
+
+  if (input.staffIds.length === 0) return []
+
+  try {
+    const rows = await db
+      .select({
+        shiftDate: sedeShifts.shiftDate,
+        staffId: sedeShifts.staffId,
+        shiftType: sedeShifts.shiftType,
+      })
+      .from(sedeShifts)
+      .leftJoin(staffMembers, eq(sedeShifts.staffId, staffMembers.id))
+      .where(
+        and(
+          gte(sedeShifts.shiftDate, input.dateFrom),
+          lte(sedeShifts.shiftDate, input.dateTo),
+          inArray(sedeShifts.staffId, input.staffIds),
+          areaScope ? eq(staffMembers.area, areaScope) : undefined,
+        ),
+      )
+
+    const conflicts: RangeConflict[] = []
+    for (const r of rows) {
+      const existingModality = MODALITY_BY_SHIFT_TYPE[r.shiftType as ShiftType]
+      if (existingModality !== input.modality) {
+        conflicts.push({
+          date: r.shiftDate,
+          staffId: r.staffId,
+          existingModality,
+        })
+      }
+    }
+    return conflicts
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    throw new Error('Error al verificar conflictos del rango')
+  }
+}
+
+/**
+ * Programa el MISMO conjunto de asignaciones para TODOS los días del rango
+ * contiguo `dateFrom..dateTo` (ambos inclusive), excluyendo `skipDates`. El
+ * rango debe estar contenido en una sola semana ISO (L–D) — validado por el
+ * schema.
+ *
+ * Comportamiento:
+ * - Pre-flight: detecta conflictos con la otra modalidad en cualquier día NO
+ *   saltado. Si hay alguno, lanza `ValidationError` con el detalle y NO toca
+ *   la DB. La UI debe llamar `getRangeConflicts` antes y proponer skipDates.
+ * - Transacción única envolvente: si CUALQUIER día falla, rollback total.
+ * - Recalc de agregados POST-commit: una sola pasada batch con el set de
+ *   staffs tocados (incluye removidos en cualquier día).
+ *
+ * `daysProcessed` excluye los `skipDates`. Si todo el rango quedó saltado
+ * (caso degenerado), no se abre la transacción y se retorna 0/0/0.
+ */
+export async function bulkUpsertRangeSedeShifts(
+  input: BulkUpsertRangeShiftsInput,
+): Promise<BulkUpsertRangeShiftsResult> {
+  const ctx = await requireAccess({ roles: ['admin', 'admin_area'] })
+
+  const safe = bulkUpsertRangeShiftsSchema.safeParse(input)
+  if (!safe.success) {
+    throw new ValidationError(`Datos de programación inválidos: ${safe.error.issues[0]?.message ?? ''}`)
+  }
+  const { dateFrom, dateTo, modality, assignments, skipDates } = safe.data
+
+  const skipSet = new Set(skipDates)
+  const days = expandRangeDays(dateFrom, dateTo).filter((d) => !skipSet.has(d))
+
+  // Limite duro defensivo: una semana ISO no debería exceder 7 días.
+  if (days.length > 7) {
+    throw new ValidationError('El rango excede el máximo permitido (7 días).')
+  }
+
+  // Caso degenerado: el usuario saltó todos los días del rango → nada que hacer.
+  if (days.length === 0) {
+    return { upserted: 0, removed: 0, daysProcessed: 0, conflicts: [] }
+  }
+
+  // Pre-flight de conflictos (defensa profunda — la UI ya hizo su pre-check vía
+  // `getRangeConflicts`, pero el server NO confía en eso). Si encontramos
+  // conflictos en los días NO saltados, rechazamos todo el batch sin tocar la
+  // DB y le pasamos al usuario el detalle para que decida saltar o resolver.
+  const incomingStaffIds = Array.from(new Set(assignments.map((a) => a.staffId)))
+  if (incomingStaffIds.length > 0) {
+    const conflicts = await getRangeConflicts({
+      dateFrom,
+      dateTo,
+      modality,
+      staffIds: incomingStaffIds,
+    })
+    const unresolved = conflicts.filter((c) => !skipSet.has(c.date))
+    if (unresolved.length > 0) {
+      // Listamos hasta 5 conflictos en el mensaje para no inundar la UI. La UI
+      // ya tiene el detalle completo desde el pre-check separado.
+      const sample = unresolved
+        .slice(0, 5)
+        .map((c) => `${c.date} (staff ${c.staffId.slice(0, 8)}…)`)
+        .join(', ')
+      const more = unresolved.length > 5 ? ` y ${unresolved.length - 5} más` : ''
+      throw new ValidationError(
+        `Hay conflictos no resueltos con la otra modalidad en: ${sample}${more}. ` +
+          'Quítalos desde esa modalidad o sáltalos al guardar.',
+      )
+    }
+  }
+
+  const cfg = await loadValidationRuntimeConfig()
+
+  try {
+    const recalcQueue = new Set<string>()
+    let totalUpserted = 0
+    let totalRemoved = 0
+
+    await db.transaction(async (tx) => {
+      for (const dayDate of days) {
+        const partial = await upsertDayShiftsCore({
+          tx,
+          dayDate,
+          modality,
+          assignments,
+          ctx,
+          cfg,
+          recalcQueue,
+        })
+        totalUpserted += partial.upserted
+        totalRemoved += partial.removed
+      }
+    })
+
+    if (recalcQueue.size > 0) {
+      // Recalc fuera de la transacción y en una sola pasada batch. Usamos el
+      // primer día del rango como referencia: `recalcAggregatesForDate`
+      // recalcula la semana ISO completa de esa fecha, que en este flujo es la
+      // misma para todos los días del rango (refine del schema).
+      await recalcAggregatesForDate(recalcQueue, dateFrom, 'bulkUpsertRangeSedeShifts')
+    }
+
+    await logAudit({
+      profileId: ctx.userId,
+      action: 'update',
+      tableName: 'sede_shifts',
+      recordId: `${dateFrom}..${dateTo}`,
+      newData: {
+        upserted: totalUpserted,
+        removed: totalRemoved,
+        daysProcessed: days.length,
+        modality,
+        skipDates,
+      },
+    })
+
+    revalidatePath('/turnos')
+
+    return {
+      upserted: totalUpserted,
+      removed: totalRemoved,
+      daysProcessed: days.length,
+      conflicts: [],
+    }
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    const cause = (error as { cause?: { message?: string; code?: string } })?.cause
+    const detail = cause?.message ?? (error instanceof Error ? error.message : 'desconocido')
+    console.error('[bulkUpsertRangeSedeShifts] error:', error, 'cause:', cause)
+
+    if (cause?.code === '42P10' || (detail && /no unique.*constraint|on conflict/i.test(detail))) {
+      throw new Error(
+        'Falta aplicar la migración de turnos (UNIQUE staff_id+shift_date). Ejecuta `pnpm db:migrate`.',
+      )
+    }
+
+    throw new Error('Error al guardar la programación del rango. Revisa los logs para más detalles.')
+  }
+}
+
+// ---- Banco de horas (badges en programación) -------------------------------
+
+import { weeklyBalance } from '@/lib/db/schema/weekly-balance'
+import { desc } from 'drizzle-orm'
+
+/**
+ * Devuelve, para cada staff de la lista, el saldo del banco de horas
+ * acumulado al cierre del último `weekStart` conocido dentro del mes
+ * `monthDate` (`YYYY-MM-01`).
+ *
+ * Retorna `Record<string, number>` (serializable cliente↔servidor — Map no
+ * lo es). Si un staff no tiene filas para ese mes, no aparece en el record.
+ *
+ * Permisos: admin global o admin_area. Cuando admin_area, restringe staffIds
+ * a su scope.area (defensa profunda — el caller suele filtrar antes).
+ */
+export async function getBankBalanceForStaffAtMonth(
+  staffIds: string[],
+  monthDate: string,
+): Promise<Record<string, number>> {
+  const { scope } = await requireAccess({ roles: ['admin', 'admin_area'] })
+  const areaScope: Area | null = scope.kind === 'global' ? null : scope.area
+
+  if (staffIds.length === 0) return {}
+  if (!/^\d{4}-\d{2}-01$/.test(monthDate)) {
+    throw new ValidationError('monthDate debe tener formato YYYY-MM-01')
+  }
+
+  try {
+    // Si admin_area, restringir a staff de su área para evitar leakage.
+    const filteredIds = areaScope
+      ? (
+          await db
+            .select({ id: staffMembers.id })
+            .from(staffMembers)
+            .where(
+              and(
+                inArray(staffMembers.id, staffIds),
+                eq(staffMembers.area, areaScope),
+              ),
+            )
+        ).map((s) => s.id)
+      : staffIds
+
+    if (filteredIds.length === 0) return {}
+
+    // Para cada staff, traer el row más reciente del mes y quedarse con el
+    // bank_balance_month de ese cierre.
+    const rows = await db
+      .select({
+        staffId: weeklyBalance.staffId,
+        bankBalanceMonth: weeklyBalance.bankBalanceMonth,
+        weekStart: weeklyBalance.weekStart,
+      })
+      .from(weeklyBalance)
+      .where(
+        and(
+          inArray(weeklyBalance.staffId, filteredIds),
+          eq(weeklyBalance.bankMonthKey, monthDate),
+        ),
+      )
+      .orderBy(desc(weeklyBalance.weekStart))
+
+    const byStaff: Record<string, number> = {}
+    for (const r of rows) {
+      // primer row por staffId = más reciente (por orderBy desc).
+      if (byStaff[r.staffId] === undefined) {
+        byStaff[r.staffId] = r.bankBalanceMonth
+      }
+    }
+    return byStaff
+  } catch (error) {
+    rethrowOrLog(
+      error,
+      'getBankBalanceForStaffAtMonth',
+      'Error al obtener el saldo del banco de horas',
+    )
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Feature C — Duplicar asignaciones de una semana origen a una semana destino
+// ---------------------------------------------------------------------------
+
+/**
+ * Resumen de una semana ISO con turnos: lunes de la semana + cuántos turnos
+ * sumó (todas las modalidades, dentro del scope de área del caller).
+ */
+export interface WeekWithShifts {
+  weekStart: string
+  shiftCount: number
+}
+
+/**
+ * Lista las semanas con turnos del último año (scoped por área del caller).
+ * Pensada para que la UI de "Duplicar semana" muestre las semanas origen
+ * disponibles. La semana se trunca por `date_trunc('week', date)` de Postgres
+ * que asume lunes como inicio (ISO 8601) — consistente con `weekStart` que
+ * usamos en el resto del módulo.
+ *
+ * Default `limit = 12` (≈3 meses de semanas). Máximo 52.
+ */
+export async function getWeeksWithShifts(limit = 12): Promise<WeekWithShifts[]> {
+  const { scope } = await requireAccess({ roles: ['admin', 'admin_area'] })
+  const areaScope: Area | null = scope.kind === 'global' ? null : scope.area
+
+  const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 52)
+
+  try {
+    const rows = await db
+      .select({
+        weekStart: sql<string>`to_char(date_trunc('week', ${sedeShifts.shiftDate}::date), 'YYYY-MM-DD')`,
+        shiftCount: sql<number>`count(*)::int`,
+      })
+      .from(sedeShifts)
+      .leftJoin(staffMembers, eq(sedeShifts.staffId, staffMembers.id))
+      .where(
+        and(
+          gte(sedeShifts.shiftDate, sql`(now() - interval '1 year')::date`),
+          areaScope ? eq(staffMembers.area, areaScope) : undefined,
+        ),
+      )
+      .groupBy(sql`date_trunc('week', ${sedeShifts.shiftDate}::date)`)
+      .orderBy(sql`date_trunc('week', ${sedeShifts.shiftDate}::date) desc`)
+      .limit(safeLimit)
+
+    return rows.map((r) => ({
+      weekStart: r.weekStart,
+      shiftCount: r.shiftCount,
+    }))
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    throw new Error('Error al obtener las semanas con turnos')
+  }
+}
+
+/**
+ * Snapshot del origen + destino para la preview del modal de duplicar:
+ * - `sourceShifts`: todos los shifts de la semana origen (ambas modalidades),
+ *   con datos del staff para mostrar nombre/perfil en la preview.
+ * - `destinationCollisions`: celdas `(staffId, targetDate)` donde el destino
+ *   ya tiene un shift y el origen mapeará encima. La UI muestra estos como
+ *   conflictos que el usuario debe resolver (skip|overwrite) celda a celda.
+ */
+export interface WeekShiftsForDuplicate {
+  sourceShifts: Array<{
+    staffId: string
+    firstName: string
+    lastName: string
+    staffProfile: string
+    shiftDate: string
+    shiftType: ShiftType
+    startTime: string
+    endTime: string
+    isOvernight: boolean
+    extraHours: number
+    notes: string | null
+  }>
+  destinationCollisions: DuplicateCollision[]
+}
+
+export async function getWeekShiftsForDuplicate(
+  sourceWeekStart: string,
+  targetWeekStart: string,
+): Promise<WeekShiftsForDuplicate> {
+  const { scope } = await requireAccess({ roles: ['admin', 'admin_area'] })
+  const areaScope: Area | null = scope.kind === 'global' ? null : scope.area
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(sourceWeekStart) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(targetWeekStart)
+  ) {
+    throw new ValidationError('Formato de fecha inválido (esperado YYYY-MM-DD)')
+  }
+
+  try {
+    const sourceDays = weekDaysFromMonday(sourceWeekStart)
+    const targetDays = weekDaysFromMonday(targetWeekStart)
+    const sourceFrom = sourceDays[0]
+    const sourceTo = sourceDays[sourceDays.length - 1]
+    const targetFrom = targetDays[0]
+    const targetTo = targetDays[targetDays.length - 1]
+
+    // Cargamos ambos sets en paralelo. Mismo patrón de JOIN+scope que el resto
+    // del módulo (filtrado por área del caller).
+    const [sourceRows, destRows] = await Promise.all([
+      db
+        .select({
+          staffId: sedeShifts.staffId,
+          firstName: staffMembers.firstName,
+          lastName: staffMembers.lastName,
+          staffProfile: staffMembers.staffProfile,
+          shiftDate: sedeShifts.shiftDate,
+          shiftType: sedeShifts.shiftType,
+          startTime: sedeShifts.startTime,
+          endTime: sedeShifts.endTime,
+          isOvernight: sedeShifts.isOvernight,
+          extraHours: sedeShifts.extraHours,
+          notes: sedeShifts.notes,
+        })
+        .from(sedeShifts)
+        .leftJoin(staffMembers, eq(sedeShifts.staffId, staffMembers.id))
+        .where(
+          and(
+            gte(sedeShifts.shiftDate, sourceFrom),
+            lte(sedeShifts.shiftDate, sourceTo),
+            areaScope ? eq(staffMembers.area, areaScope) : undefined,
+          ),
+        )
+        .orderBy(asc(sedeShifts.shiftDate), asc(staffMembers.lastName)),
+      db
+        .select({
+          staffId: sedeShifts.staffId,
+          shiftDate: sedeShifts.shiftDate,
+          shiftType: sedeShifts.shiftType,
+        })
+        .from(sedeShifts)
+        .leftJoin(staffMembers, eq(sedeShifts.staffId, staffMembers.id))
+        .where(
+          and(
+            gte(sedeShifts.shiftDate, targetFrom),
+            lte(sedeShifts.shiftDate, targetTo),
+            areaScope ? eq(staffMembers.area, areaScope) : undefined,
+          ),
+        ),
+    ])
+
+    const sourceShifts = sourceRows.map((r) => ({
+      staffId: r.staffId,
+      firstName: r.firstName ?? '',
+      lastName: r.lastName ?? '',
+      staffProfile: r.staffProfile ?? '',
+      shiftDate: r.shiftDate,
+      shiftType: r.shiftType as ShiftType,
+      startTime: r.startTime,
+      endTime: r.endTime,
+      isOvernight: r.isOvernight,
+      extraHours: r.extraHours,
+      notes: r.notes,
+    }))
+
+    const destinationCollisions = findCollisions(
+      sourceShifts.map((s) => ({ staffId: s.staffId, shiftDate: s.shiftDate })),
+      destRows.map((d) => ({
+        staffId: d.staffId,
+        shiftDate: d.shiftDate,
+        shiftType: d.shiftType,
+      })),
+      sourceWeekStart,
+      targetWeekStart,
+    )
+
+    return { sourceShifts, destinationCollisions }
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    throw new Error('Error al cargar la programación para duplicar')
+  }
+}
+
+/**
+ * Resultado de `duplicateWeekSedeShifts`.
+ */
+export interface DuplicateWeekResult {
+  upserted: number
+  removed: number
+  daysProcessed: number
+}
+
+/**
+ * Aplica las asignaciones agrupadas por (día, modalidad) sobre la semana
+ * destino en una única transacción envolvente. Si CUALQUIER bucket falla,
+ * rollback total. El recalc de agregados ocurre POST-commit, una sola pasada
+ * batch con todos los staffs tocados.
+ *
+ * El cliente es responsable de:
+ * - Filtrar las asignaciones de skip (no incluir esa celda en `perDay`).
+ * - Incluir todas las asignaciones cuando es overwrite (la modalidad destino
+ *   se reemplaza completa por la nueva lista; comportamiento de
+ *   `upsertDayShiftsCore`).
+ *
+ * Si `perDay` viene vacío (caso degenerado: el usuario deseleccionó todo o
+ * mantuvo todo el destino), no se abre transacción y se retorna 0/0/0.
+ */
+export async function duplicateWeekSedeShifts(
+  input: DuplicateWeekSedeShiftsInput,
+): Promise<DuplicateWeekResult> {
+  const ctx = await requireAccess({ roles: ['admin', 'admin_area'] })
+
+  const safe = duplicateWeekSedeShiftsSchema.safeParse(input)
+  if (!safe.success) {
+    throw new ValidationError(
+      `Datos de duplicación inválidos: ${safe.error.issues[0]?.message ?? ''}`,
+    )
+  }
+  const { sourceWeekStart, targetWeekStart, perDay } = safe.data
+
+  // Caso degenerado: nada que persistir.
+  if (perDay.length === 0) {
+    return { upserted: 0, removed: 0, daysProcessed: 0 }
+  }
+
+  // Defensa profunda: garantizar que las fechas de cada bucket caen dentro de
+  // los 7 días de la semana destino. Esto bloquea payloads mal armados desde
+  // un cliente comprometido.
+  const validTargetDays = new Set(weekDaysFromMonday(targetWeekStart))
+  for (const entry of perDay) {
+    if (!validTargetDays.has(entry.date)) {
+      throw new ValidationError(
+        `La fecha ${entry.date} no pertenece a la semana destino (${targetWeekStart}).`,
+      )
+    }
+  }
+
+  const cfg = await loadValidationRuntimeConfig()
+
+  try {
+    const recalcQueue = new Set<string>()
+    let totalUpserted = 0
+    let totalRemoved = 0
+
+    await db.transaction(async (tx) => {
+      for (const entry of perDay) {
+        const partial = await upsertDayShiftsCore({
+          tx,
+          dayDate: entry.date,
+          modality: entry.modality,
+          assignments: entry.assignments,
+          ctx,
+          cfg,
+          recalcQueue,
+        })
+        totalUpserted += partial.upserted
+        totalRemoved += partial.removed
+      }
+    })
+
+    if (recalcQueue.size > 0) {
+      // Recalc fuera de la transacción. Usamos el targetWeekStart como
+      // referencia: `recalcAggregatesForDate` recalcula la semana ISO completa
+      // y como todos los buckets están en esa misma semana, una sola pasada
+      // cubre el destino.
+      await recalcAggregatesForDate(
+        recalcQueue,
+        targetWeekStart,
+        'duplicateWeekSedeShifts',
+      )
+    }
+
+    await logAudit({
+      profileId: ctx.userId,
+      action: 'update',
+      tableName: 'sede_shifts',
+      recordId: `dup:${sourceWeekStart}->${targetWeekStart}`,
+      newData: {
+        sourceWeekStart,
+        targetWeekStart,
+        upserted: totalUpserted,
+        removed: totalRemoved,
+        daysProcessed: perDay.length,
+      },
+    })
+
+    revalidatePath('/turnos')
+
+    return {
+      upserted: totalUpserted,
+      removed: totalRemoved,
+      daysProcessed: perDay.length,
+    }
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    const cause = (error as { cause?: { message?: string; code?: string } })?.cause
+    console.error('[duplicateWeekSedeShifts] error:', error, 'cause:', cause)
+    throw new Error(
+      'Error al duplicar la programación de la semana. Revisa los logs para más detalles.',
+    )
+  }
+}
+
+// Re-exportamos el tipo de colisiones para que la UI lo consuma sin importar
+// del módulo lib.
+export type { DuplicateCollision } from '@/features/sede/lib/week-duplicate-mapping'

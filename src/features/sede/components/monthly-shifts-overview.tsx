@@ -9,6 +9,7 @@ import { type SedeModality } from '@/features/sede/lib/shift-defaults'
 import {
   getMonthlyShiftCounts,
   getSedeShiftsForDate,
+  getBankBalanceForStaffAtMonth,
 } from '@/features/sede/actions/sede-shift-actions'
 import type {
   DayShiftCount,
@@ -64,6 +65,7 @@ export function MonthlyShiftsOverview({
     date: string
     existing: SedeShiftRow[]
     modality: SedeModality
+    bankBalanceByStaff: Record<string, number>
   } | null>(null)
   const [pickerDate, setPickerDate] = useState<string | null>(null)
   const [, startTransition] = useTransition()
@@ -141,11 +143,18 @@ export function MonthlyShiftsOverview({
 
   async function handlePickModality(date: string, modality: SedeModality) {
     setPickerDate(null)
+    // Mes del día abierto (YYYY-MM-01) — usamos componentes del string para
+    // evitar pasarlo por Date/timezone.
+    const monthKey = `${date.slice(0, 7)}-01`
+    const staffIds = staffList.map((s) => s.id)
     try {
-      const existing = await getSedeShiftsForDate(date)
-      setModalState({ date, existing, modality })
+      const [existing, bankBalanceByStaff] = await Promise.all([
+        getSedeShiftsForDate(date),
+        getBankBalanceForStaffAtMonth(staffIds, monthKey).catch(() => ({})),
+      ])
+      setModalState({ date, existing, modality, bankBalanceByStaff })
     } catch {
-      setModalState({ date, existing: [], modality })
+      setModalState({ date, existing: [], modality, bankBalanceByStaff: {} })
     }
   }
 
@@ -270,6 +279,7 @@ export function MonthlyShiftsOverview({
           staffList={staffList}
           modality={modalState.modality}
           onSaved={handleSaved}
+          bankBalanceByStaff={modalState.bankBalanceByStaff}
         />
       )}
     </div>

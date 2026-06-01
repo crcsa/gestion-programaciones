@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/db', () => ({
   db: {
     select: vi.fn(),
+    selectDistinctOn: vi.fn(),
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
@@ -58,7 +59,24 @@ vi.mock('@/lib/db/schema/weekly-balance', () => ({
     workedHours: 'worked_hours',
     sundayCount: 'sunday_count',
     overnightCount: 'overnight_count',
+    bankDelta: 'bank_delta',
+    bankBalanceMonth: 'bank_balance_month',
+    bankMonthKey: 'bank_month_key',
   },
+}))
+
+vi.mock('@/features/configuration/lib/runtime-config', () => ({
+  loadValidationRuntimeConfig: vi.fn().mockResolvedValue({
+    weeklyHours: 44,
+    maxExtraHoursWeek: 12,
+    maxShiftHours: 12,
+    minRestHours: 12,
+    maxSundaysMonth: 2,
+    maxOvernightsMonth: 1,
+    municipalCutoffTime: '17:00',
+    sedeMunicipality: 'Medellin',
+    hourBankDeficitThreshold: -8,
+  }),
 }))
 
 vi.mock('@/lib/db/schema/staff-members', () => ({
@@ -78,7 +96,7 @@ import { getNotifications } from '@/features/notifications/actions/notification-
 function makeChain(resolvedValue: unknown) {
   const chain: Record<string, unknown> = {}
   const methods = [
-    'select', 'from', 'where', 'limit', 'offset', 'orderBy',
+    'select', 'selectDistinctOn', 'from', 'where', 'limit', 'offset', 'orderBy',
     'insert', 'values', 'update', 'set', 'delete', 'returning',
     'leftJoin', 'innerJoin', 'groupBy',
   ]
@@ -92,6 +110,7 @@ function makeChain(resolvedValue: unknown) {
 
 type SimpleMockDb = {
   select: ReturnType<typeof vi.fn>
+  selectDistinctOn: ReturnType<typeof vi.fn>
   insert: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
   delete: ReturnType<typeof vi.fn>
@@ -114,6 +133,8 @@ describe('getNotifications', () => {
     vi.clearAllMocks()
     setAdmin()
     vi.mocked(campaignArea).mockReturnValue(undefined)
+    // Default: selectDistinctOn devuelve [] (sin déficit).
+    mockDb.selectDistinctOn = vi.fn(() => makeChain([]))
   })
 
   it('returns cancelled campaign notifications', async () => {
@@ -286,5 +307,88 @@ describe('getNotifications', () => {
     // campaignArea solo se invoca una vez (para cancelled).
     expect(campaignArea).toHaveBeenCalledWith('logistica')
     expect(campaignArea).toHaveBeenCalledTimes(1)
+  })
+
+  it('operativo NO recibe alertas de hour_bank_deficit', async () => {
+    vi.mocked(requireUserContext).mockResolvedValue({
+      userId: 'user-op',
+      role: 'operativo',
+      area: 'banco_sangre',
+      staffId: 'staff-op-1',
+      email: 'op@example.com',
+      fullName: 'Op',
+    })
+    mockDb.select = vi.fn(() => makeChain([]))
+    // Aunque selectDistinctOn devuelva datos, operativo no debería pasar la rama.
+    mockDb.selectDistinctOn = vi.fn(() =>
+      makeChain([
+        {
+          staffId: 'staff-op-1',
+          bankBalanceMonth: -20,
+          bankMonthKey: '2026-06-01',
+          firstName: 'Op',
+          lastName: 'Test',
+        },
+      ]),
+    )
+
+    const result = await getNotifications()
+    const deficit = result.filter((n) => n.type === 'hour_bank_deficit')
+    expect(deficit).toHaveLength(0)
+    // El query NO se debe haber invocado.
+    expect(mockDb.selectDistinctOn).not.toHaveBeenCalled()
+  })
+
+  it('admin global recibe hour_bank_deficit cuando saldo <= threshold', async () => {
+    setAdmin()
+    mockDb.select = vi.fn(() => makeChain([]))
+    mockDb.selectDistinctOn = vi.fn(() =>
+      makeChain([
+        {
+          staffId: 'staff-1',
+          bankBalanceMonth: -12,
+          bankMonthKey: '2026-06-01',
+          firstName: 'Juan',
+          lastName: 'Perez',
+        },
+      ]),
+    )
+
+    const result = await getNotifications()
+    const deficit = result.filter((n) => n.type === 'hour_bank_deficit')
+    expect(deficit).toHaveLength(1)
+    expect(deficit[0].message).toContain('Juan Perez')
+    expect(deficit[0].message).toContain('12h')
+    expect(deficit[0].title).toBe('Déficit en banco de horas')
+  })
+
+  it('admin_area del área del staff sí recibe hour_bank_deficit', async () => {
+    vi.mocked(requireUserContext).mockResolvedValue({
+      userId: 'user-bds',
+      role: 'admin_area',
+      area: 'banco_sangre',
+      staffId: null,
+      email: 'bds@example.com',
+      fullName: 'BDS Admin',
+    })
+    mockDb.select = vi.fn(() => makeChain([]))
+    mockDb.selectDistinctOn = vi.fn(() =>
+      makeChain([
+        {
+          staffId: 'staff-2',
+          bankBalanceMonth: -10,
+          bankMonthKey: '2026-06-01',
+          firstName: 'Ana',
+          lastName: 'Gomez',
+        },
+      ]),
+    )
+
+    const result = await getNotifications()
+    const deficit = result.filter((n) => n.type === 'hour_bank_deficit')
+    expect(deficit).toHaveLength(1)
+    expect(deficit[0].message).toContain('Ana Gomez')
+    // Debió invocar el query.
+    expect(mockDb.selectDistinctOn).toHaveBeenCalled()
   })
 })

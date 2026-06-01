@@ -11,11 +11,16 @@ import { requireUserContext } from '@/features/auth/lib/user-context'
 import { campaignArea } from '@/features/dashboard/lib/dashboard-queries'
 import { isCommercialAdmin } from '@/lib/auth/area-gates'
 import { getCurrentMondayIso } from '@/lib/date/week'
+import { loadValidationRuntimeConfig } from '@/features/configuration/lib/runtime-config'
 import type { Area } from '@/types/areas'
 
 export interface AppNotification {
   id: string
-  type: 'campaign_cancelled' | 'missing_coordinator' | 'balance_warning'
+  type:
+    | 'campaign_cancelled'
+    | 'missing_coordinator'
+    | 'balance_warning'
+    | 'hour_bank_deficit'
   title: string
   message: string
   campaignId?: string
@@ -72,6 +77,28 @@ function buildBalanceNotifications(
       type: 'balance_warning' as const,
       title: 'Alerta de horas extras',
       message: `${s.firstName} ${s.lastName} tiene ${s.extraHours}h extras esta semana`,
+      createdAt: new Date(),
+    }))
+}
+
+function buildHourBankDeficitNotifications(
+  deficitRows: ReadonlyArray<{
+    staffId: string
+    bankBalanceMonth: number
+    firstName: string | null
+    lastName: string | null
+    bankMonthKey: string
+  }>,
+): AppNotification[] {
+  return deficitRows
+    .filter((s) => s.firstName && s.lastName)
+    .map((s) => ({
+      id: `hour-bank-${s.staffId}-${s.bankMonthKey}`,
+      type: 'hour_bank_deficit' as const,
+      title: 'Déficit en banco de horas',
+      message: `Hour bank deficit: ${s.firstName} ${s.lastName} debe ${Math.abs(
+        s.bankBalanceMonth,
+      )}h este mes (${s.bankMonthKey.slice(0, 7)})`,
       createdAt: new Date(),
     }))
 }
@@ -221,10 +248,51 @@ export async function getNotifications(): Promise<AppNotification[]> {
       .innerJoin(staffMembers, eq(weeklyBalance.staffId, staffMembers.id))
       .where(and(...balanceWhere))
 
+    // 4) Banco de horas: déficit del mes actual (admin y admin_area; los
+    //    operativos NO reciben esta alerta — es informativa de gestión).
+    let deficitRows: Array<{
+      staffId: string
+      bankBalanceMonth: number
+      firstName: string | null
+      lastName: string | null
+      bankMonthKey: string
+    }> = []
+    if (ctx.role === 'admin' || ctx.role === 'admin_area') {
+      const cfg = await loadValidationRuntimeConfig()
+      const today = new Date()
+      const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+
+      const deficitWhere = [
+        eq(weeklyBalance.bankMonthKey, monthKey),
+        sql`${weeklyBalance.bankBalanceMonth} <= ${cfg.hourBankDeficitThreshold}`,
+      ]
+      if (scope.staffAreaFilter) {
+        deficitWhere.push(eq(staffMembers.area, scope.staffAreaFilter))
+      }
+
+      // Para cada (staff, mes) hay una fila por semana; nos quedamos con el
+      // saldo más reciente (último weekStart). Hacemos un DISTINCT ON sobre
+      // staff_id ordenado DESC por week_start.
+      const raw = await db
+        .selectDistinctOn([weeklyBalance.staffId], {
+          staffId: weeklyBalance.staffId,
+          bankBalanceMonth: weeklyBalance.bankBalanceMonth,
+          bankMonthKey: weeklyBalance.bankMonthKey,
+          firstName: staffMembers.firstName,
+          lastName: staffMembers.lastName,
+        })
+        .from(weeklyBalance)
+        .innerJoin(staffMembers, eq(weeklyBalance.staffId, staffMembers.id))
+        .where(and(...deficitWhere))
+        .orderBy(weeklyBalance.staffId, sql`${weeklyBalance.weekStart} DESC`)
+      deficitRows = raw
+    }
+
     const notifications: AppNotification[] = [
       ...buildCancelledNotifications(cancelledCampaigns),
       ...buildMissingCoordinatorNotifications(confirmedCampaigns, coordinatorMap),
       ...buildBalanceNotifications(highExtraHours),
+      ...buildHourBankDeficitNotifications(deficitRows),
     ]
 
     return [...notifications].sort(

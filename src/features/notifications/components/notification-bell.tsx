@@ -37,6 +37,7 @@ const TYPE_ICON: Record<AppNotification['type'], string> = {
   campaign_cancelled: 'x',
   missing_coordinator: '!',
   balance_warning: '+',
+  hour_bank_deficit: '−',
 }
 
 export function NotificationBell() {
