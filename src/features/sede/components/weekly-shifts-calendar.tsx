@@ -1,8 +1,15 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { CalendarPlus, CalendarRange } from 'lucide-react'
+import { CalendarPlus, CalendarRange, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { SedeDaySchedulerModal } from './sede-day-scheduler-modal'
 import { SedeModalityPickerDialog } from './sede-modality-picker-dialog'
 import { SedeRangePickerDialog } from './sede-range-picker-dialog'
@@ -13,6 +20,9 @@ import { DuplicateWeekDialog } from './duplicate-week-dialog'
 import { getSedeShiftsForDate } from '@/features/sede/actions/sede-shift-actions'
 import {
   SHIFT_TYPE_SHORT_LABELS,
+  SHIFT_TYPE_LABELS,
+  MODALITY_BY_SHIFT_TYPE,
+  SEDE_MODALITY_LABELS,
   type ShiftType,
   type SedeModality,
 } from '@/features/sede/lib/shift-defaults'
@@ -67,6 +77,10 @@ export function WeeklyShiftsCalendar({
   } | null>(null)
   // Feature C — flujo de duplicar semana (origen → destino → preview)
   const [duplicateOpen, setDuplicateOpen] = useState(false)
+  // Día abierto en el dialog "Ver todos" — muestra la lista completa con
+  // nombre completo + tipo de turno + horario. Botón anidado dentro del
+  // día requiere stopPropagation para no abrir el modal de programación.
+  const [viewAllDate, setViewAllDate] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
   const days = useMemo(
@@ -151,12 +165,22 @@ export function WeeklyShiftsCalendar({
           const isLoading = loadingDate === date
 
           return (
-            <button
+            // Usamos `<div role="button">` (no `<button>`) para poder anidar
+            // un botón "Ver todos" dentro del día sin invalidar el HTML.
+            <div
               key={date}
-              type="button"
-              onClick={() => handleDayClick(date)}
-              disabled={isLoading}
-              className="flex flex-col items-stretch gap-1.5 rounded-lg border border-border bg-background p-3 text-left transition-colors hover:bg-muted/30 disabled:opacity-60"
+              role="button"
+              tabIndex={isLoading ? -1 : 0}
+              onClick={() => !isLoading && handleDayClick(date)}
+              onKeyDown={(e) => {
+                if (isLoading) return
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleDayClick(date)
+                }
+              }}
+              aria-disabled={isLoading}
+              className="flex flex-col items-stretch gap-1.5 rounded-lg border border-border bg-background p-3 text-left transition-colors hover:bg-muted/30 cursor-pointer aria-disabled:opacity-60 aria-disabled:cursor-not-allowed"
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -204,11 +228,21 @@ export function WeeklyShiftsCalendar({
                     </div>
                   ))}
                   {dayShifts.length > 4 && (
-                    <div className="text-[10px] italic">+{dayShifts.length - 4} más</div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setViewAllDate(date)
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                    >
+                      <Users className="size-3" />
+                      Ver todos ({dayShifts.length})
+                    </button>
                   )}
                 </div>
               )}
-            </button>
+            </div>
           )
         })}
       </div>
@@ -263,6 +297,99 @@ export function WeeklyShiftsCalendar({
         staffList={staffList}
         onSaved={handleSaved}
       />
+
+      <DayShiftsDialog
+        date={viewAllDate}
+        shifts={viewAllDate ? (shiftsByDate.get(viewAllDate) ?? []) : []}
+        onClose={() => setViewAllDate(null)}
+      />
     </>
+  )
+}
+
+function formatDayFull(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('es-CO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+interface DayShiftsDialogProps {
+  date: string | null
+  shifts: SedeShiftRow[]
+  onClose: () => void
+}
+
+function DayShiftsDialog({ date, shifts, onClose }: DayShiftsDialogProps) {
+  // Agrupa por modalidad (sede regular vs servicios transfusionales) para que
+  // ambas modalidades queden visualmente separadas y se vea cuántos hay de
+  // cada una. Dentro de cada grupo, ordena por apellido (los shifts del
+  // calendario semanal vienen ordenados por shiftDate + lastName, así que
+  // mantenemos el orden de entrada).
+  const groups = useMemo(() => {
+    const byModality = new Map<SedeModality, SedeShiftRow[]>()
+    for (const s of shifts) {
+      const mod = MODALITY_BY_SHIFT_TYPE[s.shiftType]
+      const arr = byModality.get(mod) ?? []
+      arr.push(s)
+      byModality.set(mod, arr)
+    }
+    return Array.from(byModality.entries())
+  }, [shifts])
+
+  return (
+    <Dialog open={!!date} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        className="max-h-[85vh] overflow-y-auto"
+        style={{ maxWidth: 'min(36rem, calc(100vw - 2rem))', width: '100%' }}
+      >
+        <DialogHeader>
+          <DialogTitle>{date ? formatDayFull(date) : ''}</DialogTitle>
+          <DialogDescription>
+            {shifts.length} colaborador{shifts.length === 1 ? '' : 'es'} programado
+            {shifts.length === 1 ? '' : 's'} ese día.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {groups.map(([modality, list]) => (
+            <div key={modality} className="space-y-2">
+              <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                <h3
+                  className={`text-sm font-semibold ${modality === 'servicios' ? 'text-rose-600 dark:text-rose-400' : ''}`}
+                >
+                  {SEDE_MODALITY_LABELS[modality]}
+                </h3>
+                <span className="text-xs text-muted-foreground">
+                  {list.length} colaborador{list.length === 1 ? '' : 'es'}
+                </span>
+              </div>
+              <ul className="divide-y divide-border/40">
+                {list.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                  >
+                    <span className="font-medium">
+                      {s.lastName}, {s.firstName}
+                    </span>
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="rounded-md border border-border bg-muted/40 px-2 py-0.5 font-mono">
+                        {s.startTime}–{s.endTime}
+                      </span>
+                      <span>{SHIFT_TYPE_LABELS[s.shiftType]}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
