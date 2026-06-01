@@ -132,6 +132,9 @@ export function CampaignTable({
         cell: (info) => {
           const campaign = info.row.original
           const isTentativa = campaign.status === 'tentativa'
+          // Tentativa y confirmada se pueden editar; cancelada y ejecutada no.
+          const isEditable =
+            campaign.status === 'tentativa' || campaign.status === 'confirmada'
           const canCancel =
             campaign.status !== 'cancelada' && campaign.status !== 'ejecutada'
 
@@ -142,7 +145,7 @@ export function CampaignTable({
                   <Eye className="h-4 w-4" />
                 </IconButton>
 
-                {isTentativa && onEdit && (
+                {isEditable && onEdit && (
                   <IconButton label="Editar" onClick={() => onEdit(campaign)}>
                     <Pencil className="h-4 w-4" />
                   </IconButton>

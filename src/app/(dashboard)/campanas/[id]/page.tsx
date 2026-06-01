@@ -103,11 +103,13 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
   ])
 
   const isTentativa = campaign.status === 'tentativa'
+  const isConfirmada = campaign.status === 'confirmada'
   // Solo super-admin y comercial (role='comercial' o admin_area+comercial)
   // pueden editar la campaña en sí. Banco_sangre y logistica solo asignan
   // su personal/vehículos via los paneles.
   const canManageCampaigns = canEditCommercial
-  const canEdit = isTentativa && canManageCampaigns
+  // Tentativa y confirmada son editables; cancelada y ejecutada no.
+  const canEdit = (isTentativa || isConfirmada) && canManageCampaigns
   // Multi-día: tenemos endDate posterior a campaignDate, o más de 1 row en campaign_days.
   const isMultiDay =
     (!!campaign.endDate && campaign.endDate > campaign.campaignDate) ||
