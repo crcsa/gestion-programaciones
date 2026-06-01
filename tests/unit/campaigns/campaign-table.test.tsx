@@ -140,7 +140,7 @@ describe('CampaignTable', () => {
     expect(verLinks[0].getAttribute('href')).toBe('/campanas/id-1')
   })
 
-  it('calls onEdit when Editar is clicked (only for tentativa)', () => {
+  it('calls onEdit when Editar is clicked (tentativa y confirmada)', () => {
     const onEdit = vi.fn()
 
     render(
@@ -153,12 +153,32 @@ describe('CampaignTable', () => {
       />
     )
 
-    // Only CMP-001 has status tentativa
+    // Tentativa y confirmada son editables; cancelada y ejecutada no.
     const editButtons = screen.getAllByRole('button', { name: 'Editar' })
-    expect(editButtons).toHaveLength(1)
+    expect(editButtons).toHaveLength(2)
 
     fireEvent.click(editButtons[0])
     expect(onEdit).toHaveBeenCalledWith(mockData[0])
+  })
+
+  it('does not show Editar for cancelada or ejecutada', () => {
+    const closedData: CampaignListItem[] = [
+      makeCampaign({ id: 'id-3', code: 'CMP-003', status: 'cancelada' }),
+      makeCampaign({ id: 'id-4', code: 'CMP-004', status: 'ejecutada' }),
+    ]
+
+    render(
+      <CampaignTable
+        data={closedData}
+        total={2}
+        page={1}
+        onPageChange={vi.fn()}
+        onEdit={vi.fn()}
+      />
+    )
+
+    const editButtons = screen.queryAllByRole('button', { name: 'Editar' })
+    expect(editButtons).toHaveLength(0)
   })
 
   it('shows empty state when no data', () => {

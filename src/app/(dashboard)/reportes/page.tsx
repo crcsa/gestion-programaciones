@@ -1,12 +1,15 @@
 import { requireAccess } from '@/features/auth/lib/require-access'
 import { getCampaignsReport } from '@/features/reports/actions/report-actions'
 import { getWeeklyBalances } from '@/features/hours/actions/hours-actions'
+import { getBancoHorasReport } from '@/features/reports/actions/banco-horas-actions'
 import { ReportsClient } from '@/features/reports/components/reports-client'
 import { loadValidationRuntimeConfig } from '@/features/configuration/lib/runtime-config'
 import { getCurrentMondayIso } from '@/lib/date/week'
 
 export default async function ReportesPage() {
-  await requireAccess({ roles: ['admin', 'admin_area', 'comercial'] })
+  const { role, area } = await requireAccess({
+    roles: ['admin', 'admin_area', 'comercial'],
+  })
 
   // Timezone-safe: monday-de-esta-semana sin shifts UTC.
   const weekStart = getCurrentMondayIso()
@@ -23,10 +26,22 @@ export default async function ReportesPage() {
   const monthStart = `${yearLocal}-${mm}-01`
   const monthEnd = `${yearLocal}-${mm}-${String(lastDayLocal).padStart(2, '0')}`
 
-  const [initialCampaigns, initialHoursRows, cfg] = await Promise.all([
+  // Comercial NO ve banco de horas (tabla queda oculta en cliente y el server
+  // tampoco la consulta).
+  const includeBanco = role !== 'comercial'
+
+  const [initialCampaigns, initialHoursRows, cfg, initialBancoHoras] = await Promise.all([
     getCampaignsReport({ dateFrom: monthStart, dateTo: monthEnd }),
     getWeeklyBalances(weekStart),
     loadValidationRuntimeConfig(),
+    includeBanco
+      ? getBancoHorasReport({
+          year: yearLocal,
+          month: monthLocal,
+          granularity: 'mensual',
+          area: null,
+        })
+      : Promise.resolve([]),
   ])
 
   return (
@@ -42,6 +57,11 @@ export default async function ReportesPage() {
         initialHoursRows={initialHoursRows}
         contractHours={cfg.weeklyHours}
         extraHoursLimit={cfg.maxExtraHoursWeek}
+        currentRole={role}
+        callerArea={area}
+        initialBancoHoras={initialBancoHoras}
+        initialBancoYear={yearLocal}
+        initialBancoMonth={monthLocal}
       />
     </div>
   )

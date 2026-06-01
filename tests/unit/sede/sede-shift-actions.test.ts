@@ -82,6 +82,10 @@ import {
   deleteSedeShift,
   getActiveStaffList,
   bulkUpsertDaySedeShifts,
+  bulkUpsertRangeSedeShifts,
+  duplicateWeekSedeShifts,
+  getWeekShiftsForDuplicate,
+  getWeeksWithShifts,
 } from '@/features/sede/actions/sede-shift-actions'
 
 // Helper to create a chainable drizzle mock
@@ -545,6 +549,414 @@ describe("createSedeShift idempotency", () => {
     })
 
     expect(conflictSpy).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Feature B — bulkUpsertRangeSedeShifts
+// ---------------------------------------------------------------------------
+
+describe("bulkUpsertRangeSedeShifts", () => {
+  // Semana ISO de referencia: lunes 2026-05-11 → domingo 2026-05-17.
+  const dateFrom = "2026-05-11" // lunes
+  const dateTo = "2026-05-15"   // viernes (5 días)
+  const staffA = "11111111-1111-4111-8111-111111111111"
+  const staffB = "22222222-2222-4222-8222-222222222222"
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("rango L–V con 2 staff sin conflictos → upsertea 5×2=10 turnos", async () => {
+    // `getRangeConflicts` (pre-check del server) y `upsertDayShiftsCore`
+    // (1 SELECT existing por día, todos vacíos) hacen todos su SELECT contra
+    // el mismo `db.select`. Devolvemos un chain "siempre vacío" para todos.
+    mockDb.select = vi.fn(() => makeChain([]))
+    const insertChain = makeChain([])
+    mockDb.insert = vi.fn(() => insertChain)
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    const result = await bulkUpsertRangeSedeShifts({
+      dateFrom,
+      dateTo,
+      modality: "sede",
+      assignments: [
+        { staffId: staffA, shiftType: "diurno_completo" },
+        { staffId: staffB, shiftType: "diurno_completo" },
+      ],
+    })
+
+    expect(result.daysProcessed).toBe(5)
+    expect(result.upserted).toBe(10) // 5 días × 2 staff
+    expect(result.removed).toBe(0)
+    expect(result.conflicts).toEqual([])
+  })
+
+  it("rango con conflicto cubierto por skipDates procesa los demás días", async () => {
+    // Conflicto: el miércoles 2026-05-13 staffA ya tiene servicios. El usuario
+    // pasa skipDates=['2026-05-13'], así que el pre-check (call #1) ve el row
+    // pero como está en skipDates NO rechaza. Los SELECT por día dentro de la
+    // tx (calls #2..#5 — L,M,J,V) deben devolver vacío para que cada día sea
+    // upsert limpio.
+    let call = 0
+    mockDb.select = vi.fn(() => {
+      call += 1
+      if (call === 1) {
+        // Pre-check del server: devuelve un único row con conflicto el miércoles.
+        return makeChain([
+          { shiftDate: "2026-05-13", staffId: staffA, shiftType: "servicios_transfusionales" },
+        ])
+      }
+      // Todos los días posteriores: sin existing.
+      return makeChain([])
+    })
+    mockDb.insert = vi.fn(() => makeChain([]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    const result = await bulkUpsertRangeSedeShifts({
+      dateFrom,
+      dateTo,
+      modality: "sede",
+      assignments: [{ staffId: staffA, shiftType: "diurno_completo" }],
+      skipDates: ["2026-05-13"],
+    })
+
+    // 4 días procesados (L,M,J,V). El miércoles fue saltado.
+    expect(result.daysProcessed).toBe(4)
+    expect(result.upserted).toBe(4)
+  })
+
+  it("rango con conflicto NO cubierto por skipDates lanza ValidationError", async () => {
+    // Pre-check devuelve un conflicto en el miércoles; skipDates está vacío.
+    mockDb.select = vi.fn(() => makeChain([
+      { shiftDate: "2026-05-13", staffId: staffA, shiftType: "servicios_transfusionales" },
+    ]))
+    mockDb.insert = vi.fn(() => makeChain([]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    await expect(
+      bulkUpsertRangeSedeShifts({
+        dateFrom,
+        dateTo,
+        modality: "sede",
+        assignments: [{ staffId: staffA, shiftType: "diurno_completo" }],
+      }),
+    ).rejects.toThrow(/conflictos no resueltos/i)
+  })
+
+  it("rechaza dateFrom > dateTo (schema)", async () => {
+    await expect(
+      bulkUpsertRangeSedeShifts({
+        dateFrom: "2026-05-15",
+        dateTo: "2026-05-11",
+        modality: "sede",
+        assignments: [{ staffId: staffA, shiftType: "diurno_completo" }],
+      }),
+    ).rejects.toThrow(/Datos de programación inválidos|inicio/i)
+  })
+
+  it("rechaza rango que cruza semanas (Dom→Lun) (schema)", async () => {
+    await expect(
+      bulkUpsertRangeSedeShifts({
+        dateFrom: "2026-05-17", // Domingo de la semana del 11
+        dateTo: "2026-05-18",   // Lunes de la semana del 18
+        modality: "sede",
+        assignments: [{ staffId: staffA, shiftType: "diurno_completo" }],
+      }),
+    ).rejects.toThrow(/Datos de programación inválidos|misma semana|lunes a domingo/i)
+  })
+
+  it("rango 1 día (dateFrom == dateTo) procesa correctamente", async () => {
+    mockDb.select = vi.fn(() => makeChain([]))
+    mockDb.insert = vi.fn(() => makeChain([]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    const result = await bulkUpsertRangeSedeShifts({
+      dateFrom: "2026-05-13",
+      dateTo: "2026-05-13",
+      modality: "sede",
+      assignments: [{ staffId: staffA, shiftType: "diurno_completo" }],
+    })
+
+    expect(result.daysProcessed).toBe(1)
+    expect(result.upserted).toBe(1)
+  })
+
+  it("rechaza por permisos", async () => {
+    vi.mocked(requireAccess).mockRejectedValueOnce(new PermissionError("No tienes permiso para realizar esta accion."))
+
+    await expect(
+      bulkUpsertRangeSedeShifts({
+        dateFrom,
+        dateTo,
+        modality: "sede",
+        assignments: [],
+      }),
+    ).rejects.toThrow("permiso")
+  })
+
+  it("todos los días saltados → no abre transacción, retorna 0/0/0", async () => {
+    // Sin SELECT mock — si la action abre la tx, fallará. Aquí esperamos
+    // short-circuit antes de tocar la DB.
+    mockDb.select = vi.fn(() => makeChain([]))
+    mockDb.insert = vi.fn(() => makeChain([]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    const result = await bulkUpsertRangeSedeShifts({
+      dateFrom: "2026-05-13",
+      dateTo: "2026-05-13",
+      modality: "sede",
+      assignments: [{ staffId: staffA, shiftType: "diurno_completo" }],
+      skipDates: ["2026-05-13"],
+    })
+
+    expect(result.daysProcessed).toBe(0)
+    expect(result.upserted).toBe(0)
+    expect(result.removed).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Feature C — Duplicar semana
+// ---------------------------------------------------------------------------
+
+describe("getWeeksWithShifts", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("devuelve lista de semanas con cuenta de turnos", async () => {
+    const rows = [
+      { weekStart: '2026-01-12', shiftCount: 14 },
+      { weekStart: '2026-01-05', shiftCount: 10 },
+    ]
+    mockDb.select = vi.fn(() => makeChain(rows))
+
+    const res = await getWeeksWithShifts()
+
+    expect(res).toHaveLength(2)
+    expect(res[0].weekStart).toBe('2026-01-12')
+    expect(res[0].shiftCount).toBe(14)
+  })
+
+  it("respeta el scope de área (admin_area)", async () => {
+    vi.mocked(requireAccess).mockResolvedValueOnce({
+      userId: 'user-bs',
+      role: 'admin_area',
+      area: 'banco_sangre',
+      staffId: null,
+      email: 'bs@test.com',
+      fullName: 'BS',
+      scope: { kind: 'area' as const, area: 'banco_sangre' },
+    })
+    mockDb.select = vi.fn(() => makeChain([]))
+
+    const res = await getWeeksWithShifts()
+
+    expect(res).toEqual([])
+    expect(mockDb.select).toHaveBeenCalled()
+  })
+
+  it("propaga errores de permiso", async () => {
+    vi.mocked(requireAccess).mockRejectedValueOnce(new PermissionError("No tienes permiso para realizar esta accion."))
+
+    await expect(getWeeksWithShifts()).rejects.toThrow('permiso')
+  })
+
+  it("envuelve errores de DB", async () => {
+    mockDb.select = vi.fn(() => { throw new Error('boom') })
+
+    await expect(getWeeksWithShifts()).rejects.toThrow(/semanas con turnos/)
+  })
+})
+
+describe("getWeekShiftsForDuplicate", () => {
+  const src = '2026-01-12'
+  const tgt = '2026-01-19'
+  const staffA = '11111111-1111-4111-8111-111111111111'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("retorna sourceShifts mapeados + collisions detectadas", async () => {
+    // 1ra llamada: sourceRows (semana origen). 2da: destRows (semana destino).
+    let call = 0
+    mockDb.select = vi.fn(() => {
+      call += 1
+      if (call === 1) {
+        return makeChain([
+          {
+            staffId: staffA,
+            firstName: 'Ana',
+            lastName: 'Perez',
+            staffProfile: 'bacteriologo',
+            shiftDate: '2026-01-12', // lunes origen
+            shiftType: 'diurno_completo',
+            startTime: '07:00',
+            endTime: '17:00',
+            isOvernight: false,
+            extraHours: 0,
+            notes: null,
+          },
+        ])
+      }
+      // dest: el mismo staff ya tiene un shift el lunes 19 → colisión.
+      return makeChain([
+        { staffId: staffA, shiftDate: '2026-01-19', shiftType: 'noche' },
+      ])
+    })
+
+    const res = await getWeekShiftsForDuplicate(src, tgt)
+
+    expect(res.sourceShifts).toHaveLength(1)
+    expect(res.sourceShifts[0].shiftDate).toBe('2026-01-12')
+    expect(res.destinationCollisions).toEqual([
+      { targetDate: '2026-01-19', staffId: staffA, existingShiftType: 'noche' },
+    ])
+  })
+
+  it("retorna vacío cuando no hay shifts en origen", async () => {
+    mockDb.select = vi.fn(() => makeChain([]))
+
+    const res = await getWeekShiftsForDuplicate(src, tgt)
+
+    expect(res.sourceShifts).toEqual([])
+    expect(res.destinationCollisions).toEqual([])
+  })
+
+  it("rechaza formato de fecha inválido", async () => {
+    await expect(
+      getWeekShiftsForDuplicate('no-date', tgt),
+    ).rejects.toThrow(/Formato de fecha inválido/)
+  })
+
+  it("propaga errores de permiso", async () => {
+    vi.mocked(requireAccess).mockRejectedValueOnce(new PermissionError("No tienes permiso para realizar esta accion."))
+
+    await expect(getWeekShiftsForDuplicate(src, tgt)).rejects.toThrow('permiso')
+  })
+})
+
+describe("duplicateWeekSedeShifts", () => {
+  const src = '2026-01-12'
+  const tgt = '2026-01-19'
+  const staffA = '11111111-1111-4111-8111-111111111111'
+  const staffB = '22222222-2222-4222-8222-222222222222'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("perDay con 7 días sin colisiones llama upsertDayShiftsCore 7 veces", async () => {
+    mockDb.select = vi.fn(() => makeChain([]))
+    mockDb.insert = vi.fn(() => makeChain([]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    const perDay = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date('2026-01-19T00:00:00')
+      day.setDate(day.getDate() + i)
+      return {
+        date: day.toISOString().slice(0, 10),
+        modality: 'sede' as const,
+        assignments: [
+          { staffId: staffA, shiftType: 'diurno_completo' as const },
+        ],
+      }
+    })
+
+    const result = await duplicateWeekSedeShifts({
+      sourceWeekStart: src,
+      targetWeekStart: tgt,
+      perDay,
+    })
+
+    expect(result.daysProcessed).toBe(7)
+    expect(result.upserted).toBe(7)
+    expect(mockDb.insert).toHaveBeenCalledTimes(7)
+  })
+
+  it("perDay con varias asignaciones en un día las upsertea todas", async () => {
+    mockDb.select = vi.fn(() => makeChain([]))
+    mockDb.insert = vi.fn(() => makeChain([]))
+    mockDb.delete = vi.fn(() => makeChain([]))
+
+    const result = await duplicateWeekSedeShifts({
+      sourceWeekStart: src,
+      targetWeekStart: tgt,
+      perDay: [
+        {
+          date: '2026-01-19',
+          modality: 'sede',
+          assignments: [
+            { staffId: staffA, shiftType: 'diurno_completo' },
+            { staffId: staffB, shiftType: 'noche' },
+          ],
+        },
+      ],
+    })
+
+    expect(result.daysProcessed).toBe(1)
+    expect(result.upserted).toBe(2)
+  })
+
+  it("perDay vacío → no-op, retorna 0/0/0 sin abrir transacción", async () => {
+    // Si la action abre la tx, mockDb.transaction es invocado. Verificamos
+    // que NO se llamó.
+    const txSpy = (db as unknown as { transaction: ReturnType<typeof vi.fn> })
+      .transaction
+
+    const result = await duplicateWeekSedeShifts({
+      sourceWeekStart: src,
+      targetWeekStart: tgt,
+      perDay: [],
+    })
+
+    expect(result.daysProcessed).toBe(0)
+    expect(result.upserted).toBe(0)
+    expect(result.removed).toBe(0)
+    expect(txSpy).not.toHaveBeenCalled()
+  })
+
+  it("bloquea cuando una fecha de perDay no pertenece a la semana destino", async () => {
+    await expect(
+      duplicateWeekSedeShifts({
+        sourceWeekStart: src,
+        targetWeekStart: tgt,
+        perDay: [
+          {
+            // 2026-01-26 es la semana SIGUIENTE a tgt (no la semana destino).
+            date: '2026-01-26',
+            modality: 'sede',
+            assignments: [
+              { staffId: staffA, shiftType: 'diurno_completo' },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow(/no pertenece a la semana destino/)
+  })
+
+  it("rechaza payload inválido (sourceWeekStart mal formado)", async () => {
+    await expect(
+      duplicateWeekSedeShifts({
+        sourceWeekStart: 'no-date',
+        targetWeekStart: tgt,
+        perDay: [],
+      }),
+    ).rejects.toThrow(/Datos de duplicación inválidos/)
+  })
+
+  it("propaga errores de permiso", async () => {
+    vi.mocked(requireAccess).mockRejectedValueOnce(new PermissionError("No tienes permiso para realizar esta accion."))
+
+    await expect(
+      duplicateWeekSedeShifts({
+        sourceWeekStart: src,
+        targetWeekStart: tgt,
+        perDay: [],
+      }),
+    ).rejects.toThrow('permiso')
   })
 })
 

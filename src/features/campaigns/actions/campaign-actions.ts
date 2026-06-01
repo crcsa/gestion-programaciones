@@ -573,9 +573,13 @@ export async function updateCampaign(
       throw new NotFoundError('Campaña no encontrada')
     }
 
-    if (current.status !== 'tentativa') {
+    // Solo se bloquea editar campañas ya cerradas (canceladas o ejecutadas).
+    // Las tentativa y confirmada se pueden editar; cambios sobre confirmada
+    // pueden quedar inconsistentes con asignaciones existentes — el cron
+    // recalcula horas al día siguiente.
+    if (current.status === 'cancelada' || current.status === 'ejecutada') {
       throw new ValidationError(
-        'No se puede editar una campaña confirmada o cancelada',
+        'No se puede editar una campaña cancelada o ejecutada',
       )
     }
 

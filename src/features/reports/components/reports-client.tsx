@@ -12,14 +12,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Clock, CalendarDays, Users, ChevronLeft, ChevronRight, Download } from 'lucide-react'
+import { Clock, CalendarDays, Users, Wallet, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { WeeklyBalanceTable } from '@/features/hours/components/weekly-balance-table'
 import { CampaignsReportTable } from './campaigns-report-table'
 import { PersonalReportTable } from './personal-report-table'
+import { BancoHorasTable } from './banco-horas-table'
 import { getHoursReport, getCampaignsReport, getPersonalReport } from '../actions/report-actions'
 import { exportToExcel } from '@/lib/excel/export-utils'
 import type { WeeklyBalanceRow } from '@/features/hours/actions/hours-actions'
 import type { CampaignReportRow, PersonalReportRow } from '../actions/report-actions'
+import type { BancoHorasReportRow } from '../actions/banco-horas-actions'
+import type { Role } from '@/types/roles'
+import type { Area } from '@/types/areas'
 
 // ---- Helpers ---------------------------------------------------------------
 
@@ -81,6 +85,11 @@ interface ReportsClientProps {
   initialHoursRows: WeeklyBalanceRow[]
   contractHours: number
   extraHoursLimit: number
+  currentRole: Role
+  callerArea: Area | null
+  initialBancoHoras: BancoHorasReportRow[]
+  initialBancoYear: number
+  initialBancoMonth: number
 }
 
 // ---- Component -------------------------------------------------------------
@@ -90,7 +99,14 @@ export function ReportsClient({
   initialHoursRows,
   contractHours,
   extraHoursLimit,
+  currentRole,
+  callerArea,
+  initialBancoHoras,
+  initialBancoYear,
+  initialBancoMonth,
 }: ReportsClientProps) {
+  // Comercial NO ve banco de horas (solo admin / admin_area).
+  const showBancoHoras = currentRole !== 'comercial'
   // Hours tab state
   const [weekStart, setWeekStart] = useState(getCurrentMonday)
   const [hoursRows, setHoursRows] = useState<WeeklyBalanceRow[]>(initialHoursRows)
@@ -163,6 +179,12 @@ export function ReportsClient({
           <Users className="h-3.5 w-3.5" />
           Personal
         </TabsTrigger>
+        {showBancoHoras && (
+          <TabsTrigger value="banco" className="gap-1.5">
+            <Wallet className="h-3.5 w-3.5" />
+            Banco de horas
+          </TabsTrigger>
+        )}
       </TabsList>
 
       {/* ── Horas ── */}
@@ -289,6 +311,19 @@ export function ReportsClient({
         </div>
         <PersonalReportTable rows={personalRows} />
       </TabsContent>
+
+      {/* ── Banco de horas ── */}
+      {showBancoHoras && (
+        <TabsContent value="banco" className="space-y-4">
+          <BancoHorasTable
+            initialData={initialBancoHoras}
+            currentRole={currentRole}
+            callerArea={callerArea}
+            initialYear={initialBancoYear}
+            initialMonth={initialBancoMonth}
+          />
+        </TabsContent>
+      )}
     </Tabs>
   )
 }

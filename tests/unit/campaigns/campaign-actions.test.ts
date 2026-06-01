@@ -514,20 +514,59 @@ describe('updateCampaign', () => {
     )
   })
 
-  it('lanza error cuando el estado no es tentativa', async () => {
+  it('permite editar cuando el estado es confirmada', async () => {
     const confirmedRow = [{ id: validUuid, status: 'confirmada' }]
+    const updatedCampaign = [
+      {
+        id: validUuid,
+        code: 'TEST-001',
+        status: 'confirmada' as const,
+        campaignDate: '2026-05-20',
+        size: 'L' as const,
+        modality: 'combinada' as const,
+        municipality: 'Bogota',
+        expectedDonations: 100,
+        companyId: null,
+        locationId: null,
+        // Sin tiempos: evita disparar persistCampaignDays (mono-día) en el
+        // test; el flujo real ya está cubierto por el caso tentativa.
+        startTime: null,
+        endTime: null,
+        trainingAreaId: null,
+        cancelReason: null,
+        observations: null,
+        createdById: 'user-123',
+        confirmedById: null,
+        confirmedAt: null,
+        isDeleted: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]
 
     mockDb.select = vi.fn(() => makeChain(confirmedRow))
+    mockDb.update = vi.fn(() => makeChain(updatedCampaign))
 
-    await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
-      'editar una campaña',
-    )
+    const result = await updateCampaign(validUuid, validUpdateData)
+
+    expect(result.id).toBe(validUuid)
+    expect(result.status).toBe('confirmada')
   })
 
   it('lanza error cuando el estado es cancelada', async () => {
     const cancelledRow = [{ id: validUuid, status: 'cancelada' }]
 
     mockDb.select = vi.fn(() => makeChain(cancelledRow))
+
+    await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
+      'editar una campaña',
+    )
+  })
+
+  it('lanza error cuando el estado es ejecutada', async () => {
+    const executedRow = [{ id: validUuid, status: 'ejecutada' }]
+
+    mockDb.select = vi.fn(() => makeChain(executedRow))
 
     await expect(updateCampaign(validUuid, validUpdateData)).rejects.toThrow(
       'editar una campaña',

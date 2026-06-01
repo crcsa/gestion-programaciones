@@ -34,7 +34,8 @@ export default async function EditCampaignPage({ params }: EditCampaignPageProps
     notFound()
   }
 
-  if (campaign.status !== 'tentativa') {
+  // Tentativa y confirmada se pueden editar. Cancelada y ejecutada no.
+  if (campaign.status === 'cancelada' || campaign.status === 'ejecutada') {
     redirect(`/campanas/${id}`)
   }
 

@@ -13,6 +13,11 @@ export interface ValidationRuntimeConfig {
   maxOvernightsMonth: number
   municipalCutoffTime: string
   sedeMunicipality: string
+  /**
+   * Umbral (negativo o cero) del saldo mensual del banco de horas a partir
+   * del cual se emite una alerta de déficit. Ej. -8 → alerta si saldo <= -8h.
+   */
+  hourBankDeficitThreshold: number
 }
 
 const TTL_MS = 60_000
@@ -31,6 +36,7 @@ function defaults(): ValidationRuntimeConfig {
     maxOvernightsMonth: Number(get(CONFIG_KEYS.MAX_OVERNIGHTS_MONTH)),
     municipalCutoffTime: get(CONFIG_KEYS.MUNICIPAL_CUTOFF_TIME),
     sedeMunicipality: get(CONFIG_KEYS.SEDE_MUNICIPALITY),
+    hourBankDeficitThreshold: Number(get(CONFIG_KEYS.HOUR_BANK_DEFICIT_THRESHOLD)),
   }
 }
 
@@ -65,6 +71,10 @@ export async function loadValidationRuntimeConfig(): Promise<ValidationRuntimeCo
       maxOvernightsMonth: numeric(CONFIG_KEYS.MAX_OVERNIGHTS_MONTH, fallback.maxOvernightsMonth),
       municipalCutoffTime: byKey.get(CONFIG_KEYS.MUNICIPAL_CUTOFF_TIME) ?? fallback.municipalCutoffTime,
       sedeMunicipality: byKey.get(CONFIG_KEYS.SEDE_MUNICIPALITY) ?? fallback.sedeMunicipality,
+      hourBankDeficitThreshold: numeric(
+        CONFIG_KEYS.HOUR_BANK_DEFICIT_THRESHOLD,
+        fallback.hourBankDeficitThreshold,
+      ),
     }
 
     cache = { value, expires: now + TTL_MS }
@@ -169,6 +179,10 @@ export async function loadValidationRuntimeConfigAt(
       maxOvernightsMonth: numeric(CONFIG_KEYS.MAX_OVERNIGHTS_MONTH, fallback.maxOvernightsMonth),
       municipalCutoffTime: byKey.get(CONFIG_KEYS.MUNICIPAL_CUTOFF_TIME) ?? fallback.municipalCutoffTime,
       sedeMunicipality: byKey.get(CONFIG_KEYS.SEDE_MUNICIPALITY) ?? fallback.sedeMunicipality,
+      hourBankDeficitThreshold: numeric(
+        CONFIG_KEYS.HOUR_BANK_DEFICIT_THRESHOLD,
+        fallback.hourBankDeficitThreshold,
+      ),
     }
 
     historicalCache.set(cacheKey, { value, expires: now + TTL_MS })

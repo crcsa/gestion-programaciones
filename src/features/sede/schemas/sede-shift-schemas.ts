@@ -134,4 +134,92 @@ export const bulkUpsertDayShiftsSchema = z.object({
 export type CreateSedeShiftInput = z.input<typeof createSedeShiftSchema>
 export type UpdateSedeShiftInput = z.input<typeof updateSedeShiftSchema>
 export type DayAssignmentItem = z.input<typeof dayAssignmentItemSchema>
+/** Item ya parseado por zod (output). Lo usan los helpers internos que reciben
+ * el payload tras `safeParse`. */
+export type ParsedDayAssignmentItem = z.output<typeof dayAssignmentItemSchema>
 export type BulkUpsertDayShiftsInput = z.input<typeof bulkUpsertDayShiftsSchema>
+
+/**
+ * Programación de un MISMO conjunto de asignaciones para un RANGO contiguo de
+ * días dentro de UNA misma semana ISO (L–D). El cliente puede saltar días
+ * específicos vía `skipDates` cuando hay conflictos no resueltos con la otra
+ * modalidad.
+ */
+export const bulkUpsertRangeShiftsSchema = z
+  .object({
+    dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
+    dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
+    modality: z.enum(['sede', 'servicios'], { message: 'Modalidad inválida' }),
+    assignments: z.array(dayAssignmentItemSchema).max(200),
+    /** Días dentro del rango que el usuario decidió saltar (porque tienen conflictos no resueltos). */
+    skipDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional().default([]),
+  })
+  .refine(
+    (d) => {
+      // Guard: si las fechas no pasan el regex base, no evaluamos comparación.
+      const re = /^\d{4}-\d{2}-\d{2}$/
+      if (!re.test(d.dateFrom) || !re.test(d.dateTo)) return true
+      return d.dateFrom <= d.dateTo
+    },
+    {
+      message: 'La fecha de inicio debe ser ≤ a la fecha de fin',
+      path: ['dateTo'],
+    },
+  )
+  .refine(
+    (d) => {
+      const re = /^\d{4}-\d{2}-\d{2}$/
+      if (!re.test(d.dateFrom) || !re.test(d.dateTo)) return true
+      // Misma semana ISO: lunes de dateFrom == lunes de dateTo (calculado en JS).
+      const lunes = (iso: string) => {
+        const dt = new Date(`${iso}T00:00:00`)
+        if (Number.isNaN(dt.getTime())) return iso // no calculable → ignora refine
+        const dow = dt.getDay() // 0=Dom, 1=Lun, ...
+        const offset = dow === 0 ? -6 : 1 - dow
+        const lun = new Date(dt)
+        lun.setDate(dt.getDate() + offset)
+        return lun.toISOString().slice(0, 10)
+      }
+      return lunes(d.dateFrom) === lunes(d.dateTo)
+    },
+    {
+      message: 'El rango debe estar dentro de una misma semana (lunes a domingo)',
+      path: ['dateTo'],
+    },
+  )
+
+export type BulkUpsertRangeShiftsInput = z.input<typeof bulkUpsertRangeShiftsSchema>
+
+// ---------------------------------------------------------------------------
+// Feature C — Duplicar una semana origen a una semana destino
+// ---------------------------------------------------------------------------
+
+/**
+ * Una "entrada" del payload de duplicar semana, agrupada por día+modalidad.
+ * Cada entrada corresponde a un `upsertDayShiftsCore({ dayDate, modality,
+ * assignments })`. El cliente ya filtró las asignaciones (skips y overwrites
+ * resueltos) antes de enviar.
+ */
+export const duplicateWeekDaySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
+  modality: z.enum(['sede', 'servicios'], { message: 'Modalidad inválida' }),
+  assignments: z.array(dayAssignmentItemSchema).max(200),
+})
+
+/**
+ * Duplica la programación de una semana origen (cualquier semana pasada con
+ * turnos) a una semana destino. El payload `perDay` viene agrupado por día y
+ * modalidad — el cliente ya resolvió skip/overwrite por celda y construyó las
+ * asignaciones finales por bucket. El server ejecuta cada entrada como un
+ * `upsertDayShiftsCore` dentro de una sola transacción envolvente.
+ *
+ * Máximo 14 entradas (7 días × 2 modalidades).
+ */
+export const duplicateWeekSedeShiftsSchema = z.object({
+  sourceWeekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
+  targetWeekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
+  perDay: z.array(duplicateWeekDaySchema).max(14),
+})
+
+export type DuplicateWeekDayInput = z.input<typeof duplicateWeekDaySchema>
+export type DuplicateWeekSedeShiftsInput = z.input<typeof duplicateWeekSedeShiftsSchema>

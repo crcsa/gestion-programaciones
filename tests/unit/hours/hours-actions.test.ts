@@ -5,6 +5,8 @@ vi.mock('@/lib/db', () => ({
     select: vi.fn(),
     insert: vi.fn(),
     update: vi.fn(),
+    execute: vi.fn().mockResolvedValue(undefined),
+    transaction: vi.fn(),
   },
 }))
 
@@ -38,6 +40,8 @@ vi.mock('@/lib/db/schema/weekly-balance', () => ({
     campaignHours: 'campaign_hours', extraHours: 'extra_hours',
     sundayCount: 'sunday_count', overnightCount: 'overnight_count',
     scheduledHours: 'scheduled_hours', updatedAt: 'updated_at',
+    bankDelta: 'bank_delta', bankBalanceMonth: 'bank_balance_month',
+    bankMonthKey: 'bank_month_key',
   },
 }))
 
@@ -111,15 +115,28 @@ function makeChain(resolvedValue: unknown) {
   return chain
 }
 
-type MockDb = { select: ReturnType<typeof vi.fn>; insert: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
+type MockDb = {
+  select: ReturnType<typeof vi.fn>
+  insert: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
+  execute: ReturnType<typeof vi.fn>
+  transaction: ReturnType<typeof vi.fn>
+}
 const mockDb = db as unknown as MockDb
+// transaction ejecuta el callback con mockDb como tx para que las llamadas
+// a tx.insert/tx.select/tx.execute pasen por los mocks existentes.
+function resetTransactionMocks() {
+  mockDb.transaction = vi.fn(async (cb: (tx: MockDb) => Promise<unknown>) => cb(mockDb))
+  mockDb.execute = vi.fn().mockResolvedValue(undefined)
+}
+resetTransactionMocks()
 
 const staffId = '550e8400-e29b-41d4-a716-446655440001'
 
 const mockStaff = [{ id: staffId, firstName: 'Ana', lastName: 'López', staffProfile: 'bacteriologo' }]
 
 describe('getWeeklyBalances', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => { vi.clearAllMocks(); resetTransactionMocks() })
 
   it('returns cumplió state when exactly 44h', async () => {
     const balance = {
@@ -192,7 +209,7 @@ describe('getWeeklyBalances', () => {
 })
 
 describe('getWeeklyBalances — sunday week derivation', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => { vi.clearAllMocks(); resetTransactionMocks() })
 
   it('handles Sunday campaign date (getMondayOfWeek uses -6 diff)', async () => {
     // 2026-03-22 is a Sunday; getMondayOfWeek should return 2026-03-16
@@ -214,7 +231,7 @@ describe('getWeeklyBalances — sunday week derivation', () => {
 })
 
 describe('getWeeklyBalances — error path', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => { vi.clearAllMocks(); resetTransactionMocks() })
 
   it('wraps generic DB error as user-friendly message', async () => {
     mockDb.select = vi.fn().mockImplementation(() => {
@@ -225,7 +242,7 @@ describe('getWeeklyBalances — error path', () => {
 })
 
 describe('recalculateWeeklyBalance', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => { vi.clearAllMocks(); resetTransactionMocks() })
 
   it('upserts balance from sede shifts and campaign hours', async () => {
     const shift = { totalHours: 8, shiftDate: '2026-03-16', isOvernight: false }
@@ -289,7 +306,7 @@ describe('recalculateWeeklyBalance', () => {
 })
 
 describe('recalculateWeeklyBalance — campaign hours calculation', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => { vi.clearAllMocks(); resetTransactionMocks() })
 
   it('calculates hours from campaign with startTime and endTime', async () => {
     // sede shifts (Promise.all slot 1), campaign rows (Promise.all slot 2)
@@ -337,7 +354,7 @@ describe('recalculateWeeklyBalance — campaign hours calculation', () => {
 })
 
 describe('recalculateAllWeeklyBalances', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => { vi.clearAllMocks(); resetTransactionMocks() })
 
   it('recalculates for all active staff members sequentially', async () => {
     const staff = [{ id: staffId }, { id: '550e8400-e29b-41d4-a716-446655440002' }]
@@ -374,7 +391,7 @@ describe('recalculateAllWeeklyBalances', () => {
 })
 
 describe('getStaffWeeklyBalance — error paths', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => { vi.clearAllMocks(); resetTransactionMocks() })
 
   it('wraps generic error as user-friendly message', async () => {
     mockDb.select = vi.fn().mockImplementation(() => {
@@ -385,7 +402,7 @@ describe('getStaffWeeklyBalance — error paths', () => {
 })
 
 describe('getStaffWeeklyBalance', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => { vi.clearAllMocks(); resetTransactionMocks() })
 
   it('returns null when staff not found', async () => {
     mockDb.select = vi.fn(() => makeChain([]))
