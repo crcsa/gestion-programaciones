@@ -187,32 +187,30 @@ export function BancoHorasTable({
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-4">
-        <p className="mb-3 text-xs text-muted-foreground">
-          Las semanas se asignan al mes del lunes (<code>weekStart</code>). El saldo es solo
-          informativo; la app no modifica metas semanales.
-        </p>
-
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="banco-month">Mes</Label>
+            <Label htmlFor="banco-month" className="text-xs text-muted-foreground">
+              Mes
+            </Label>
             <Input
               id="banco-month"
               type="month"
               value={formatMonthInput(year, month)}
               onChange={(e) => handleMonthChange(e.target.value)}
-              className="w-40"
+              className="h-9 w-40"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Periodo</Label>
-            <div className="flex gap-1">
+            <Label className="text-xs text-muted-foreground">Periodo</Label>
+            <div className="flex h-9 gap-1">
               <Button
                 type="button"
                 size="sm"
                 variant={granularity === 'mensual' ? 'default' : 'outline'}
                 onClick={() => handleGranularityChange('mensual')}
                 disabled={loading}
+                className="h-9"
               >
                 Mensual
               </Button>
@@ -222,6 +220,7 @@ export function BancoHorasTable({
                 variant={granularity === 'quincenal_q1' ? 'default' : 'outline'}
                 onClick={() => handleGranularityChange('quincenal_q1')}
                 disabled={loading}
+                className="h-9"
               >
                 Q1
               </Button>
@@ -231,6 +230,7 @@ export function BancoHorasTable({
                 variant={granularity === 'quincenal_q2' ? 'default' : 'outline'}
                 onClick={() => handleGranularityChange('quincenal_q2')}
                 disabled={loading}
+                className="h-9"
               >
                 Q2
               </Button>
@@ -239,12 +239,14 @@ export function BancoHorasTable({
 
           {canSelectArea && (
             <div className="space-y-1.5">
-              <Label htmlFor="banco-area">Área</Label>
+              <Label htmlFor="banco-area" className="text-xs text-muted-foreground">
+                Área
+              </Label>
               <Select
                 value={areaFilter}
                 onValueChange={(v) => handleAreaChange((v ?? 'todas') as Area | 'todas')}
               >
-                <SelectTrigger id="banco-area" className="w-44">
+                <SelectTrigger id="banco-area" className="h-9 w-44">
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent>
@@ -261,7 +263,7 @@ export function BancoHorasTable({
 
           {!canSelectArea && callerArea && (
             <div className="space-y-1.5">
-              <Label className="text-xs">Área</Label>
+              <Label className="text-xs text-muted-foreground">Área</Label>
               <div className="h-9 flex items-center rounded-md border border-border bg-muted px-3 text-sm text-muted-foreground">
                 {AREA_LABELS[callerArea]} (fijada)
               </div>
@@ -269,7 +271,9 @@ export function BancoHorasTable({
           )}
 
           <div className="flex-1 min-w-48 space-y-1.5">
-            <Label htmlFor="banco-search">Buscar</Label>
+            <Label htmlFor="banco-search" className="text-xs text-muted-foreground">
+              Buscar
+            </Label>
             <Input
               id="banco-search"
               placeholder="Nombre o perfil..."
@@ -284,6 +288,7 @@ export function BancoHorasTable({
             size="sm"
             onClick={handleExport}
             disabled={filtered.length === 0 || loading}
+            className="h-9"
           >
             <Download className="mr-2 h-4 w-4" />
             Exportar Excel
