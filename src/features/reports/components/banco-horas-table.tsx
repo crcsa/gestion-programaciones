@@ -42,16 +42,30 @@ const STATE_VARIANTS: Record<
   BancoHorasReportRow['state'],
   'default' | 'destructive' | 'outline'
 > = {
-  cumplio: 'default',
+  cumplio: 'outline',
   debe: 'destructive',
   compensatorio: 'outline',
 }
 
 const STATE_CLASSES: Record<BancoHorasReportRow['state'], string> = {
-  cumplio: '',
+  cumplio:
+    'border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400 dark:border-green-500/50',
   debe: '',
   compensatorio:
     'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 dark:border-amber-500/50',
+}
+
+/**
+ * Escala de colores para "Horas trabajadas" según progreso hacia la jornada
+ * normal (44h). `0h` se queda neutro (sin marcar) porque suele indicar staff
+ * sin asignaciones aún en el periodo, no incumplimiento real.
+ */
+function workedHoursClass(hours: number): string {
+  if (hours <= 0) return 'text-muted-foreground'
+  if (hours >= 44) return 'text-green-600 dark:text-green-400 font-medium'
+  if (hours >= 33) return 'text-lime-600 dark:text-lime-400'
+  if (hours >= 22) return 'text-amber-600 dark:text-amber-400'
+  return 'text-red-600 dark:text-red-400'
 }
 
 function formatMonthInput(year: number, month: number): string {
@@ -359,7 +373,9 @@ export function BancoHorasTable({
                       {STAFF_PROFILE_LABELS[row.staffProfile as StaffProfile] ?? row.staffProfile}
                     </td>
                     <td className="px-4 py-2 text-muted-foreground">{AREA_LABELS[row.area]}</td>
-                    <td className="px-4 py-2 text-right">{row.workedHours}h</td>
+                    <td className={`px-4 py-2 text-right ${workedHoursClass(row.workedHours)}`}>
+                      {row.workedHours}h
+                    </td>
                     <td className={`px-4 py-2 text-right ${deltaCls}`}>
                       {row.bankDelta > 0 ? '+' : ''}
                       {row.bankDelta}h
